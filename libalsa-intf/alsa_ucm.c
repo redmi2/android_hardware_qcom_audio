@@ -626,6 +626,8 @@ int use_case_index)
 
     /* Check if voice call use case/modifier exists */
     if ((!strncmp(uc_mgr->card_ctxt_ptr->current_verb,
+        SND_USE_CASE_VERB_VOLTE, strlen(SND_USE_CASE_VERB_VOLTE))) ||
+	(!strncmp(uc_mgr->card_ctxt_ptr->current_verb,
         SND_USE_CASE_VERB_VOICECALL, strlen(SND_USE_CASE_VERB_VOICECALL))) ||
         (!strncmp(uc_mgr->card_ctxt_ptr->current_verb,
         SND_USE_CASE_VERB_SGLTECALL, strlen(SND_USE_CASE_VERB_SGLTECALL))) ||
@@ -641,7 +643,9 @@ int use_case_index)
             if ((ident_value =
                 snd_ucm_get_value_at_index(uc_mgr->card_ctxt_ptr->mod_list_head,
                 index))) {
-                if ((!strncmp(ident_value, SND_USE_CASE_MOD_PLAY_VOICE,
+                if ((!strncmp(ident_value, SND_USE_CASE_MOD_PLAY_VOLTE,
+                    strlen(SND_USE_CASE_MOD_PLAY_VOLTE))) ||
+		    (!strncmp(ident_value, SND_USE_CASE_MOD_PLAY_VOICE,
                     strlen(SND_USE_CASE_MOD_PLAY_VOICE))) ||
                     (!strncmp(ident_value, SND_USE_CASE_MOD_PLAY_SGLTE,
                     strlen(SND_USE_CASE_MOD_PLAY_SGLTE))) ||
