@@ -21,7 +21,8 @@ LOCAL_SRC_FILES := \
   AudioStreamInALSA.cpp 	\
   ALSAStreamOps.cpp		\
   audio_hw_hal.cpp \
-  AudioUsbALSA.cpp
+  AudioUsbALSA.cpp \
+  AudioSessionOut.cpp
 
 LOCAL_STATIC_LIBRARIES := \
     libmedia_helper \
@@ -51,6 +52,8 @@ LOCAL_C_INCLUDES += hardware/libhardware_legacy/include
 LOCAL_C_INCLUDES += frameworks/base/include
 LOCAL_C_INCLUDES += system/core/include
 
+LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
+LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
 
 ifeq ($(call is-board-platform,msm8974),true)
   LOCAL_MODULE := audio.primary.msm8974
@@ -148,6 +151,9 @@ LOCAL_SHARED_LIBRARIES := \
     libcsd-client
 
 
+LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
+LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
+
 ifeq ($(call is-board-platform,msm8974),true)
   LOCAL_MODULE:= alsa.msm8974
 endif
@@ -155,6 +161,7 @@ endif
 ifeq ($(call is-board-platform,msm8960),true)
   LOCAL_MODULE:= alsa.msm8960
 endif
+
 LOCAL_MODULE_TAGS := optional
 
   include $(BUILD_SHARED_LIBRARY)
