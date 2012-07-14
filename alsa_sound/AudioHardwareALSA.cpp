@@ -681,12 +681,10 @@ uint32_t AudioHardwareALSA::getVoipMode(int format)
     case AudioSystem::AMR_WB:
                return MODE_AMR_WB;
          break;
-
-#ifdef QCOM_QCHAT_ENABLED
     case AudioSystem::EVRC:
                return MODE_IS127;
          break;
-
+#ifdef QCOM_QCHAT_ENABLED
     case AudioSystem::EVRCB:
                return MODE_4GV_NB;
          break;
@@ -694,7 +692,6 @@ uint32_t AudioHardwareALSA::getVoipMode(int format)
                return MODE_4GV_WB;
          break;
 #endif
-
     default:
                return MODE_PCM;
     }
@@ -1376,8 +1373,8 @@ size_t AudioHardwareALSA::getInputBufferSize(uint32_t sampleRate, int format, in
     if (format != AudioSystem::PCM_16_BIT
         && format != AudioSystem::AMR_NB
         && format != AudioSystem::AMR_WB
-#ifdef QCOM_QCHAT_ENABLED
         && format != AudioSystem::EVRC
+#ifdef QCOM_QCHAT_ENABLED
         && format != AudioSystem::EVRCB
         && format != AudioSystem::EVRCWB
 #endif
