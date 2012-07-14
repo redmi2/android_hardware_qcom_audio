@@ -283,8 +283,8 @@ status_t setHardwareParams(alsa_handle_t *handle)
     if (handle->format != SNDRV_PCM_FORMAT_S16_LE) {
         if (handle->format == AudioSystem::AMR_NB
             || handle->format == AudioSystem::AMR_WB
-#ifdef QCOM_QCHAT_ENABLED
             || handle->format == AudioSystem::EVRC
+#ifdef QCOM_QCHAT_ENABLED
             || handle->format == AudioSystem::EVRCB
             || handle->format == AudioSystem::EVRCWB
 #endif
@@ -1330,13 +1330,13 @@ char *getUCMDevice(uint32_t devices, int input, char *rxDevice)
     if (!input) {
         if (!(mDevSettingsFlag & TTY_OFF) &&
             (callMode == AudioSystem::MODE_IN_CALL) &&
-            ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
-             (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE))) { 
+            ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET)
+             || (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE)
 #ifdef QCOM_ANC_HEADSET_ENABLED
-             ||
-             (devices & AudioSystem::DEVICE_OUT_ANC_HEADSET) ||
-             (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE))) {
+             || (devices & AudioSystem::DEVICE_OUT_ANC_HEADSET)
+             || (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE)
 #endif
+             )) {
              if (mDevSettingsFlag & TTY_VCO) {
                  return strdup(SND_USE_CASE_DEV_TTY_HEADSET_RX);
              } else if (mDevSettingsFlag & TTY_FULL) {
@@ -1435,10 +1435,11 @@ char *getUCMDevice(uint32_t devices, int input, char *rxDevice)
     } else {
         if (!(mDevSettingsFlag & TTY_OFF) &&
             (callMode == AudioSystem::MODE_IN_CALL) &&
-            ((devices & AudioSystem::DEVICE_IN_WIRED_HEADSET))) { 
+            ((devices & AudioSystem::DEVICE_IN_WIRED_HEADSET)
 #ifdef QCOM_ANC_HEADSET_ENABLED
-            ||(devices & AudioSystem::DEVICE_IN_ANC_HEADSET))) {
+             || (devices & AudioSystem::DEVICE_IN_ANC_HEADSET)
 #endif
+             )) {
              if (mDevSettingsFlag & TTY_HCO) {
                  return strdup(SND_USE_CASE_DEV_TTY_HEADSET_TX);
              } else if (mDevSettingsFlag & TTY_FULL) {

@@ -152,8 +152,8 @@ status_t ALSAStreamOps::set(int      *format,
                 break;
             case AudioSystem::AMR_NB:
             case AudioSystem::AMR_WB:
-#ifdef QCOM_QCHAT_ENABLED
             case AudioSystem::EVRC:
+#ifdef QCOM_QCHAT_ENABLED
             case AudioSystem::EVRCB:
             case AudioSystem::EVRCWB:
 #endif
@@ -270,8 +270,8 @@ int ALSAStreamOps::format() const
 
         case AudioSystem::AMR_NB:
         case AudioSystem::AMR_WB:
-#ifdef QCOM_QCHAT_ENABLED
         case AudioSystem::EVRC:
+#ifdef QCOM_QCHAT_ENABLED
         case AudioSystem::EVRCB:
         case AudioSystem::EVRCWB:
 #endif
