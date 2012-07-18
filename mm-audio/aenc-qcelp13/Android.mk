@@ -9,7 +9,7 @@ endif
 ifeq ($(call is-board-platform,msm8960),true)
 include $(AENC_QCELP13_PATH)/qdsp6/Android.mk
 endif
-ifeq ($(call is-board-platform,copper),true)
+ifeq ($(call is-board-platform,msm8974),true)
 include $(AENC_QCELP13_PATH)/qdsp6/Android.mk
 endif
 
