@@ -96,7 +96,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     mBufferSize     = 0;
     *status         = BAD_VALUE;
     mSessionId      = sessionId;
-
+    hw_ptr          = 0;
 
     mUseTunnelDecoder   = false;
     mCaptureFromProxy   = false;
@@ -376,6 +376,7 @@ status_t AudioSessionOutALSA::openTunnelDevice(int devices)
     // audio to SPDIF and Proxy devices only
     char *use_case;
     status_t status = NO_ERROR;
+    hw_ptr = 0;
     if(mCaptureFromProxy) {
         devices = (mDevices & AudioSystem::DEVICE_OUT_SPDIF);
         devices |= AudioSystem::DEVICE_OUT_PROXY;
@@ -708,12 +709,12 @@ int32_t AudioSessionOutALSA::writeToCompressedDriver(char *buffer, int bytes)
         pcm * local_handle = (struct pcm *)mCompreRxHandle->handle;
         // Set the channel status after first frame decode/transcode and for change
         // in sample rate or channel mode as we close and open the device again
+        if (bytes < local_handle->period_size) {
+            ALOGD("Last buffer case");
+            mReachedExtractorEOS = true;
+        }
         n = pcm_write(local_handle, buf.memBuf, local_handle->period_size);
         if (bytes < local_handle->period_size) {
-        ALOGD("Last buffer case");
-        uint64_t writeValue = SIGNAL_EVENT_THREAD;
-        sys_write::lib_write(mEfd, &writeValue, sizeof(uint64_t));
-
             //TODO : Is this code reqd - start seems to fail?
             if (ioctl(local_handle->fd, SNDRV_PCM_IOCTL_START) < 0)
                 ALOGE("AUDIO Start failed");
@@ -807,19 +808,7 @@ void  AudioSessionOutALSA::eventThreadEntry() {
         ALOGV("pfd[0].revents =%d ", pfd[0].revents);
         ALOGV("pfd[1].revents =%d ", pfd[1].revents);
         if (err_poll == EINTR)
-            ALOGE("Timer is intrrupted");
-        if (pfd[1].revents & POLLIN) {
-            uint64_t u;
-            read(mEfd, &u, sizeof(uint64_t));
-            ALOGV("POLLIN event occured on the event fd, value written to %llu",\
-                    (unsigned long long)u);
-            pfd[1].revents = 0;
-            if (u == SIGNAL_EVENT_THREAD) {
-                ALOGV("### Setting mReachedExtractorEOS");
-                mReachedExtractorEOS = true;
-                continue;
-            }
-        }
+            ALOGE("Timer is interrupted");
         if ((pfd[1].revents & POLLERR) || (pfd[1].revents & POLLNVAL)) {
             ALOGE("POLLERR or INVALID POLL");
         }
@@ -832,31 +821,38 @@ void  AudioSessionOutALSA::eventThreadEntry() {
             pfd[0].revents = 0;
             if (mTunnelPaused)
                 continue;
-            ALOGV("After an event occurs");
-            {
-                if (mInputMemFilledQueue.empty()) {
-                    ALOGV("Filled queue is empty");
-                    continue;
-                }
-                mInputMemResponseMutex.lock();
-                BuffersAllocated buf = *(mInputMemFilledQueue.begin());
-                mInputMemFilledQueue.erase(mInputMemFilledQueue.begin());
-                ALOGV("mInputMemFilledQueue %d", mInputMemFilledQueue.size());
-                if (mInputMemFilledQueue.empty() && mReachedExtractorEOS) {
-                    ALOGV("Posting the EOS to the MPQ player");
-                    //post the EOS To MPQ player
-                    if (mObserver)
+            do {
+                ALOGV("After an event occurs");
+                {
+                    if (mInputMemFilledQueue.empty()) {
+                        ALOGV("Filled queue is empty");
+                        break;
+                    }
+                    mInputMemResponseMutex.lock();
+                    BuffersAllocated buf = *(mInputMemFilledQueue.begin());
+                    mInputMemFilledQueue.erase(mInputMemFilledQueue.begin());
+                    ALOGV("mInputMemFilledQueue %d", mInputMemFilledQueue.size());
+                    if (mInputMemFilledQueue.empty() && mReachedExtractorEOS) {
+                        ALOGV("Posting the EOS to the MPQ player");
+                        //post the EOS To MPQ player
+                        if (mObserver)
                         mObserver->postEOS(0);
+                    }
+                    mInputMemResponseMutex.unlock();
+
+                    mInputMemRequestMutex.lock();
+
+                    mInputMemEmptyQueue.push_back(buf);
+
+                    mInputMemRequestMutex.unlock();
+                    mWriteCv.signal();
                 }
-                mInputMemResponseMutex.unlock();
-
-                mInputMemRequestMutex.lock();
-
-                mInputMemEmptyQueue.push_back(buf);
-
-                mInputMemRequestMutex.unlock();
-                mWriteCv.signal();
-            }
+                hw_ptr += mCompreRxHandle->bufferSize/4;
+                mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_APPL |
+                                         SNDRV_PCM_SYNC_PTR_AVAIL_MIN);
+                sync_ptr(mCompreRxHandle->handle);
+                ALOGE("hw_ptr = %lld status.hw_ptr = %lld", hw_ptr, mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr);
+            } while(hw_ptr < mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr);
         }
     }
     mEventThreadAlive = false;
@@ -968,6 +964,7 @@ status_t AudioSessionOutALSA::drainTunnel()
     mCompreRxHandle->handle->sync_ptr->flags =
         SNDRV_PCM_SYNC_PTR_APPL | SNDRV_PCM_SYNC_PTR_AVAIL_MIN;
     sync_ptr(mCompreRxHandle->handle);
+    hw_ptr = 0;
     ALOGV("appl_ptr= %d",\
         (int)mCompreRxHandle->handle->sync_ptr->c.control.appl_ptr);
     return err;
