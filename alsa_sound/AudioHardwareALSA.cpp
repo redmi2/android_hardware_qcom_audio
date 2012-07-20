@@ -479,6 +479,18 @@ String8 AudioHardwareALSA::getParameters(const String8& keys)
         if(mBluetoothVGS)
            param.addInt(String8("isVGS"), true);
     }
+#ifdef QCOM_SSR_ENABLED
+    key = String8(AudioParameter::keySSR);
+    if (param.get(key, value) == NO_ERROR) {
+        char ssr_enabled[6] = "false";
+        property_get("ro.qcom.audio.ssr",ssr_enabled,"0");
+        if (!strncmp("true", ssr_enabled, 4)) {
+            value = String8("true");
+        }
+        param.add(key, value);
+    }
+#endif
+
 
     ALOGV("AudioHardwareALSA::getParameters() %s", param.toString().string());
     return param.toString();
@@ -1233,6 +1245,15 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                 || !strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC))) {
                 ALOGV("OpenInoutStream: Use larger buffer size for 5.1(%s) recording ", it->useCase);
                 it->bufferSize = getInputBufferSize(it->sampleRate,*format,it->channels);
+
+                //Check if SSR is supported by reading system property
+                char ssr_enabled[6] = "false";
+                property_get("ro.qcom.audio.ssr",ssr_enabled,"0");
+                if (strncmp("true", ssr_enabled, 4)) {
+                    if (status) *status = err;
+                    ALOGE("openInputStream: FAILED:%d. Surround sound recording is not supported",*status);
+                    return in;
+                }
             }
         }
 #endif
