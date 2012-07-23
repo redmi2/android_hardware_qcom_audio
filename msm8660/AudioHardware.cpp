@@ -1847,7 +1847,11 @@ status_t AudioHardware::enableComboDevice(uint32_t sndDevice, bool enableOrDisab
             return NO_ERROR;
         }
 
-        if(!LpaNode && !PcmNode) {
+        if(
+#ifdef QCOM_TUNNEL_LPA_ENABLED
+         !LpaNode &&
+#endif
+         !PcmNode) {
             ALOGE("No active playback session active bailing out ");
             cur_rx = DEVICE_FMRADIO_STEREO_RX;
             return NO_ERROR;
@@ -1863,10 +1867,12 @@ status_t AudioHardware::enableComboDevice(uint32_t sndDevice, bool enableOrDisab
                     temp = PcmNode;
                     CurrentComboDeviceData.StreamType = PCM_PLAY;
                     ALOGD("PCM_PLAY session Active ");
+#ifdef QCOM_TUNNEL_LPA_ENABLED
                 }else if(LpaNode){
                     temp = LpaNode;
                     CurrentComboDeviceData.StreamType = LPA_DECODE;
                     ALOGD("LPA_DECODE session Active ");
+#endif
                 } else {
                     ALOGE("no PLAYback session Active ");
                     return -1;
@@ -1982,8 +1988,15 @@ status_t AudioHardware::disableFM()
        }
     }
     deleteFromTable(FM_RADIO);
-    if(!getNodeByStreamType(VOICE_CALL) && !getNodeByStreamType(LPA_DECODE)
-        && !getNodeByStreamType(PCM_PLAY) && !getNodeByStreamType(VOIP_CALL)) {
+    if(!getNodeByStreamType(VOICE_CALL)
+#ifdef QCOM_TUNNEL_LPA_ENABLED
+      && !getNodeByStreamType(LPA_DECODE)
+#endif
+        && !getNodeByStreamType(PCM_PLAY)
+#ifdef QCOM_VOIP_ENABLED
+        && !getNodeByStreamType(VOIP_CALL)
+#endif
+        ) {
         if(enableDevice(cur_rx, 0)) {
             ALOGV("Disable device[%d] failed errno = %d",DEV_ID(cur_rx),errno);
             return 0;
@@ -2096,7 +2109,9 @@ status_t AudioHardware::AudioSessionOutMSM8x60::set(
                 ALOGE("msm_route_stream failed");
                 return -1;
             }
+#ifdef QCOM_TUNNEL_LPA_ENABLED
             CurrentComboDeviceData.StreamType = LPA_DECODE;
+#endif
         }
 #endif
 
@@ -2362,6 +2377,7 @@ ssize_t AudioHardware::AudioStreamOutMSM8x60::write(const void* buffer, size_t b
             Mutex::Autolock lock_1(mComboDeviceLock);
 #ifdef QCOM_FM_ENABLED
             if(CurrentComboDeviceData.DeviceId == SND_DEVICE_FM_TX_AND_SPEAKER){
+#ifdef QCOM_TUNNEL_LPA_ENABLED
                 Routing_table *LpaNode = getNodeByStreamType(LPA_DECODE);
                 /* This de-routes the LPA being routed on to speaker, which is done in
                   * enablecombo()
@@ -2375,6 +2391,7 @@ ssize_t AudioHardware::AudioStreamOutMSM8x60::write(const void* buffer, size_t b
                             return -1;
                     }
                 }
+#endif
                 ALOGD("Routing PCM stream to speaker for combo device");
                 ALOGD("combo:msm_route_stream(PCM_PLAY,session id:%d,dev id:%d,1)",dec_id,
                     DEV_ID(DEVICE_SPEAKER_RX));
@@ -2895,11 +2912,11 @@ status_t AudioHardware::AudioStreamInMSM8x60::set(
             ALOGE("Cannot open /dev/msm_pcm_in errno: %d", errno);
             goto Error;
         }
-        mFd = status;
+        mFdin = status;
         // configuration
         ALOGV("get config");
         struct msm_audio_config config;
-        status = ioctl(mFd, AUDIO_GET_CONFIG, &config);
+        status = ioctl(mFdin, AUDIO_GET_CONFIG, &config);
         if (status < 0) {
             ALOGE("Cannot read config");
             goto Error;
@@ -2911,10 +2928,10 @@ status_t AudioHardware::AudioStreamInMSM8x60::set(
         config.buffer_size = bufferSize();
         config.buffer_count = 2;
         config.codec_type = CODEC_TYPE_PCM;
-        status = ioctl(mFd, AUDIO_SET_CONFIG, &config);
+        status = ioctl(mFdin, AUDIO_SET_CONFIG, &config);
         if (status < 0) {
             ALOGE("Cannot set config");
-            if (ioctl(mFd, AUDIO_GET_CONFIG, &config) == 0) {
+            if (ioctl(mFdin, AUDIO_GET_CONFIG, &config) == 0) {
                 if (config.channel_count == 1) {
                     *pChannels = AudioSystem::CHANNEL_IN_MONO;
                 } else {
@@ -2926,7 +2943,7 @@ status_t AudioHardware::AudioStreamInMSM8x60::set(
         }
 
         ALOGV("confirm config");
-        status = ioctl(mFd, AUDIO_GET_CONFIG, &config);
+        status = ioctl(mFdin, AUDIO_GET_CONFIG, &config);
         if (status < 0) {
             ALOGE("Cannot read config");
             goto Error;
@@ -3111,7 +3128,7 @@ ssize_t AudioHardware::AudioStreamInMSM8x60::read( void* buffer, ssize_t bytes)
         }
 #ifdef QCOM_FM_ENABLED
         if((mDevices == AudioSystem::DEVICE_IN_FM_RX) || (mDevices == AudioSystem::DEVICE_IN_FM_RX_A2DP) ){
-            if(ioctl(mFd, AUDIO_GET_SESSION_ID, &dec_id)) {
+            if(ioctl(mFdin, AUDIO_GET_SESSION_ID, &dec_id)) {
                 ALOGE("AUDIO_GET_SESSION_ID failed*********");
                 hw->mLock.unlock();
                 return -1;
