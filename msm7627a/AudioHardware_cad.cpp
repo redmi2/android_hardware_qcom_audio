@@ -1841,7 +1841,8 @@ status_t AudioHardware::AudioStreamOutMSM72xx::set(
         if (pFormat) *pFormat = format();
         if (pChannels) *pChannels = channels();
         if (pRate) *pRate = sampleRate();
-        return BAD_VALUE;
+        ALOGE("AudioStreamOutMSM72xx: Setting up correct values");
+        return NO_ERROR;
     }
 
     if (pFormat) *pFormat = lFormat;
