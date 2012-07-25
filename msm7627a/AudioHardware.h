@@ -589,6 +589,10 @@ private:
             uint32_t mVoipBitRate;
             msm_snd_endpoint *mSndEndpoints;
             int mNumSndEndpoints;
+
+            msm_cad_endpoint *mCadEndpoints;
+            int mNumCadEndpoints;
+
             int mCurSndDevice;
             int m7xsnddriverfd;
             bool        mDualMicEnabled;
