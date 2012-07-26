@@ -147,6 +147,9 @@ enum audio_call_mode {
     CS_INACTIVE   = 0x0,
     CS_ACTIVE     = 0x1,
     CS_HOLD       = 0x2,
+    CS_INACTIVE_SESSION2   = 0x0,
+    CS_ACTIVE_SESSION2     = 0x100,
+    CS_HOLD_SESSION2       = 0x200,
     IMS_INACTIVE  = 0x0,
     IMS_ACTIVE    = 0x10,
     IMS_HOLD      = 0x20
@@ -203,6 +206,8 @@ struct alsa_device_t {
     void     (*setVocRecMode)(uint8_t);
     void     (*setVoLTEMicMute)(int);
     void     (*setVoLTEVolume)(int);
+    void     (*setSGLTEMicMute)(int);
+    void     (*setSGLTEVolume)(int);
 };
 
 // ----------------------------------------------------------------------------
@@ -525,6 +530,7 @@ protected:
     void                enableVoiceCall(char* verb, char* modifier, int mode, int device);
     bool                routeVoiceCall(int device, int	newMode);
     bool                routeVoLTECall(int device, int newMode);
+    bool                routeSGLTECall(int device, int newMode);
     friend class AudioStreamOutALSA;
     friend class AudioStreamInALSA;
     friend class ALSAStreamOps;
@@ -553,6 +559,7 @@ protected:
     bool                mMicMute;
     int mCSCallActive;
     int mVolteCallActive;
+    int mSGLTECallActive;
     int mCallState;
     int mIsFmActive;
     bool mBluetoothVGS;

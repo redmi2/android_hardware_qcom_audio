@@ -67,6 +67,8 @@ static void     s_enable_slow_talk(bool flag);
 static void     s_set_voc_rec_mode(uint8_t mode);
 static void     s_set_volte_mic_mute(int state);
 static void     s_set_volte_volume(int vol);
+static void     s_set_sglte_mic_mute(int);
+static void     s_set_sglte_volume(int);
 
 static char mic_type[25];
 static char curRxUCMDevice[50];
@@ -133,6 +135,8 @@ static int s_device_open(const hw_module_t* module, const char* name,
     dev->setVocRecMode = s_set_voc_rec_mode;
     dev->setVoLTEMicMute = s_set_volte_mic_mute;
     dev->setVoLTEVolume = s_set_volte_volume;
+    dev->setSGLTEMicMute = s_set_sglte_mic_mute;
+    dev->setSGLTEVolume = s_set_sglte_volume;
 
     *device = &dev->common;
 
@@ -1155,6 +1159,10 @@ int getUseCaseType(const char *useCase)
             strlen(SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE,
             strlen(SND_USE_CASE_MOD_CAPTURE_VOICE)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_SGLTECALL,
+            strlen(SND_USE_CASE_VERB_SGLTECALL)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_SGLTE,
+            strlen(SND_USE_CASE_MOD_PLAY_SGLTE)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_VOLTE,
             strlen(SND_USE_CASE_VERB_VOLTE)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_VOLTE,
@@ -1410,6 +1418,21 @@ void s_set_voice_volume(int vol)
     }
 }
 
+void s_set_sglte_volume(int vol)
+{
+    int err = 0;
+    ALOGD("s_set_sglte_volume: volume %d", vol);
+    ALSAControl control("/dev/snd/controlC0");
+    control.set("SGLTE Rx Volume", vol, 0);
+
+    if (platform_is_Fusion3()) {
+        err = csd_client_volume(vol);
+        if (err < 0) {
+            ALOGE("s_set_sglte_volume: csd_client error %d", err);
+        }
+    }
+}
+
 void s_set_volte_volume(int vol)
 {
     ALOGD("s_set_volte_volume: volume %d", vol);
@@ -1438,6 +1461,20 @@ void s_set_mic_mute(int state)
             ALOGE("s_set_mic_mute: csd_client error %d", err);
         }
 #endif
+    }
+}
+void s_set_sglte_mic_mute(int state)
+{
+    int err = 0;
+    ALOGD("s_set_sglte_mic_mute: state %d", state);
+    ALSAControl control("/dev/snd/controlC0");
+    control.set("SGLTE Tx Mute", state, 0);
+
+    if (platform_is_Fusion3()) {
+        err = csd_client_mic_mute(state);
+        if (err < 0) {
+            ALOGE("s_set_sglte_mic_mute: csd_client error %d", err);
+        }
     }
 }
 void s_set_volte_mic_mute(int state)
