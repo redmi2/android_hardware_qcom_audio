@@ -10,6 +10,8 @@ include $(CLEAR_VARS)
 LOCAL_ARM_MODE := arm
 LOCAL_CFLAGS := -D_POSIX_SOURCE
 
+LOCAL_CFLAGS += -DQCOM_ACDB_ENABLED
+
 LOCAL_SRC_FILES := \
     AudioHardware.cpp \
     audio_hw_hal.cpp
