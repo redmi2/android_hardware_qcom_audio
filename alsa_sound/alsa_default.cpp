@@ -1355,9 +1355,10 @@ char *getUCMDevice(uint32_t devices, int input, char *rxDevice)
             }
         } else if (devices & AudioSystem::DEVICE_IN_AUX_DIGITAL) {
             return strdup(SND_USE_CASE_DEV_HDMI_TX); /* HDMI TX */
+        } else if ((devices & AudioSystem::DEVICE_IN_WIRED_HEADSET)) {
+            return strdup(SND_USE_CASE_DEV_HEADSET); /* HEADSET TX */
 #ifdef QCOM_ANC_HEADSET_ENABLED
-        } else if ((devices & AudioSystem::DEVICE_IN_WIRED_HEADSET) ||
-                   (devices & AudioSystem::DEVICE_IN_ANC_HEADSET)) {
+        } else if (devices & AudioSystem::DEVICE_IN_ANC_HEADSET) {
             return strdup(SND_USE_CASE_DEV_HEADSET); /* HEADSET TX */
 #endif
         } else if (devices & AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET) {
