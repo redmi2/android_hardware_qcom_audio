@@ -13,3 +13,9 @@ endif
 ifeq ($(call is-board-platform,msm8660),true)
     include $(AUDIO_HW_ROOT)/msm8660/Android.mk
 endif
+ifeq ($(call is-board-platform,msm8660),true)
+    include $(AUDIO_HW_ROOT)/mm-audio/Android.mk
+endif
+ifeq ($(call is-board-platform,msm8960),true)
+    include $(AUDIO_HW_ROOT)/mm-audio/Android.mk
+endif
