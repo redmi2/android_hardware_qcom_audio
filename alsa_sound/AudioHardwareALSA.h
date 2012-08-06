@@ -147,6 +147,9 @@ static int USBRECBIT_FM = (1 << 3);
 #define AFE_PROXY_SAMPLE_RATE 48000
 #define AFE_PROXY_CHANNEL_COUNT 2
 
+#define MAX_SLEEP_RETRY 100  /*  Will check 100 times before continuing */
+#define AUDIO_INIT_SLEEP_WAIT 50 /* 50 ms */
+
 static uint32_t FLUENCE_MODE_ENDFIRE   = 0;
 static uint32_t FLUENCE_MODE_BROADSIDE = 1;
 class ALSADevice;
