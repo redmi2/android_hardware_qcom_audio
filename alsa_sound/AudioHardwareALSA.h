@@ -373,15 +373,9 @@ public:
 
     virtual status_t    standby();
 
-    virtual status_t    setParameters(const String8& keyValuePairs)
-    {
-        return NO_ERROR;
-    }
+    virtual status_t    setParameters(const String8& keyValuePairs);
 
-    virtual String8     getParameters(const String8& keys)
-    {
-        return String8("");
-    }
+    virtual String8     getParameters(const String8& keys);
 
 
     // return the number of audio frames written by the audio dsp to DAC since
@@ -405,6 +399,7 @@ private:
     bool                mSeeking;
     bool                mReachedEOS;
     bool                mSkipWrite;
+    bool                mEosEventReceived;
     AudioHardwareALSA  *mParent;
     alsa_handle_t *     mAlsaHandle;
     alsa_device_t *     mAlsaDevice;

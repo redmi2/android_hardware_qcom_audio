@@ -639,7 +639,8 @@ void AudioHardwareALSA::doRouting(int device)
         } else {
              ALSAHandleList::iterator it = mDeviceList.end();
              it--;
-             mALSADevice->route(&(*it), (uint32_t)device, newMode);
+             if(device != mCurDevice)
+                 mALSADevice->route(&(*it), (uint32_t)device, newMode);
         }
     }
     mCurDevice = device;
