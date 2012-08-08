@@ -24,6 +24,7 @@ endif
 ifeq ($(BOARD_HAVE_QCOM_FM),true)
   LOCAL_CFLAGS += -DQCOM_FM_ENABLED
 endif
+LOCAL_CFLAGS += -DQCOM_VOIP_ENABLED
 
 LOCAL_SHARED_LIBRARIES := \
     libcutils       \
