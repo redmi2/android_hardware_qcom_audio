@@ -229,6 +229,7 @@ status_t AudioHardwareALSA::setVoiceVolume(float v)
 #ifdef QCOM_FM_ENABLED
 status_t  AudioHardwareALSA::setFmVolume(float value)
 {
+    Mutex::Autolock autoLock(mLock);
     status_t status = NO_ERROR;
 
     int vol;
@@ -303,7 +304,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         doRouting(0);
     }
 
-    key = String8(FLUENCE_KEY);
+    key = String8(AudioParameter::keyFluenceType);
     if (param.get(key, value) == NO_ERROR) {
         if (value == "quadmic") {
             mDevSettingsFlag |= QMIC_FLAG;
@@ -451,7 +452,7 @@ String8 AudioHardwareALSA::getParameters(const String8& keys)
         param.add(key, value);
     }
 
-    key = String8(FLUENCE_KEY);
+    key = String8(AudioParameter::keyFluenceType);
     if (param.get(key, value) == NO_ERROR) {
     if ((mDevSettingsFlag & QMIC_FLAG) &&
                                (mDevSettingsFlag & ~DMIC_FLAG))
@@ -639,6 +640,7 @@ void AudioHardwareALSA::doRouting(int device)
                               }
                          }
         } else {
+             setInChannels(device);
              ALSAHandleList::iterator it = mDeviceList.end();
              it--;
              if(device != mCurDevice)
@@ -646,6 +648,25 @@ void AudioHardwareALSA::doRouting(int device)
         }
     }
     mCurDevice = device;
+}
+
+void AudioHardwareALSA::setInChannels(int device)
+{
+     ALSAHandleList::iterator it;
+
+     if (device & AudioSystem::DEVICE_IN_BUILTIN_MIC) {
+         for(it = mDeviceList.begin(); it != mDeviceList.end(); ++it) {
+             if (!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC,
+                 strlen(SND_USE_CASE_VERB_HIFI_REC)) ||
+                 !strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC,
+                 strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC))) {
+                 mALSADevice->setInChannels(it->channels);
+                 return;
+             }
+         }
+     }
+
+     mALSADevice->setInChannels(1);
 }
 
 uint32_t AudioHardwareALSA::getVoipMode(int format)
@@ -1074,8 +1095,10 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
            if(sampleRate) {
                it->sampleRate = *sampleRate;
            }
-           if(channels)
+           if(channels) {
                it->channels = AudioSystem::popCount(*channels);
+               setInChannels(devices);
+           }
            err = mALSADevice->startVoipCall(&(*it));
            if (err) {
                ALOGE("Error opening pcm input device");
@@ -1222,6 +1245,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
 #endif
                        ));
             ALOGV("updated channel info: channels=%d", it->channels);
+            setInChannels(devices);
         }
         if (devices == AudioSystem::DEVICE_IN_VOICE_CALL){
            /* Add current devices info to devices to do route */
@@ -1506,6 +1530,7 @@ char *use_case;
         alsa_handle.devices = device;
     }
 #endif
+    setInChannels(device);
     mALSADevice->route(&(*it), (uint32_t)device, mode);
     if (!strcmp(it->useCase, verb)) {
         snd_use_case_set(mUcMgr, "_verb", verb);
