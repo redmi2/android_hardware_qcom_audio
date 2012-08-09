@@ -52,7 +52,14 @@ LOCAL_C_INCLUDES += frameworks/base/include
 LOCAL_C_INCLUDES += system/core/include
 
 
-LOCAL_MODULE := audio.primary.msm8960
+ifeq ($(call is-board-platform,msm8974),true)
+  LOCAL_MODULE := audio.primary.msm8974
+endif
+
+ifeq ($(call is-board-platform,msm8960),true)
+  LOCAL_MODULE := audio.primary.msm8960
+endif
+
 LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw
 LOCAL_MODULE_TAGS := optional
 
@@ -72,7 +79,15 @@ LOCAL_SRC_FILES := \
     audio_policy_hal.cpp \
     AudioPolicyManagerALSA.cpp
 
-LOCAL_MODULE := audio_policy.msm8960
+
+ifeq ($(call is-board-platform,msm8974),true)
+  LOCAL_MODULE := audio_policy.msm8974
+endif
+
+ifeq ($(call is-board-platform,msm8960),true)
+  LOCAL_MODULE := audio_policy.msm8960
+endif
+
 LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw
 LOCAL_MODULE_TAGS := optional
 
@@ -132,7 +147,14 @@ LOCAL_SHARED_LIBRARIES := \
     libalsa-intf \
     libcsd-client
 
-LOCAL_MODULE:= alsa.msm8960
+
+ifeq ($(call is-board-platform,msm8974),true)
+  LOCAL_MODULE:= alsa.msm8974
+endif
+
+ifeq ($(call is-board-platform,msm8960),true)
+  LOCAL_MODULE:= alsa.msm8960
+endif
 LOCAL_MODULE_TAGS := optional
 
   include $(BUILD_SHARED_LIBRARY)
