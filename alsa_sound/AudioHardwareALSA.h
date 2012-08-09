@@ -84,7 +84,6 @@ class AudioHardwareALSA;
 #define MODE_PCM                0xC
 
 #define DUALMIC_KEY         "dualmic_enabled"
-#define FLUENCE_KEY         "fluence"
 #define ANC_KEY             "anc_enabled"
 #define TTY_MODE_KEY        "tty_mode"
 #define BT_SAMPLERATE_KEY   "bt_samplerate"
@@ -211,6 +210,7 @@ struct alsa_device_t {
     void     (*setVoLTEVolume)(int);
     void     (*setSGLTEMicMute)(int);
     void     (*setSGLTEVolume)(int);
+    void     (*setInChannels)(int);
 };
 
 // ----------------------------------------------------------------------------
@@ -660,6 +660,7 @@ protected:
     void                startUsbPlaybackIfNotStarted();
     void                startUsbRecordingIfNotStarted();
 #endif
+    void                setInChannels(int device);
 
     void                disableVoiceCall(char* verb, char* modifier, int mode, int device);
     void                enableVoiceCall(char* verb, char* modifier, int mode, int device);
