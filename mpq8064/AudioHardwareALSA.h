@@ -113,6 +113,7 @@ class AudioBitstreamSM;
 #define MAX_OUTPUT_CHANNELS_SUPPORTED   6
 #define PCM_BLOCK_PER_CHANNEL_MS11      1536*2
 #define AAC_BLOCK_PER_CHANNEL_MS11      768
+#define NUMBER_BITS_IN_A_BYTE           8
 
 #define PCM_2CH_OUT                 0
 #define PCM_MCH_OUT                 1
@@ -160,6 +161,19 @@ struct alsa_handle_t {
     struct pcm *        rxHandle;
     uint32_t            activeDevice;
     snd_use_case_mgr_t  *ucMgr;
+};
+
+struct compressed_read_metadata_t {
+    uint32_t            streamId;
+    uint32_t            formatId;
+    uint32_t            dataOffset;
+    uint32_t            frameSize;
+    uint32_t            commandOffset;
+    uint32_t            commandSize;
+    uint32_t            encodedPcmSamples;
+    uint32_t            timestampMsw;
+    uint32_t            timestampLsw;
+    uint32_t            flags;
 };
 
 typedef List<alsa_handle_t> ALSAHandleList;
@@ -636,6 +650,7 @@ private:
     int                 mInputBufferSize;
     int                 mInputBufferCount;
     int32_t             mMinBytesReqToDecode;
+    compressed_read_metadata_t mReadMetaData;
     // HDMI and SPDIF specifics
     char                mSpdifOutputFormat[128];
     char                mHdmiOutputFormat[128];
@@ -717,6 +732,8 @@ private:
     ssize_t             readFromCapturePath(char *buffer);
     void                resetCapturePathVariables();
     void                exitFromCaptureThread();
+    uint32_t            read4BytesFromBuffer(char *buf);
+    void                updateCaptureMetaData(char *buf);
     // Playback
     void                setRoutingFlagsBasedOnConfig();
     status_t            openRoutingDevice(char *useCase, bool bIsUseCase,
