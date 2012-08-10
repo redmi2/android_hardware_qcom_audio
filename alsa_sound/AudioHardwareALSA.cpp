@@ -477,6 +477,18 @@ String8 AudioHardwareALSA::getParameters(const String8& keys)
         if(mBluetoothVGS)
            param.addInt(String8("isVGS"), true);
     }
+    key = String8(AudioParameter::keySSR);
+    if (param.get(key, value) == NO_ERROR) {
+        //char ssr_enabled[6] = "false";
+        //property_get("ro.qcom.audio.ssr",ssr_enabled,"0");
+        //if (!strncmp("true", ssr_enabled, 4)) {
+            //value = String8("true");
+        //}
+        //SSR feature is not supported in jb_choco branch
+        value = String8("false");
+        param.add(key, value);
+    }
+
 
     ALOGV("AudioHardwareALSA::getParameters() %s", param.toString().string());
     return param.toString();
@@ -1225,15 +1237,26 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         if(sampleRate) {
             it->sampleRate = *sampleRate;
         }
-#ifdef QCOM_SSR_ENABLED
+//#ifdef QCOM_SSR_ENABLED
         if (6 == it->channels) {
             if (!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC, strlen(SND_USE_CASE_VERB_HIFI_REC))
                 || !strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC))) {
                 ALOGV("OpenInoutStream: Use larger buffer size for 5.1(%s) recording ", it->useCase);
-                it->bufferSize = getInputBufferSize(it->sampleRate,*format,it->channels);
+
+                //Check if SSR is supported by reading system property
+                //char ssr_enabled[6] = "false";
+                //property_get("ro.qcom.audio.ssr",ssr_enabled,"0");
+                //if (strncmp("true", ssr_enabled, 4)) {
+                    //if (status) *status = err;
+                    //SSR feature is not supported in jb_choco branch
+                    ALOGE("openInputStream: FAILED:%d. Surround sound recording is not supported",*status);
+                    return in;
+                //}
+
+                //it->bufferSize = getInputBufferSize(it->sampleRate,*format,it->channels);
             }
         }
-#endif
+//#endif
         err = mALSADevice->open(&(*it));
         if (err) {
            ALOGE("Error opening pcm input device");
