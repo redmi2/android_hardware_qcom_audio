@@ -1565,27 +1565,36 @@ int32_t ALSADevice::get_compressed_channel_status(void *audio_stream_data,
     return 0;
 }
 
-status_t ALSADevice::setPcmVolume(int value)
+status_t ALSADevice::setPlaybackVolume(int value, char *useCase)
 {
     status_t err = NO_ERROR;
+    char volMixerCtrlStr[128];
 
-    err = setMixerControl("HIFI2 RX Volume",value,0);
+    if((!strncmp(useCase, SND_USE_CASE_VERB_HIFI2,
+           strlen(SND_USE_CASE_VERB_HIFI2))) ||
+       (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC2,
+           strlen(SND_USE_CASE_MOD_PLAY_MUSIC2))))
+        strlcpy(volMixerCtrlStr, "HIFI2 RX Volume", sizeof(volMixerCtrlStr));
+    else if((!strncmp(useCase, SND_USE_CASE_VERB_HIFI3,
+                strlen(SND_USE_CASE_VERB_HIFI3))) ||
+            (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC3,
+                strlen(SND_USE_CASE_MOD_PLAY_MUSIC3))))
+        strlcpy(volMixerCtrlStr, "HIFI3 RX Volume", sizeof(volMixerCtrlStr));
+    else if((!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
+                strlen(SND_USE_CASE_VERB_HIFI_TUNNEL))) ||
+            (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL,
+                strlen(SND_USE_CASE_MOD_PLAY_TUNNEL))))
+        strlcpy(volMixerCtrlStr, "COMPRESSED RX Volume", sizeof(volMixerCtrlStr));
+    else if((!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
+                strlen(SND_USE_CASE_VERB_HIFI_TUNNEL2))) ||
+            (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
+                strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2))))
+        strlcpy(volMixerCtrlStr, "COMPRESSED2 RX Volume", sizeof(volMixerCtrlStr));
+
+    err = setMixerControl(volMixerCtrlStr,value,0);
     if(err) {
-        ALOGE("setPcmVolume - HIFI2 error = %d",err);
+        ALOGE("setPlaybackVolume - error = %d",err);
     }
-
-    return err;
-}
-
-status_t ALSADevice::setCompressedVolume(int value)
-{
-    status_t err = NO_ERROR;
-
-    err = setMixerControl("COMPRESSED RX Volume",value,0);
-    if(err) {
-        ALOGE("setCompressedVolume = error = %d",err);
-    }
-
     return err;
 }
 
