@@ -10,12 +10,18 @@ include $(CLEAR_VARS)
 LOCAL_ARM_MODE := arm
 LOCAL_CFLAGS := -D_POSIX_SOURCE
 
+LOCAL_CFLAGS += -DQCOM_ACDB_ENABLED
+
 LOCAL_SRC_FILES := \
     AudioHardware.cpp \
     audio_hw_hal.cpp
 
 ifeq ($(BOARD_HAVE_BLUETOOTH),true)
   LOCAL_CFLAGS += -DWITH_A2DP
+endif
+
+ifeq ($(BOARD_HAVE_QCOM_FM),true)
+  LOCAL_CFLAGS += -DQCOM_FM_ENABLED
 endif
 
 LOCAL_SHARED_LIBRARIES := \
@@ -54,8 +60,6 @@ LOCAL_ADDITIONAL_DEPENDENCIES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
 
 include $(BUILD_SHARED_LIBRARY)
 
-ifeq ("x","y") # use default audio policy manager
-
 # The audio policy is implemented on top of legacy policy code
 include $(CLEAR_VARS)
 
@@ -87,7 +91,6 @@ LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
 LOCAL_ADDITIONAL_DEPENDENCIES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
 
 include $(BUILD_SHARED_LIBRARY)
-endif
 
 # Load audio_policy.conf to system/etc/
 include $(CLEAR_VARS)
