@@ -409,7 +409,18 @@ long pcm_avail(struct pcm *pcm)
                 avail += pcm->sw_p->boundary;
         return avail;
      } else {
-         long avail = sync_ptr->s.status.hw_ptr - sync_ptr->c.control.appl_ptr + ((pcm->flags & PCM_MONO) ? pcm->buffer_size/2 : pcm->buffer_size/4);
+         int buffer_size = 0;
+         long avail;
+         if(pcm->flags & PCM_MONO)
+             buffer_size = pcm->buffer_size/2;
+         else if(pcm->flags & PCM_QUAD)
+             buffer_size = pcm->buffer_size/8;
+         else if(pcm->flags & PCM_5POINT1)
+             buffer_size = pcm->buffer_size/12;
+         else
+             buffer_size = pcm->buffer_size/4;
+
+         avail = sync_ptr->s.status.hw_ptr - sync_ptr->c.control.appl_ptr + buffer_size;
          if (avail < 0)
               avail += pcm->sw_p->boundary;
          else if ((unsigned long) avail >= pcm->sw_p->boundary)
@@ -461,8 +472,18 @@ u_int8_t *dst_address(struct pcm *pcm)
     unsigned long pcm_offset = 0;
     struct snd_pcm_sync_ptr *sync_ptr = pcm->sync_ptr;
     unsigned int appl_ptr = 0;
+    int channels;
+    if(pcm->flags & PCM_MONO)
+        channels = 1;
+    else if(pcm->flags & PCM_QUAD)
+        channels = 4;
+    else if(pcm->flags & PCM_5POINT1)
+        channels = 6;
+    else
+        channels = 2;
 
-    appl_ptr = (pcm->flags & PCM_MONO) ? sync_ptr->c.control.appl_ptr*2 : sync_ptr->c.control.appl_ptr*4;
+    appl_ptr = sync_ptr->c.control.appl_ptr*2*channels;
+
     pcm_offset = (appl_ptr % (unsigned long)pcm->buffer_size);
     return pcm->addr + pcm_offset;
 
@@ -529,7 +550,15 @@ static int pcm_write_mmap(struct pcm *pcm, void *data, unsigned count)
     int err;
     int bytes_written;
 
-    frames = (pcm->flags & PCM_MONO) ? (count / 2) : (count / 4);
+    if (pcm->flags & PCM_MONO) {
+        frames = (count / 2);
+    } else if (pcm->flags & PCM_QUAD) {
+        frames = (count / 8);
+    } else if (pcm->flags & PCM_5POINT1) {
+        frames = (count / 12);
+    } else {
+        frames = (count / 4);
+    }
 
     pcm->sync_ptr->flags = SNDRV_PCM_SYNC_PTR_APPL | SNDRV_PCM_SYNC_PTR_AVAIL_MIN;
     err = sync_ptr(pcm);

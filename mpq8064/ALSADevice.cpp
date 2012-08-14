@@ -176,6 +176,11 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
                  (format == AUDIO_FORMAT_EAC3)) {
             ALOGV("AC3 CODEC");
             compr_params.codec.id = compr_cap.codecs[2];
+            err = setHDMIChannelCount();
+            if(err != OK) {
+                ALOGE("setHDMIChannelCount err = %d", err);
+                return err;
+            }
         } else if(format == AUDIO_FORMAT_MP3) {
              ALOGV("MP3 CODEC");
              compr_params.codec.id = compr_cap.codecs[0];
@@ -194,13 +199,13 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
             err = -errno;
             return err;
         }
-        if (handle->channels > 2)
-            handle->channels = 2;
     }
-	if(handle->sampleRate > 48000) {
-		ALOGE("Sample rate >48000, opening the driver with 48000Hz");
-		handle->sampleRate     = 48000;
-	}
+    if(handle->sampleRate > 48000) {
+        ALOGE("Sample rate >48000, opening the driver with 48000Hz");
+        handle->sampleRate     = 48000;
+    }
+    if(handle->channels > 8)
+        handle->channels = 8;
     params = (snd_pcm_hw_params*) calloc(1, sizeof(struct snd_pcm_hw_params));
     if (!params) {
 		//SMANI:: Commented to fix build issues. FIX IT.
@@ -229,7 +234,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
                            strlen(SND_USE_CASE_VERB_HIFI3))) ||
         (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC3,
                            strlen(SND_USE_CASE_MOD_PLAY_MUSIC3)))) {
-        int ALSAbufferSize = getALSABufferSize(handle);
+        int ALSAbufferSize = reqBuffSize;
         param_set_int(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, ALSAbufferSize);
         ALOGD("ALSAbufferSize = %d",ALSAbufferSize);
         param_set_int(params, SNDRV_PCM_HW_PARAM_PERIODS, MULTI_CHANNEL_PERIOD_COUNT);
@@ -240,7 +245,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
 
     param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 16);
     param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS,
-                   handle->channels - 1 ? 32 : 16);
+                   handle->channels * 16);
     param_set_int(params, SNDRV_PCM_HW_PARAM_CHANNELS,
                   handle->channels);
     param_set_int(params, SNDRV_PCM_HW_PARAM_RATE, handle->sampleRate);
@@ -300,8 +305,8 @@ status_t ALSADevice::setSoftwareParams(alsa_handle_t *handle)
           params->start_threshold = periodSize/2;
           params->stop_threshold = INT_MAX;
      } else {
-         params->avail_min = handle->channels - 1 ? periodSize/2 : periodSize/4;
-         params->start_threshold = handle->channels - 1 ? periodSize : periodSize/2;
+         params->avail_min =  periodSize/(2*handle->channels);
+         params->start_threshold = periodSize/(handle->channels);
          //Data required in packets for WMA which could be upto 16K.
          if (handle->format == AUDIO_FORMAT_WMA ||
               handle->format == AUDIO_FORMAT_WMA_PRO)
@@ -318,8 +323,10 @@ status_t ALSADevice::setSoftwareParams(alsa_handle_t *handle)
                            strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2)))) {
         params->tstamp_mode = SNDRV_PCM_TSTAMP_NONE;
         params->period_step = 1;
+        params->avail_min = handle->channels - 1 ? periodSize/2 : periodSize/4;
+        params->start_threshold = handle->channels - 1 ? periodSize : periodSize/2;
         params->xfer_align = (handle->handle->flags & PCM_MONO) ?
-            handle->handle->period_size/2 : handle->handle->period_size/4;
+                   handle->handle->period_size/2 : handle->handle->period_size/4;
     }
     params->silence_threshold = 0;
     params->silence_size = 0;
@@ -478,14 +485,6 @@ status_t ALSADevice::open(alsa_handle_t *handle)
     close(handle);
     ALOGD("s_open: handle %p", handle);
 
-    if(handle->channels == 1 && handle->devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
-        err = setHDMIChannelCount();
-        if(err != OK) {
-            ALOGE("setHDMIChannelCount err = %d", err);
-            return err;
-        }
-    }
-
     // ASoC multicomponent requires a valid path (frontend/backend) for
     // the device to be opened
 
@@ -520,7 +519,7 @@ status_t ALSADevice::open(alsa_handle_t *handle)
 
     if (handle->channels == 1) {
         flags |= PCM_MONO;
-    } else if (handle->channels == 6) {
+    } else if (handle->channels >= 6) {
         flags |= PCM_5POINT1;
     } else {
         flags |= PCM_STEREO;

@@ -63,10 +63,6 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
                                          status_t   *status)
 {
     devices |= AudioSystem::DEVICE_OUT_SPDIF;
-    //hardcoding to hdmi default dev
-    //devices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
-    //devices = devices & ~AudioSystem::DEVICE_OUT_SPEAKER;
-    //end
     alsa_handle_t alsa_handle;
     char *use_case;
     bool bIsUseCaseSet = false;
@@ -84,11 +80,10 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
        format == AUDIO_FORMAT_HE_AAC_V2 || format == AUDIO_FORMAT_AAC_ADIF) {
         if(samplingRate > 24000) {
             mSampleRate     = 48000;
-            mChannels       = 2;
         }
+        mChannels       = 6;
     } else if (format == AUDIO_FORMAT_AC3 || format == AUDIO_FORMAT_EAC3) {
-        if(mChannels > 2)
-            mChannels   = 2;
+        mChannels   = 6;
     }
     // NOTE: This has to be changed when Multi channel PCM has to be
     // sent over HDMI
@@ -122,7 +117,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     mMS11Decoder        = NULL;
     mBitstreamSM        = NULL;
 
-    mInputBufferSize    = DEFAULT_BUFFER_SIZE;
+    mInputBufferSize    = MULTI_CHANNEL_MAX_PERIOD_SIZE;
     mInputBufferCount   = TUNNEL_DECODER_BUFFER_COUNT;
     mEfd = -1;
 
@@ -183,7 +178,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
             format_ms11 = FORMAT_DOLBY_DIGITAL_PLUS_MAIN;
             mMinBytesReqToDecode = 0;
         }
-        if(mMS11Decoder->setUseCaseAndOpenStream(format_ms11,channels,samplingRate)) {
+        if(mMS11Decoder->setUseCaseAndOpenStream(format_ms11,mChannels,samplingRate)) {
             ALOGE("SetUseCaseAndOpen MS11 failed");
             delete mMS11Decoder;
             delete mBitstreamSM;
@@ -546,11 +541,11 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
 
             // copy the output of MS11 to HAL internal buffers for PCM and SPDIF
             if(mRoutePcmAudio) {
-                bufPtr=mBitstreamSM->getOutputBufferWritePtr(PCM_2CH_OUT);
-                copyBytesMS11 = mMS11Decoder->copyOutputFromMS11Buf(PCM_2CH_OUT,bufPtr);
+                bufPtr=mBitstreamSM->getOutputBufferWritePtr(PCM_MCH_OUT);
+                copyBytesMS11 = mMS11Decoder->copyOutputFromMS11Buf(PCM_MCH_OUT,bufPtr);
                 // Note: Set the output Buffer to start for for changein sample rate and channel
                 // This has to be done.
-                mBitstreamSM->setOutputBufferWritePtr(PCM_2CH_OUT,copyBytesMS11);
+                mBitstreamSM->setOutputBufferWritePtr(PCM_MCH_OUT,copyBytesMS11);
                 // If output samples size is zero, donot continue and wait for next
                 // write for decode
             }
@@ -589,9 +584,9 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
             // Write the output of MS11 to appropriate drivers
             if(mPcmRxHandle && mRoutePcmAudio) {
                 period_size = mPcmRxHandle->periodSize;
-                while(mBitstreamSM->sufficientSamplesToRender(PCM_2CH_OUT,period_size) == true) {
+                while(mBitstreamSM->sufficientSamplesToRender(PCM_MCH_OUT,period_size) == true) {
                     n = pcm_write(mPcmRxHandle->handle,
-                             mBitstreamSM->getOutputBufferPtr(PCM_2CH_OUT),
+                              mBitstreamSM->getOutputBufferPtr(PCM_MCH_OUT),
                               period_size);
                     ALOGD("mPcmRxHandle - pcm_write returned with %d", n);
                     if (n == -EBADFD) {
@@ -605,7 +600,7 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
                     } else {
                         mFrameCount++;
                         sent += static_cast<ssize_t>((period_size));
-                        mBitstreamSM->copyResidueOutputToStart(PCM_2CH_OUT,period_size);
+                        mBitstreamSM->copyResidueOutputToStart(PCM_MCH_OUT,period_size);
                     }
                 }
             }
