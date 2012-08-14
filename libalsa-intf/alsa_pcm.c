@@ -43,7 +43,7 @@
 #include <sys/poll.h>
 #include <linux/ioctl.h>
 #include <linux/types.h>
-
+#include <sound/compress_params.h>
 #include "alsa_audio.h"
 
 #define __force
@@ -133,6 +133,18 @@ const char *formats_list[][2] = {
         {"U18_3LE", "Unsigned 18 bit Little Endian in 3bytes"},
         {"U18_3BE", "Unsigned 18 bit Big Endian in 3bytes"},
 };
+enum decoder_alias {
+    FORMAT_MP3              = SND_AUDIOCODEC_MP3,
+    FORMAT_AAC              = SND_AUDIOCODEC_AAC,
+    FORMAT_AC3_PASS_THROUGH = SND_AUDIOCODEC_AC3_PASS_THROUGH,
+    FORMAT_WMA              = SND_AUDIOCODEC_WMA,
+    FORMAT_WMA_PRO          = SND_AUDIOCODEC_WMA_PRO,
+    FORMAT_DTS              = SND_AUDIOCODEC_DTS,
+    FORMAT_DTS_LBR          = SND_AUDIOCODEC_DTS_LBR,
+    FORMAT_DTS_PASS_THROUGH = SND_AUDIOCODEC_DTS_PASS_THROUGH,
+    FORMAT_AMRWB            = SND_AUDIOCODEC_AMRWB,
+    FORMAT_AMRWB_PLUS       = SND_AUDIOCODEC_AMRWBPLUS
+};
 
 int get_compressed_format(const char *format)
 {
@@ -146,6 +158,27 @@ int get_compressed_format(const char *format)
         } else if (strcmp(ch, "AAC") == 0) {
                 printf("AAC is selected\n");
                 return FORMAT_AAC;
+        } else if (strcmp(ch, "AC3_PASS_THROUGH") == 0) {
+                printf("AC3_PASS_THROUGH is selected\n");
+                return FORMAT_AC3_PASS_THROUGH;
+        } else if (strcmp(ch, "WMA") == 0) {
+                printf("WMA is selected\n");
+                return FORMAT_WMA;
+        }else if (strcmp(ch, "WMA_PRO") == 0) {
+                printf("WMA_PRO is selected\n");
+                return FORMAT_WMA_PRO;
+        }else if (strcmp(ch, "DTS") == 0) {
+                printf("DTS is selected\n");
+                return FORMAT_DTS;
+        } else if (strcmp(ch, "DTS_LBR") == 0) {
+                printf("DTS_LBR is selected\n");
+                return FORMAT_DTS_LBR;
+        } else if (strcmp(ch, "AMR_WB") == 0) {
+                printf("AMR_WB is selected\n");
+                return FORMAT_AMRWB;
+        }else if (strcmp(ch, "AMR_WB_PLUS") == 0) {
+                printf("FORMAT_AMRWB_PLUS is selected\n");
+                return FORMAT_AMRWB_PLUS;
         } else {
                 printf("invalid format\n");
                 return -1;

@@ -186,7 +186,7 @@ static int play_file(unsigned rate, unsigned channels, int fd,
     if (channels == 1)
         flags |= PCM_MONO;
     else if (channels == 6)
-	flags |= PCM_5POINT1;
+  flags |= PCM_5POINT1;
     else
         flags |= PCM_STEREO;
 
@@ -215,16 +215,16 @@ static int play_file(unsigned rate, unsigned channels, int fd,
        if (!period)
            period = compr_cap.min_fragment_size;
            switch (get_compressed_format(compr_codec)) {
-           case FORMAT_MP3:
-               compr_params.codec.id = compr_cap.codecs[FORMAT_MP3];
+           case SND_AUDIOCODEC_MP3:
+               compr_params.codec.id = SND_AUDIOCODEC_MP3;
                break;
-           case FORMAT_AC3_PASS_THROUGH:
-               compr_params.codec.id = compr_cap.codecs[FORMAT_AC3_PASS_THROUGH];
-               printf("codec -d = %x\n", compr_params.codec.id);
+           case SND_AUDIOCODEC_AC3_PASS_THROUGH:
+               compr_params.codec.id = SND_AUDIOCODEC_AC3_PASS_THROUGH;
+               printf("codec -d = %x\n", SND_AUDIOCODEC_AC3_PASS_THROUGH);
                break;
-           case FORMAT_AAC:
-               compr_params.codec.id = compr_cap.codecs[FORMAT_AAC];
-               printf("codec -d = %x\n", compr_params.codec.id);
+           case SND_AUDIOCODEC_AAC:
+               compr_params.codec.id = SND_AUDIOCODEC_AAC;
+               printf("codec -d = %x\n", SND_AUDIOCODEC_AAC);
                break;
            default:
                break;
@@ -380,11 +380,11 @@ static int play_file(unsigned rate, unsigned channels, int fd,
                             pcm->sync_ptr->c.control.appl_ptr);
                  if (compressed && start) {
                     struct snd_compr_tstamp tstamp;
-		    if (ioctl(pcm->fd, SNDRV_COMPRESS_TSTAMP, &tstamp))
-			fprintf(stderr, "Aplay: failed SNDRV_COMPRESS_TSTAMP\n");
+        if (ioctl(pcm->fd, SNDRV_COMPRESS_TSTAMP, &tstamp))
+      fprintf(stderr, "Aplay: failed SNDRV_COMPRESS_TSTAMP\n");
                     else
-	                fprintf(stderr, "timestamp = %lld\n", tstamp.timestamp);
-		}
+                  fprintf(stderr, "timestamp = %lld\n", tstamp.timestamp);
+    }
              }
              /*
               * If we have reached start threshold of buffer prefill,
@@ -493,7 +493,7 @@ int play_raw(const char *fg, int rate, int ch, const char *device, const char *f
         flag = PCM_NMMAP;
 
     fprintf(stderr, "aplay: Playing '%s': format %s ch = %d\n",
-		    fn, get_format_desc(format), ch );
+        fn, get_format_desc(format), ch );
     return play_file(rate, ch, fd, flag, device, 0);
 }
 
@@ -572,13 +572,13 @@ int main(int argc, char **argv)
     if (argc <2) {
           printf("\nUsage: aplay [options] <file>\n"
                 "options:\n"
-                "-D <hw:C,D>	-- Alsa PCM by name\n"
-                "-M		-- Mmap stream\n"
-                "-P		-- Hostless steam[No PCM]\n"
-		"-C             -- Channels\n"
-		"-R             -- Rate\n"
-                "-V		-- verbose\n"
-		"-F             -- Format\n"
+                "-D <hw:C,D>  -- Alsa PCM by name\n"
+                "-M   -- Mmap stream\n"
+                "-P   -- Hostless steam[No PCM]\n"
+    "-C             -- Channels\n"
+    "-R             -- Rate\n"
+                "-V   -- verbose\n"
+    "-F             -- Format\n"
                 "-B             -- Period\n"
                 "-T <MP3, AAC, AC3_PASS_THROUGH>  -- Compressed\n"
                 "<file> \n");
@@ -624,13 +624,13 @@ int main(int argc, char **argv)
        default:
           printf("\nUsage: aplay [options] <file>\n"
                 "options:\n"
-                "-D <hw:C,D>	-- Alsa PCM by name\n"
-                "-M		-- Mmap stream\n"
-                "-P		-- Hostless steam[No PCM]\n"
-                "-V		-- verbose\n"
-                "-C		-- Channels\n"
-		"-R             -- Rate\n"
-		"-F             -- Format\n"
+                "-D <hw:C,D>  -- Alsa PCM by name\n"
+                "-M   -- Mmap stream\n"
+                "-P   -- Hostless steam[No PCM]\n"
+                "-V   -- verbose\n"
+                "-C   -- Channels\n"
+    "-R             -- Rate\n"
+    "-F             -- Format\n"
                 "-B             -- Period\n"
                 "-T             -- Compressed\n"
                 "<file> \n");
@@ -656,7 +656,7 @@ int main(int argc, char **argv)
     }
 
     if (pcm_flag) {
-	 if (format == SNDRV_PCM_FORMAT_S16_LE) 
+   if (format == SNDRV_PCM_FORMAT_S16_LE)
              rc = play_wav(mmap, rate, ch, device, filename);
          else
              rc = play_raw(mmap, rate, ch, device, filename);
