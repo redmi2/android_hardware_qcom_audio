@@ -553,7 +553,6 @@ void AudioHardwareALSA::doRouting(int device)
     if ((device == AudioSystem::DEVICE_IN_VOICE_CALL)
 #ifdef QCOM_FM_ENABLED
         || (device == AudioSystem::DEVICE_IN_FM_RX)
-        || (device == AudioSystem::DEVICE_OUT_DIRECTOUTPUT)
         || (device == AudioSystem::DEVICE_IN_FM_RX_A2DP)
 #endif
         || (device == AudioSystem::DEVICE_IN_COMMUNICATION)
@@ -1426,12 +1425,14 @@ int newMode = mode();
         mDeviceList.push_back(alsa_handle);
         ALSAHandleList::iterator it = mDeviceList.end();
         it--;
+#ifdef QCOM_USBAUDIO_ENABLED
         if((device & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
            (device & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)){
             device |= AudioSystem::DEVICE_OUT_PROXY;
             alsa_handle.devices = AudioSystem::DEVICE_OUT_PROXY;
             ALOGE("Routing to proxy for FM case");
         }
+#endif
         mALSADevice->route(&(*it), (uint32_t)device, newMode);
         if(!strcmp(it->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO)) {
             snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_DIGITAL_RADIO);
@@ -1439,12 +1440,14 @@ int newMode = mode();
             snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_FM);
         }
         mALSADevice->startFm(&(*it));
+#ifdef QCOM_USBAUDIO_ENABLED
         if((device & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
            (device & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)){
             ALOGE("Starting FM, musbPlaybackState %d", musbPlaybackState);
             startUsbPlaybackIfNotStarted();
             musbPlaybackState |= USBPLAYBACKBIT_FM;
         }
+#endif
     } else if (!(device & AudioSystem::DEVICE_OUT_FM) && mIsFmActive == 1) {
         //i Stop FM Radio
         ALOGV("Stop FM");
@@ -1459,11 +1462,13 @@ int newMode = mode();
             }
         }
         mIsFmActive = 0;
+#ifdef QCOM_USBAUDIO_ENABLED
         musbPlaybackState &= ~USBPLAYBACKBIT_FM;
         if((device & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
            (device & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)){
             closeUsbPlaybackIfNothingActive();
         }
+#endif
     }
 }
 #endif
