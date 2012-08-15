@@ -91,14 +91,6 @@ static void ap_set_phone_state(struct audio_policy *pol, audio_mode_t state)
     qap->apm->setPhoneState(state);
 }
 
-    /* indicate a change in ringer mode */
-static void ap_set_ringer_mode(struct audio_policy *pol, uint32_t mode,
-                               uint32_t mask)
-{
-    struct qcom_audio_policy *qap = to_qap(pol);
-    qap->apm->setRingerMode(mode, mask);
-}
-
     /* force using a specific device category for the specified usage */
 static void ap_set_force_use(struct audio_policy *pol,
                           audio_policy_force_use_t usage,
@@ -134,13 +126,14 @@ static int ap_init_check(const struct audio_policy *pol)
     return qap->apm->initCheck();
 }
 
+#ifdef QCOM_TUNNEL_LPA_ENABLED
 static audio_io_handle_t ap_get_session(struct audio_policy *pol,
                                        audio_stream_type_t stream,
-                                       uint32_t format,
+                                       audio_format_t format,
                                        audio_policy_output_flags_t flags,
                                        int sessionId,
                                        uint32_t samplingRate,
-                                        uint32_t channels)
+                                       uint32_t channels)
 {
     struct qcom_audio_policy *qap = to_qap(pol);
 
@@ -171,13 +164,14 @@ static void ap_release_session(struct audio_policy *pol, audio_io_handle_t outpu
     struct qcom_audio_policy *qap = to_qap(pol);
     qap->apm->releaseSession(output);
 }
+#endif
 
 static audio_io_handle_t ap_get_output(struct audio_policy *pol,
                                        audio_stream_type_t stream,
                                        uint32_t sampling_rate,
                                        audio_format_t format,
                                        uint32_t channels,
-                                       audio_policy_output_flags_t flags)
+                                       audio_output_flags_t flags)
 {
     struct qcom_audio_policy *qap = to_qap(pol);
 
@@ -210,7 +204,7 @@ static void ap_release_output(struct audio_policy *pol,
     qap->apm->releaseOutput(output);
 }
 
-static audio_io_handle_t ap_get_input(struct audio_policy *pol, int inputSource,
+static audio_io_handle_t ap_get_input(struct audio_policy *pol, audio_source_t inputSource,
                                       uint32_t sampling_rate,
                                       audio_format_t format,
                                       uint32_t channels,
@@ -273,6 +267,28 @@ static uint32_t ap_get_strategy_for_stream(const struct audio_policy *pol,
 {
     const struct qcom_audio_policy *qap = to_cqap(pol);
     return qap->apm->getStrategyForStream((AudioSystem::stream_type)stream);
+}
+
+static int ap_set_stream_volume_index_for_device(struct audio_policy *pol,
+                                      audio_stream_type_t stream,
+                                      int index,
+                                      audio_devices_t device)
+{
+   const struct qcom_audio_policy *qap = to_cqap(pol);
+   return qap->apm->setStreamVolumeIndex((AudioSystem::stream_type)stream,
+                                          index,
+                                          device);
+}
+
+static int ap_get_stream_volume_index_for_device(const struct audio_policy *pol,
+                                      audio_stream_type_t stream,
+                                      int *index,
+                                      audio_devices_t device)
+{
+   const struct qcom_audio_policy *qap = to_cqap(pol);
+   return qap->apm->getStreamVolumeIndex((AudioSystem::stream_type)stream,
+                                          index,
+                                          AUDIO_DEVICE_OUT_DEFAULT);
 }
 
 static audio_devices_t ap_get_devices_for_stream(const struct audio_policy *pol,
@@ -344,17 +360,18 @@ static int create_qcom_ap(const struct audio_policy_device *device,
     qap->policy.set_device_connection_state = ap_set_device_connection_state;
     qap->policy.get_device_connection_state = ap_get_device_connection_state;
     qap->policy.set_phone_state = ap_set_phone_state;
-    qap->policy.set_ringer_mode = ap_set_ringer_mode;
     qap->policy.set_force_use = ap_set_force_use;
     qap->policy.get_force_use = ap_get_force_use;
     qap->policy.set_can_mute_enforced_audible =
         ap_set_can_mute_enforced_audible;
     qap->policy.init_check = ap_init_check;
     qap->policy.get_output = ap_get_output;
+#ifdef QCOM_TUNNEL_LPA_ENABLED
     qap->policy.get_session = ap_get_session;
     qap->policy.pause_session = ap_pause_session;
     qap->policy.resume_session = ap_resume_session;
     qap->policy.release_session = ap_release_session;
+#endif
     qap->policy.start_output = ap_start_output;
     qap->policy.stop_output = ap_stop_output;
     qap->policy.release_output = ap_release_output;
@@ -365,6 +382,8 @@ static int create_qcom_ap(const struct audio_policy_device *device,
     qap->policy.init_stream_volume = ap_init_stream_volume;
     qap->policy.set_stream_volume_index = ap_set_stream_volume_index;
     qap->policy.get_stream_volume_index = ap_get_stream_volume_index;
+    qap->policy.set_stream_volume_index_for_device = ap_set_stream_volume_index_for_device;
+    qap->policy.get_stream_volume_index_for_device = ap_get_stream_volume_index_for_device;
     qap->policy.get_strategy_for_stream = ap_get_strategy_for_stream;
     qap->policy.get_devices_for_stream = ap_get_devices_for_stream;
     qap->policy.get_output_for_effect = ap_get_output_for_effect;
@@ -428,8 +447,7 @@ static int qcom_ap_dev_open(const hw_module_t* module, const char* name,
 {
     struct qcom_ap_device *dev;
 
-    if (strncmp(name, AUDIO_POLICY_INTERFACE,
-                      strlen(AUDIO_POLICY_INTERFACE)) != 0)
+    if (strcmp(name, AUDIO_POLICY_INTERFACE) != 0)
         return -EINVAL;
 
     dev = (struct qcom_ap_device *)calloc(1, sizeof(*dev));

@@ -56,9 +56,6 @@ include $(CLEAR_VARS)
 
 LOCAL_CFLAGS := -D_POSIX_SOURCE
 
-ifeq (1,0) # use default audio policy manager
-# This is the ALSA audio policy manager
-
 ifeq ($(BOARD_HAVE_BLUETOOTH),true)
   LOCAL_CFLAGS += -DWITH_A2DP
 endif
@@ -78,12 +75,13 @@ LOCAL_STATIC_LIBRARIES := \
 LOCAL_SHARED_LIBRARIES := \
     libcutils \
     libutils \
-    libmedia
+    libmedia \
+    libaudioparameter
 
 LOCAL_C_INCLUDES := hardware/libhardware_legacy/audio
 
 include $(BUILD_SHARED_LIBRARY)
-endif
+
 include $(call all-makefiles-under,$(LOCAL_PATH))
 # Load audio_policy.conf to system/etc/
 include $(CLEAR_VARS)
