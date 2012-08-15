@@ -160,6 +160,23 @@ status_t AudioPolicyManager::setDeviceConnectionState(AudioSystem::audio_devices
         updateDeviceForStrategy();
         for (size_t i = 0; i < mOutputs.size(); i++) {
             audio_devices_t newDevice = getNewDevice(mOutputs.keyAt(i), true /*fromCache*/);
+            if(device == AudioSystem::DEVICE_OUT_FM) {
+                if (state == AudioSystem::DEVICE_STATE_AVAILABLE) {
+                    ALOGV("setDeviceConnectionState() changeRefCount Inc");
+                    mOutputs.valueFor(mPrimaryOutput)->changeRefCount(AudioSystem::FM, 1);
+                }
+                else {
+                    ALOGV("setDeviceConnectionState() changeRefCount Dec");
+                    mOutputs.valueFor(mPrimaryOutput)->changeRefCount(AudioSystem::FM, -1);
+                }
+                if(newDevice == 0){
+                    newDevice = getDeviceForStrategy(STRATEGY_MEDIA, false);
+                }
+                AudioParameter param = AudioParameter();
+                param.addInt(String8(AudioParameter::keyHandleFm), (int)newDevice);
+                ALOGV("setDeviceConnectionState() setParameters handle_fm");
+                mpClientInterface->setParameters(mPrimaryOutput, param.toString());
+            }
             if(device == AudioSystem::DEVICE_OUT_ANC_HEADPHONE ||
                device == AudioSystem::DEVICE_OUT_ANC_HEADSET) {
                 if(newDevice == 0){
@@ -350,7 +367,7 @@ void AudioPolicyManager::setForceUse(AudioSystem::force_use usage, AudioSystem::
             config != AudioSystem::FORCE_WIRED_ACCESSORY &&
             config != AudioSystem::FORCE_ANALOG_DOCK &&
             config != AudioSystem::FORCE_DIGITAL_DOCK && config != AudioSystem::FORCE_NONE &&
-            config != AudioSystem::FORCE_NO_BT_A2DP) {
+            config != AudioSystem::FORCE_NO_BT_A2DP && config != AudioSystem::FORCE_SPEAKER) {
             ALOGW("setForceUse() invalid config %d for FOR_MEDIA", config);
             return;
         }
@@ -435,6 +452,7 @@ status_t AudioPolicyManager::startOutput(audio_io_handle_t output,
         bool shouldWait = (strategy == STRATEGY_SONIFICATION) ||
                             (strategy == STRATEGY_SONIFICATION_RESPECTFUL);
         uint32_t waitMs = 0;
+        uint32_t muteWaitMs = 0;
         bool force = false;
         for (size_t i = 0; i < mOutputs.size(); i++) {
             AudioOutputDescriptor *desc = mOutputs.valueAt(i);
@@ -454,7 +472,12 @@ status_t AudioPolicyManager::startOutput(audio_io_handle_t output,
                 }
             }
         }
-        uint32_t muteWaitMs = setOutputDevice(output, newDevice, force);
+
+        if(stream == AudioSystem::FM && output == getA2dpOutput()) {
+            muteWaitMs = setOutputDevice(output, newDevice, true);
+        } else {
+            muteWaitMs = setOutputDevice(output, newDevice, force);
+        }
 
         // handle special case for sonification while in call
         if (isInCall()) {
@@ -537,8 +560,10 @@ status_t AudioPolicyManager::stopOutput(audio_io_handle_t output,
 }
 
 
-
-
+/*
+Overwriting this function from base class to allow 2 acitve AudioRecord clients in case of FM.
+One for FM A2DP playbck and other for FM recording.
+*/
 status_t AudioPolicyManager::startInput(audio_io_handle_t input)
 {
     ALOGV("startInput() input %d", input);
@@ -549,6 +574,7 @@ status_t AudioPolicyManager::startInput(audio_io_handle_t input)
     }
     AudioInputDescriptor *inputDesc = mInputs.valueAt(index);
 
+/*
 #ifdef AUDIO_POLICY_TEST
     if (mTestInput == 0)
 #endif //AUDIO_POLICY_TEST
@@ -559,12 +585,15 @@ status_t AudioPolicyManager::startInput(audio_io_handle_t input)
             return INVALID_OPERATION;
         }
     }
+*/
 
     AudioParameter param = AudioParameter();
     param.addInt(String8(AudioParameter::keyRouting), (int)inputDesc->mDevice);
 
-    param.addInt(String8(AudioParameter::keyInputSource), (int)inputDesc->mInputSource);
-    ALOGV("AudioPolicyManager::startInput() input source = %d", inputDesc->mInputSource);
+    // use Voice Recognition mode or not for this input based on input source
+    int vr_enabled = inputDesc->mInputSource == AUDIO_SOURCE_VOICE_RECOGNITION ? 1 : 0;
+    param.addInt(String8("vr_mode"), vr_enabled);
+    ALOGV("AudioPolicyManager::startInput(%d), setting vr_mode to %d", inputDesc->mInputSource, vr_enabled);
 
     mpClientInterface->setParameters(input, param.toString());
 
@@ -783,6 +812,9 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
             device = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_SPEAKER;
         }
 
+        if (mAvailableOutputDevices & AudioSystem::DEVICE_OUT_FM) {
+            device |= AudioSystem::DEVICE_OUT_FM;
+        }
         if (mAvailableOutputDevices & AudioSystem::DEVICE_OUT_ANC_HEADSET) {
             device |= AudioSystem::DEVICE_OUT_ANC_HEADSET;
         }
@@ -885,6 +917,12 @@ audio_devices_t AudioPolicyManager::getDeviceForInputSource(int inputSource)
             device = AudioSystem::DEVICE_IN_VOICE_CALL;
         }
         break;
+   case AUDIO_SOURCE_FM_RX:
+        device = AudioSystem::DEVICE_IN_FM_RX;
+        break;
+    case AUDIO_SOURCE_FM_RX_A2DP:
+        device = AudioSystem::DEVICE_IN_FM_RX_A2DP;
+        break;
     default:
         ALOGW("getDeviceForInputSource() invalid input source %d", inputSource);
         break;
@@ -921,7 +959,7 @@ status_t AudioPolicyManager::checkAndSetVolume(int stream,
     // - the float value returned by computeVolume() changed
     // - the force flag is set
     if (volume != mOutputs.valueFor(output)->mCurVolume[stream] ||
-            force) {
+            (stream == AudioSystem::FM) || force) {
         mOutputs.valueFor(output)->mCurVolume[stream] = volume;
         ALOGVV("checkAndSetVolume() for output %d stream %d, volume %f, delay %d", output, stream, volume, delayMs);
         if (stream == AudioSystem::VOICE_CALL ||
@@ -935,6 +973,16 @@ status_t AudioPolicyManager::checkAndSetVolume(int stream,
             if (stream == AudioSystem::BLUETOOTH_SCO) {
                 mpClientInterface->setStreamVolume(AudioSystem::VOICE_CALL, volume, output, delayMs);
             }
+        } else if (stream == AudioSystem::FM) {
+            float fmVolume = -1.0;
+            fmVolume = computeVolume(stream, index, output, device);
+            if (fmVolume >= 0) {
+                if(output == mPrimaryOutput)
+                    mpClientInterface->setFmVolume(fmVolume, delayMs);
+                else if(mHasA2dp && output == getA2dpOutput())
+                    mpClientInterface->setStreamVolume((AudioSystem::stream_type)stream, volume, output, delayMs);
+            }
+            return NO_ERROR;
         }
 
         mpClientInterface->setStreamVolume((AudioSystem::stream_type)stream, volume, output, delayMs);
