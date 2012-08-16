@@ -125,6 +125,9 @@ AudioHardwareALSA::AudioHardwareALSA() :
             } else if (strstr(soundCardInfo, "msm8930-sitar-snd-card")) {
                 codec_rev = 3;
                 break;
+            } else if (strstr(soundCardInfo, "msm8974-taiko-snd-card")) {
+                codec_rev = 4;
+                break;
             }
         }
         fclose(fp);
@@ -148,6 +151,9 @@ AudioHardwareALSA::AudioHardwareALSA() :
     } else if (codec_rev == 3) {
         ALOGV("Detected sitar 1.x sound card");
         snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm_Sitar");
+    } else if (codec_rev == 4) {
+        ALOGV("Detected taiko sound card");
+        snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm_Taiko");
     } else {
         property_get("ro.board.platform", platform, "");
         property_get("ro.baseband", baseband, "");
