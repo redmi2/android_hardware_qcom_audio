@@ -802,8 +802,9 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
             // device is DEVICE_OUT_SPEAKER if we come from case STRATEGY_SONIFICATION or
             // STRATEGY_ENFORCED_AUDIBLE, 0 otherwise
             device |= device2;
-            if (device) break;
-            device = mDefaultOutputDevice;
+            if (!device) {
+                device = mDefaultOutputDevice;
+            }
             if (device == 0) {
                 ALOGE("getDeviceForStrategy() no device found for STRATEGY_MEDIA");
             }
