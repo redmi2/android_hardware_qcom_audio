@@ -799,7 +799,7 @@ static status_t s_start_voip_call(alsa_handle_t *handle)
         ALOGE("Failed to get pcm device node");
         return NO_INIT;
      }
-    if (devName != NULL) {
+    if (devName1 != NULL) {
         handle->handle = pcm_open(flags, (char*)devName1);
     } else {
          ALOGE("Failed to get pcm device node");
@@ -807,9 +807,9 @@ static status_t s_start_voip_call(alsa_handle_t *handle)
     }
 
      if (!handle->handle) {
-         if (devName) {
-             free(devName);
-             devName = NULL;
+         if (devName1) {
+             free(devName1);
+             devName1 = NULL;
          }
          ALOGE("s_open: Failed to initialize ALSA device '%s'", devName);
          return NO_INIT;
