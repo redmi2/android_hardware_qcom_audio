@@ -228,7 +228,7 @@ public:
     virtual    void        closeOutputStream(AudioStreamOut* out);
     virtual    void        closeInputStream(AudioStreamIn* in);
 
-    virtual    size_t      getInputBufferSize(uint32_t sampleRate, int format, int channelCount);
+    virtual    size_t      getInputBufferSize(uint32_t sampleRate, int format, audio_channel_mask_t channelCount);
                void        clearCurDevice() { mCurSndDevice = -1; }
 #ifdef QCOM_FM_ENABLED
                 int IsFmon() const { return (mFmFd != -1); }
@@ -238,6 +238,9 @@ public:
 #endif
 protected:
     virtual status_t    dump(int fd, const Vector<String16>& args);
+    uint32_t getMvsMode(int format);
+    uint32_t getMvsRateType(uint32_t MvsMode, uint32_t *rateType);
+    status_t setupDeviceforVoipCall(bool value);
 
 private:
 
@@ -300,11 +303,11 @@ private:
                                 int *pFormat,
                                 uint32_t *pChannels,
                                 uint32_t *pRate);
-        virtual uint32_t    sampleRate() const { return 8000; }
+        virtual uint32_t    sampleRate() const {ALOGD(" AudioStreamOutDirect: SampleRate %d\n",mSampleRate); return mSampleRate; }
         // must be 32-bit aligned - driver only seems to like 4800
-        virtual size_t      bufferSize() const { return 320; }
-        virtual uint32_t    channels() const { return mChannels; }
-        virtual int         format() const {return AudioSystem::PCM_16_BIT; }
+        virtual size_t      bufferSize() const { ALOGD(" AudioStreamOutDirect: bufferSize %d\n",mBufferSize);return mBufferSize; }
+        virtual uint32_t    channels() const {ALOGD(" AudioStreamOutDirect: channels %d\n",mChannels); return mChannels; }
+        virtual int         format() const {ALOGD(" AudioStreamOutDirect: format %d\n",mFormat);return mFormat; }
         virtual uint32_t    latency() const { return (1000*AUDIO_HW_NUM_OUT_BUF*(bufferSize()/frameSize()))/sampleRate()+AUDIO_HW_OUT_LATENCY_MS; }
         virtual status_t    setVolume(float left, float right) { return INVALID_OPERATION; }
         virtual ssize_t     write(const void* buffer, size_t bytes);
@@ -457,7 +460,7 @@ private:
                 uint32_t    mFmRec;
 #endif
     };
-#endif
+#endif /*QCOM_VOIP_ENABLED*/
             static const uint32_t inputSamplingRates[];
             bool        mInit;
             bool        mMicMute;
@@ -471,11 +474,10 @@ private:
             AudioStreamOutMSM72xx*  mOutput;
 #ifdef QCOM_VOIP_ENABLED
             AudioStreamOutDirect*  mDirectOutput;
-#endif
-            SortedVector <AudioStreamInMSM72xx*>   mInputs;
-#ifdef QCOM_VOIP_ENABLED
             SortedVector <AudioStreamInVoip*>   mVoipInputs;
-#endif
+#endif /*QCOM_VOIP_ENABLED*/
+            SortedVector <AudioStreamInMSM72xx*>   mInputs;
+            uint32_t mVoipBitRate;
             msm_snd_endpoint *mSndEndpoints;
             int mNumSndEndpoints;
             int mCurSndDevice;
@@ -484,9 +486,10 @@ private:
             int         mTtyMode;
 #ifdef QCOM_VOIP_ENABLED
             int mVoipFd;
-            int mNumVoipStreams;
-#endif
-
+            bool mVoipInActive;
+            bool mVoipOutActive;
+            Mutex       mVoipLock;
+#endif /*QCOM_VOIP_ENABLED*/
      friend class AudioStreamInMSM72xx;
             Mutex       mLock;
 };
