@@ -143,6 +143,9 @@ int get_compressed_format(const char *format)
         } else if (strcmp(ch, "AC3_PASS_THROUGH") == 0) {
                 printf("AC3 PASS THROUGH is selected\n");
                 return FORMAT_AC3_PASS_THROUGH;
+        } else if (strcmp(ch, "AAC") == 0) {
+                printf("AAC is selected\n");
+                return FORMAT_AAC;
         } else {
                 printf("invalid format\n");
                 return -1;

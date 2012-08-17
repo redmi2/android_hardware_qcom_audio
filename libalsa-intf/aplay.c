@@ -222,6 +222,10 @@ static int play_file(unsigned rate, unsigned channels, int fd,
                compr_params.codec.id = compr_cap.codecs[FORMAT_AC3_PASS_THROUGH];
                printf("codec -d = %x\n", compr_params.codec.id);
                break;
+           case FORMAT_AAC:
+               compr_params.codec.id = compr_cap.codecs[FORMAT_AAC];
+               printf("codec -d = %x\n", compr_params.codec.id);
+               break;
            default:
                break;
            }

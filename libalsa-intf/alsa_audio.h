@@ -46,6 +46,7 @@ struct pcm {
 
 enum decoder_alias {
     FORMAT_MP3,
+    FORMAT_AAC,
     FORMAT_AC3_PASS_THROUGH = 2,
 };
 
