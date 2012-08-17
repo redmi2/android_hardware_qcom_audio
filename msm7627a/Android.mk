@@ -28,6 +28,8 @@ ifeq ($(strip $(BOARD_USES_SRS_TRUEMEDIA)),true)
 LOCAL_CFLAGS += -DSRS_PROCESSING
 endif
 
+LOCAL_CFLAGS += -DQCOM_VOIP_ENABLED
+
 LOCAL_SHARED_LIBRARIES := \
     libcutils       \
     libutils        \
