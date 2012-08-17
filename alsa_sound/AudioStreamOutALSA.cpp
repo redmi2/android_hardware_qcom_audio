@@ -26,7 +26,7 @@
 #include <math.h>
 
 #define LOG_TAG "AudioStreamOutALSA"
-#define LOG_NDEBUG 0
+//#define LOG_NDEBUG 0
 #define LOG_NDDEBUG 0
 #include <utils/Log.h>
 #include <utils/String8.h>
