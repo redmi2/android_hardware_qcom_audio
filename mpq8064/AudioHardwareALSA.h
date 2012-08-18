@@ -73,9 +73,8 @@ class AudioBitstreamSM;
 #define MULTI_CHANNEL_MAX_PERIOD_SIZE 4032
 #define MULTI_CHANNEL_PERIOD_COUNT 8
 #define PCM_BUFFER_DURATION 10000
-#define DEFAULT_IN_BUFFER_SIZE_BROADCAST_PCM_STEREO   2048
-#define DEFAULT_IN_BUFFER_SIZE_BROADCAST_PCM_MCH   5376
-#define DEFAULT_OUT_BUFFER_SIZE_PER_CHANNEL    1536
+#define DEFAULT_OUT_BUFFER_SIZE_PER_CHANNEL   1536
+#define DEFAULT_IN_BUFFER_SIZE_PCM_PER_CHANNEL   1536
 #define DEFAULT_IN_BUFFER_SIZE_BROADCAST_COMPRESSED   6208
 
 #define VOIP_SAMPLING_RATE_8K 8000
@@ -667,6 +666,7 @@ private:
     bool                mCapturePCMFromDSP;
     bool                mCaptureCompressedFromDSP;
     bool                mRoutePCMStereoToDSP;
+    bool                mRoutePCMMChToDSP;
     bool                mUseMS11Decoder;
     bool                mUseTunnelDecoder;
     bool                mRoutePcmAudio;
@@ -1104,8 +1104,8 @@ private:
     char               *ms11PCM2ChOutputBuffer;
     char               *ms11PCM2ChOutputBufferWritePtr;
 
-    char               *ms11PCM6ChOutputBuffer;
-    char               *ms11PCM6ChOutputBufferWritePtr;
+    char               *ms11PCMMChOutputBuffer;
+    char               *ms11PCMMChOutputBufferWritePtr;
 };
 
 // ----------------------------------------------------------------------------
