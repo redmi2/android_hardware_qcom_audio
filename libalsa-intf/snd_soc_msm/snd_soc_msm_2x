@@ -1602,11 +1602,11 @@ SectionVerb
 	Name "HiFi TunnelBT SCO Rx"
 
 	EnableSequence
-		'"INTERNAL_BT_SCO_RX Audio Mixer MultiMedia4':1:1
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia4':1:1
 	EndSequence
 
 	DisableSequence
-		'"INTERNAL_BT_SCO_RX Audio Mixer MultiMedia4':1:0
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia4':1:0
 	EndSequence
 
 	# ALSA PCMs
@@ -1618,11 +1618,11 @@ SectionVerb
 	Name "HiFi TunnelBT SCO WB Rx"
 
 	EnableSequence
-		'"INTERNAL_BT_SCO_RX Audio Mixer MultiMedia4':1:1
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia4':1:1
 	EndSequence
 
 	DisableSequence
-		'"INTERNAL_BT_SCO_RX Audio Mixer MultiMedia4':1:0
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia4':1:0
 	EndSequence
 
 	# ALSA PCMs
@@ -2092,6 +2092,8 @@ SectionVerb
 	# ALSA PCMs
 	PlaybackPCM 12
 	capturePCM 12
+
+EndSection
 }
 SectionUseCase."ADSP testfwk" {
 Comment "ADSP testfwk use case"
@@ -2225,6 +2227,8 @@ SectionDevice
 		'HPHR DAC Switch':1:1
 		'HPHL Volume':1:80
 		'HPHR Volume':1:80
+		'RX1 Digital Volume':1:68
+		'RX2 Digital Volume':1:68
 	EndSequence
 
 	DisableSequence
@@ -2234,6 +2238,8 @@ SectionDevice
 		'HPHR DAC Switch':1:0
 		'HPHL Volume':1:0
 		'HPHR Volume':1:0
+		'RX1 Digital Volume':1:0
+		'RX2 Digital Volume':1:0
 	EndSequence
 
 	ACDBID	10:1
@@ -3016,6 +3022,8 @@ SectionDevice
 		'HPHR DAC Switch':1:1
 		'HPHL Volume':1:80
 		'HPHR Volume':1:80
+		'RX1 Digital Volume':1:68
+		'RX2 Digital Volume':1:68
 	EndSequence
 
 	DisableSequence
@@ -3025,6 +3033,8 @@ SectionDevice
 		'HPHR DAC Switch':1:0
 		'HPHL Volume':1:0
 		'HPHR Volume':1:0
+		'RX1 Digital Volume':1:0
+		'RX2 Digital Volume':1:0
 	EndSequence
 
 	ACDBID	10:1
@@ -3302,6 +3312,8 @@ SectionDevice
 		'HPHR DAC Switch':1:1
 		'HPHL Volume':1:80
 		'HPHR Volume':1:80
+		'RX1 Digital Volume':1:68
+		'RX2 Digital Volume':1:68
 	EndSequence
 
 	DisableSequence
@@ -3311,6 +3323,8 @@ SectionDevice
 		'HPHR DAC Switch':1:0
 		'HPHL Volume':1:0
 		'HPHR Volume':1:0
+		'RX1 Digital Volume':1:0
+		'RX2 Digital Volume':1:0
 	EndSequence
 
 	ACDBID	10:1
@@ -4358,11 +4372,11 @@ SectionModifier
 	Name "Play TunnelBT SCO Rx"
 
 	EnableSequence
-		'"INTERNAL_BT_SCO_RX Audio Mixer MultiMedia4':1:1
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia4':1:1
 	EndSequence
 
 	DisableSequence
-		'"INTERNAL_BT_SCO_RX Audio Mixer MultiMedia4':1:0
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia4':1:0
 	EndSequence
 
 	# ALSA PCMs
@@ -4374,11 +4388,11 @@ SectionModifier
 	Name "Play TunnelBT SCO WB Rx"
 
 	EnableSequence
-		'"INTERNAL_BT_SCO_RX Audio Mixer MultiMedia4':1:1
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia4':1:1
 	EndSequence
 
 	DisableSequence
-		'"INTERNAL_BT_SCO_RX Audio Mixer MultiMedia4':1:0
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia4':1:0
 	EndSequence
 
 	# ALSA PCMs
@@ -4802,6 +4816,25 @@ SectionModifier
         # ALSA PCMs
         CapturePCM 0
         PlaybackPCM 0
+
+EndSection
+
+SectionModifier
+        Name "Play SGLTE"
+
+        EnableSequence
+                'SLIM_0_RX_Voice Mixer SGLTE':1:1
+                'SGLTE_Tx Mixer SLIM_0_TX_SGLTE':1:1
+        EndSequence
+
+        DisableSequence
+                'SLIM_0_RX_Voice Mixer SGLTE':1:0
+                'SGLTE_Tx Mixer SLIM_0_TX_SGLTE':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 13
+        PlaybackPCM 13
 
 EndSection
 

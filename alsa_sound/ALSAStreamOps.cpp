@@ -152,8 +152,8 @@ status_t ALSAStreamOps::set(int      *format,
                 break;
             case AudioSystem::AMR_NB:
             case AudioSystem::AMR_WB:
-#ifdef QCOM_QCHAT_ENABLED
             case AudioSystem::EVRC:
+#ifdef QCOM_QCHAT_ENABLED
             case AudioSystem::EVRCB:
             case AudioSystem::EVRCWB:
 #endif
@@ -192,12 +192,24 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
     AudioParameter param = AudioParameter(keyValuePairs);
     String8 key = String8(AudioParameter::keyRouting);
     int device;
+    status_t err = NO_ERROR;
     if (param.getInt(key, device) == NO_ERROR) {
         // Ignore routing if device is 0.
-        ALOGD("setParameters(): keyRouting with device %d", device);
-        mDevices = device;
         if(device) {
-            mParent->doRouting(device);
+            ALOGD("setParameters(): keyRouting with device %d", device);
+            if(device & AudioSystem::DEVICE_OUT_ALL_A2DP) {
+                device &= ~AudioSystem::DEVICE_OUT_ALL_A2DP;
+                device |=  AudioSystem::DEVICE_OUT_PROXY;
+                mParent->mRouteAudioToA2dp = true;
+                ALOGD("setParameters(): A2DP device %d", device);
+            }
+            err = mParent->doRouting(device);
+            if(err) {
+                ALOGE("doRouting failed = %d",err);
+            }
+            else {
+                mDevices = device;
+            }
         }
         param.remove(key);
     }
@@ -206,8 +218,8 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
         key = String8(AudioParameter::keyHandleFm);
         if (param.getInt(key, device) == NO_ERROR) {
         ALOGD("setParameters(): handleFm with device %d", device);
-        mDevices = device;
             if(device) {
+                mDevices = device;
                 mParent->handleFm(device);
             }
             param.remove(key);
@@ -215,7 +227,7 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
     }
 #endif
 
-    return NO_ERROR;
+    return err;
 }
 
 String8 ALSAStreamOps::getParameters(const String8& keys)
@@ -270,8 +282,8 @@ int ALSAStreamOps::format() const
 
         case AudioSystem::AMR_NB:
         case AudioSystem::AMR_WB:
-#ifdef QCOM_QCHAT_ENABLED
         case AudioSystem::EVRC:
+#ifdef QCOM_QCHAT_ENABLED
         case AudioSystem::EVRCB:
         case AudioSystem::EVRCWB:
 #endif
@@ -287,7 +299,7 @@ int ALSAStreamOps::format() const
             break;
     }
 
-    ALOGD("ALSAFormat:0x%x,audioSystemFormat:0x%x",ALSAFormat,audioSystemFormat);
+    ALOGV("ALSAFormat:0x%x,audioSystemFormat:0x%x",ALSAFormat,audioSystemFormat);
     return audioSystemFormat;
 }
 
