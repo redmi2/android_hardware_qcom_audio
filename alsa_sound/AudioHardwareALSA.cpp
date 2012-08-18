@@ -639,7 +639,8 @@ void AudioHardwareALSA::doRouting(int device)
         } else {
              ALSAHandleList::iterator it = mDeviceList.end();
              it--;
-             mALSADevice->route(&(*it), (uint32_t)device, newMode);
+             if(device != mCurDevice)
+                 mALSADevice->route(&(*it), (uint32_t)device, newMode);
         }
     }
     mCurDevice = device;
@@ -678,6 +679,7 @@ uint32_t AudioHardwareALSA::getVoipMode(int format)
 
 AudioStreamOut *
 AudioHardwareALSA::openOutputStream(uint32_t devices,
+                                    audio_output_flags_t flags,
                                     int *format,
                                     uint32_t *channels,
                                     uint32_t *sampleRate,
@@ -688,6 +690,28 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
          devices, *channels, *sampleRate);
 
     status_t err = BAD_VALUE;
+    if (flags & AUDIO_OUTPUT_FLAG_LPA) {
+        AudioSessionOutALSA *out = new AudioSessionOutALSA(this, devices, *format, *channels,
+                                                           *sampleRate, 0, &err);
+        if(err != NO_ERROR) {
+            delete out;
+            out = NULL;
+        }
+        if (status) *status = err;
+        return out;
+    }
+
+    if (flags & AUDIO_OUTPUT_FLAG_TUNNEL) {
+        AudioSessionOutALSA *out = new AudioSessionOutALSA(this, devices, *format, *channels,
+                                                           *sampleRate, 1, &err);
+        if(err != NO_ERROR) {
+            delete out;
+            out = NULL;
+        }
+        if (status) *status = err;
+        return out;
+    }
+
     AudioStreamOutALSA *out = 0;
     ALSAHandleList::iterator it;
 
