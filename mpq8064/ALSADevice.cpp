@@ -321,7 +321,10 @@ status_t ALSADevice::setSoftwareParams(alsa_handle_t *handle)
     }
 
     // Get the current software parameters
-    params->tstamp_mode = SNDRV_PCM_TSTAMP_NONE;
+    if(handle->timeStampMode == SNDRV_PCM_TSTAMP_ENABLE)
+        params->tstamp_mode = SNDRV_PCM_TSTAMP_ENABLE;
+    else
+        params->tstamp_mode = SNDRV_PCM_TSTAMP_NONE;
     params->period_step = 1;
     if(((!strncmp(handle->useCase,SND_USE_CASE_MOD_PLAY_VOIP,
                             strlen(SND_USE_CASE_MOD_PLAY_VOIP))) ||
@@ -348,7 +351,6 @@ status_t ALSADevice::setSoftwareParams(alsa_handle_t *handle)
                            strlen(SND_USE_CASE_VERB_HIFI_TUNNEL2))) ||
         (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
                            strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2)))) {
-        params->tstamp_mode = SNDRV_PCM_TSTAMP_NONE;
         params->period_step = 1;
         params->avail_min = handle->channels - 1 ? periodSize/2 : periodSize/4;
         params->start_threshold = handle->channels - 1 ? periodSize : periodSize/2;
@@ -2328,9 +2330,8 @@ status_t ALSADevice::setCaptureSoftwareParams(alsa_handle_t *handle,
         return NO_INIT;
     }
 
-    if(isCompressed)
-	params->tstamp_mode = SNDRV_PCM_TSTAMP_NONE;
-//NOTE: move this to TIME STAMP mode for compressed
+    if(handle->timeStampMode == SNDRV_PCM_TSTAMP_ENABLE)
+	    params->tstamp_mode = SNDRV_PCM_TSTAMP_ENABLE;
     else
         params->tstamp_mode = SNDRV_PCM_TSTAMP_NONE;
     params->period_step = 1;

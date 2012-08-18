@@ -1368,6 +1368,7 @@ status_t AudioSessionOutALSA::openDevice(char *useCase, bool bIsUseCase, int dev
     alsa_handle.latency     = PLAYBACK_LATENCY;
     alsa_handle.rxHandle    = 0;
     alsa_handle.ucMgr       = mUcMgr;
+    alsa_handle.timeStampMode = SNDRV_PCM_TSTAMP_NONE;
     strlcpy(alsa_handle.useCase, useCase, sizeof(alsa_handle.useCase));
 
     mALSADevice->setUseCase(&alsa_handle, bIsUseCase);
