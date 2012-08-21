@@ -153,7 +153,7 @@ static uint32_t CAD_HW_DEVICE_ID_CURRENT_TX = -1;
 
 AudioHardware::AudioHardware() :
     mInit(false), mMicMute(true), mBluetoothNrec(true), mBluetoothId(0), mTtyMode(TTY_OFF),
-    mOutput(0),mBluetoothVGS(false), mCadEndpoints(NULL), mCurSndDevice(-1), mDualMicEnabled(false)
+    mOutput(0),mBluetoothVGS(false), mCadEndpoints(NULL), mCurSndDevice(-1)
 #ifdef QCOM_FM_ENABLED
     ,mFmFd(-1),FmA2dpStatus(-1)
 #endif
@@ -206,7 +206,21 @@ AudioHardware::AudioHardware() :
         else ALOGE("Could not retrieve number of MSM SND endpoints.");
     } else
         ALOGE("Could not open MSM SND driver.");
+
     audcal_initialize();
+
+    char fluence_key[20] = "none";
+    property_get("ro.qc.sdk.audio.fluencetype",fluence_key,"0");
+
+    if (0 == strncmp("fluencepro", fluence_key, sizeof("fluencepro"))) {
+       ALOGE("FluencePro quadMic feature not supported");
+    } else if (0 == strncmp("fluence", fluence_key, sizeof("fluence"))) {
+       mDualMicEnabled = true;
+       ALOGV("Fluence dualmic feature Enabled");
+    } else {
+       mDualMicEnabled = false;
+       ALOGV("Fluence feature Disabled");
+    }
 }
 
 AudioHardware::~AudioHardware()
@@ -784,6 +798,17 @@ String8 AudioHardware::getParameters(const String8& keys)
         param.add(key, value);
     }
 
+    key = String8(AudioParameter::keyFluenceType);
+    if (param.get(key, value) == NO_ERROR) {
+       if (mDualMicEnabled) {
+            value = String8("fluence");
+            param.add(key, value);
+       } else {
+            value = String8("none");
+            param.add(key, value);
+       }
+    }
+
     ALOGV("AudioHardware::getParameters() %s", param.toString().string());
     return param.toString();
 }
@@ -1295,7 +1320,7 @@ status_t AudioHardware::doRouting(AudioStreamInMSM72xx *input)
         }
     }
 
-    if (mDualMicEnabled && mMode == AudioSystem::MODE_IN_CALL) {
+    if (mDualMicEnabled && (mMode == AudioSystem::MODE_IN_CALL || mMode == AudioSystem::MODE_IN_COMMUNICATION)) {
         if (new_snd_device == SND_DEVICE_HANDSET) {
             ALOGI("Routing audio to handset with DualMike enabled\n");
             new_snd_device = SND_DEVICE_IN_S_SADC_OUT_HANDSET;
@@ -1470,6 +1495,8 @@ status_t AudioHardware::setupDeviceforVoipCall(bool value)
         ALOGV("setMode fails");
         return UNKNOWN_ERROR;
     }
+
+    doRouting(NULL);
 
     if (setMicMute(!value) != NO_ERROR) {
         ALOGV("MicMute fails");
