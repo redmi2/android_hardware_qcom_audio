@@ -47,6 +47,10 @@ ifneq ($(TARGET_SIMULATOR),true)
 LOCAL_SHARED_LIBRARIES += libdl
 endif
 
+ifeq ($(strip $(TARGET_HAS_QACT)),true)
+LOCAL_SHARED_LIBRARIES += libaudcal
+endif
+
 LOCAL_STATIC_LIBRARIES := \
     libmedia_helper \
     libaudiohw_legacy
