@@ -681,6 +681,10 @@ void AudioBroadcastStreamALSA::setRoutingFlagsBasedOnConfig()
                 mRoutePCMStereoToDSP = true;
 //              mRoutePCMMchToDSP = true;
 // NOTE: enable this when required MS11 output is Multi channel
+                if(mAudioSource == QCOM_AUDIO_SOURCE_HDMI_IN)
+                    mAacConfigDataSet = false;
+                else
+                    mAacConfigDataSet = true;
             } else {
                 mUseTunnelDecoder = true;
             }
@@ -1195,12 +1199,12 @@ status_t AudioBroadcastStreamALSA::openMS11Instance()
     } else {
         formatMS11 = FORMAT_EXTERNAL_PCM;
     }
-    if(mMS11Decoder->setUseCaseAndOpenStream(formatMS11,mChannels,mSampleRate)) {
+    if(mMS11Decoder->setUseCaseAndOpenStream(formatMS11,mChannels,mSampleRate,
+                                             false /* file_playback_mode */)) {
         ALOGE("SetUseCaseAndOpen MS11 failed");
         delete mMS11Decoder;
         return BAD_VALUE;
     }
-    mAacConfigDataSet = false;
     return NO_ERROR;
 }
 
