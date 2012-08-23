@@ -858,7 +858,7 @@ uint32_t AudioPolicyManager::setOutputDevice(audio_io_handle_t output,
     if (device != 0) {
         outputDesc->mDevice = device;
     }
-    muteWaitMs = checkDeviceMuteStrategies(outputDesc, prevDevice, delayMs);
+    muteWaitMs = checkDeviceMuteStrategies(outputDesc, device, delayMs);
 
     // Do not change the routing if:
     //  - the requested device is 0
@@ -876,6 +876,8 @@ uint32_t AudioPolicyManager::setOutputDevice(audio_io_handle_t output,
 
     // update stream volumes according to new device
     applyStreamVolumes(output, device, delayMs);
+
+    muteWaitMs = checkDeviceMuteStrategies(outputDesc, prevDevice, delayMs);
 
     return muteWaitMs;
 }
