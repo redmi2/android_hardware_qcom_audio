@@ -23,3 +23,6 @@ endif
 ifeq ($(call is-board-platform,msm8974),true)
     include $(AUDIO_HW_ROOT)/mm-audio/Android.mk
 endif
+ifeq ($(call is-board-platform,msm7630_surf),true)
+    include $(AUDIO_HW_ROOT)/msm7630/Android.mk
+endif
