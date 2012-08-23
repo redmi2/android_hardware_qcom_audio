@@ -27,6 +27,8 @@
 #include <hardware_legacy/AudioHardwareInterface.h>
 #include <hardware_legacy/AudioSystemLegacy.h>
 
+#define QCOM_FM_ENABLED
+
 namespace android_audio_legacy {
 
 extern "C" {
