@@ -146,6 +146,13 @@ static uint32_t FLUENCE_MODE_BROADSIDE = 1;
 class ALSADevice;
 class ALSAControl;
 
+enum {
+    INVALID_FORMAT               = -1,
+    PCM_FORMAT                   = 0,
+    COMPRESSED_FORMAT            = 1,
+    COMPRESSED_FORCED_PCM_FORMAT = 2
+};
+
 struct alsa_handle_t {
     ALSADevice*         module;
     uint32_t            devices;
@@ -222,8 +229,7 @@ public:
                                               unsigned char *channel_status,
                                               enum audio_parser_code_type codec_type);
 
-    status_t    setPcmVolume(int);
-    status_t    setCompressedVolume(int);
+    status_t    setPlaybackVolume(int, char *);
     status_t    setPlaybackFormat(const char *value, int device);
     status_t    setCaptureFormat(const char *value);
     status_t    setWMAParams(alsa_handle_t* , int[], int);
@@ -475,17 +481,10 @@ private:
     uint32_t            mStreamVol;
     bool                mPowerLock;
     bool                mRoutePcmAudio;
-    bool                mRouteCompreAudio;
-    bool                mRoutePcmToSpdif;
-    bool                mRouteCompreToSpdif;
-    bool                mRouteDtsToSpdif;
-    bool                mRoutePcmToHdmi;
-    bool                mRouteCompreToHdmi;
-    bool                mRouteDtsToHdmi;
     bool                mRouteAudioToA2dp;
-    bool                mUseTunnelDecode;
+    bool                mUseTunnelDecoder;
     bool                mCaptureFromProxy;
-    bool                mOpenMS11Decoder;
+    bool                mUseMS11Decoder;
     uint32_t            mSessionId;
     size_t              mMinBytesReqToDecode;
     bool                mAacConfigDataSet;
@@ -500,11 +499,11 @@ private:
     char                mSpdifOutputFormat[128];
     char                mHdmiOutputFormat[128];
     uint32_t            mCurDevice;
+    int32_t             mSpdifFormat;
+    int32_t             mHdmiFormat;
 
     AudioHardwareALSA  *mParent;
     alsa_handle_t *     mPcmRxHandle;
-    alsa_handle_t *     mPcmTxHandle;
-    alsa_handle_t *     mSpdifRxHandle;
     alsa_handle_t *     mCompreRxHandle;
     ALSADevice *        mALSADevice;
     snd_use_case_mgr_t *mUcMgr;
@@ -512,6 +511,7 @@ private:
     AudioBitstreamSM   *mBitstreamSM;
     AudioEventObserver *mObserver;
 
+    status_t            openPcmDevice(int devices);
     status_t            openDevice(char *pUseCase, bool bIsUseCase, int devices);
     status_t            closeDevice(alsa_handle_t *pDevice);
     status_t            doRouting(int devices);
@@ -528,6 +528,8 @@ private:
     void                eventThreadEntry();
     void                updateOutputFormat();
     void                updateRoutingFlags();
+    void                setSpdifHdmiRoutingFlags(int devices);
+    status_t            setPlaybackFormat();
     status_t            pause_l();
     status_t            resume_l();
     void                reset();
@@ -634,16 +636,13 @@ private:
     uint32_t            mAudioSource;
     uint32_t            mStreamVol;
     size_t              mBufferSize;
+    int                 mCurDevice;
     // Capture and Routing Flags
     bool                mCapturePCMFromDSP;
     bool                mCaptureCompressedFromDSP;
     bool                mRoutePCMStereoToDSP;
     bool                mUseMS11Decoder;
     bool                mUseTunnelDecoder;
-    bool                mRoutePcmToSpdif;
-    bool                mRoutePcmToHdmi;
-    bool                mRouteCompreToSpdif;
-    bool                mRouteCompreToHdmi;
     bool                mRoutePcmAudio;
     bool                mRoutingSetupDone;
     bool                mSignalToSetupRoutingPath;
@@ -652,6 +651,8 @@ private:
     int32_t             mMinBytesReqToDecode;
     compressed_read_metadata_t mReadMetaData;
     // HDMI and SPDIF specifics
+    int32_t             mSpdifFormat;
+    int32_t             mHdmiFormat;
     char                mSpdifOutputFormat[128];
     char                mHdmiOutputFormat[128];
     unsigned char       mChannelStatus[24];
@@ -663,6 +664,7 @@ private:
     bool                isSessionPaused;
 
     bool                mRouteAudioToA2dp;
+    bool                mCaptureFromProxy;
 
     // ALSA device handle to route PCM 2.0 playback
     alsa_handle_t      *mPcmRxHandle;
@@ -720,6 +722,9 @@ private:
     void                updateOutputFormat();
     status_t            openCapturingAndRoutingDevices();
     status_t            closeDevice(alsa_handle_t *pHandle);
+    status_t            doRouting(int devices);
+    status_t            pause_l();
+    status_t            resume_l();
     //Capture
     void                setCaptureFlagsBasedOnConfig();
     status_t            openPCMCapturePath();
@@ -736,6 +741,8 @@ private:
     void                updateCaptureMetaData(char *buf);
     // Playback
     void                setRoutingFlagsBasedOnConfig();
+    void                setSpdifHdmiRoutingFlags(int devices);
+    status_t            setPlaybackFormat();
     status_t            openRoutingDevice(char *useCase, bool bIsUseCase,
                                           int devices);
     status_t            openPcmDevice(int devices);
