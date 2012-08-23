@@ -1260,10 +1260,31 @@ void AudioBroadcastStreamALSA::captureThreadEntry()
                 continue;
             } else if (mSignalToSetupRoutingPath ==  true) {
                 ALOGD("Setup the Routing path based on the format from DSP");
-                if(mInputFormat == QCOM_BROADCAST_AUDIO_FORMAT_LPCM)
+                if(mInputFormat == QCOM_BROADCAST_AUDIO_FORMAT_LPCM){
                     mFormat = AudioSystem::PCM_16_BIT;
-                else
-                    mFormat = AudioSystem::AC3;
+                }
+                else{
+                    updateCaptureMetaData(tempBuffer);
+                    switch(mReadMetaData.formatId) {
+                       case Q6_AC3_DECODER:
+                            mFormat = AudioSystem::AC3;
+                            break;
+                       case Q6_EAC3_DECODER:
+                            mFormat = AudioSystem::AC3_PLUS;
+                            break;
+                       case Q6_DTS:
+                            mFormat = AudioSystem::DTS;
+                            break;
+                       case Q6_DTS_LBR:
+                            mFormat = AudioSystem::DTS;
+                            break;
+                       default:
+                            ALOGE("Invalid supported format");
+                            break;
+                     }
+                     ALOGV("format: %d, frameSize: %d", mReadMetaData.formatId,
+                                         frameSize);
+                }
 //NOTE:
 // Fill the format from the meta data from DSP. Right now hardcoded to AC3
 // as support is available only for AC3 and without meta data
@@ -1283,16 +1304,21 @@ void AudioBroadcastStreamALSA::captureThreadEntry()
 //      prefixed to the buffer from driver to HAL. Hence, frame length is
 //      extracted to read valid data from the buffer. Framelength is of 32 bit.
                 if (mCaptureCompressedFromDSP) {
-                    frameSize =  (uint32_t)(tempBuffer[3] << 24) +
-                                 (uint32_t)(tempBuffer[2] << 16) +
-                                 (uint32_t)(tempBuffer[1] << 8) +
-                                 (uint32_t)(tempBuffer[0] << 0);
-                    bufPtr += COMPRE_CAPTURE_HEADER_SIZE;
+                    for(int i=0; i<MAX_NUM_FRAMES_PER_BUFFER; i++) {
+                       updateCaptureMetaData(tempBuffer + i * META_DATA_LEN_BYTES);
+//NOTE: Handle the command offset and size when available from DSP
+                       bufPtr = tempBuffer + mReadMetaData.dataOffset;
+                       frameSize = mReadMetaData.frameSize;
+                       ALOGV("format: %d, frameSize: %d",
+                                mReadMetaData.formatId, frameSize);
+                       write_l(bufPtr, frameSize);
+                    }
                 } else {
                     frameSize = size;
+                    ALOGV("format: %d, frameSize: %d", mReadMetaData.formatId,
+                                      frameSize);
+                    write_l(bufPtr, frameSize);
                 }
-                ALOGV("frameSize: %d", frameSize);
-                write_l(bufPtr, frameSize);
             }
         }
     }
@@ -1831,5 +1857,33 @@ int32_t AudioBroadcastStreamALSA::writeToCompressedDriver(char *buffer, int byte
 
     return n;
 }
+
+uint32_t AudioBroadcastStreamALSA::read4BytesFromBuffer(char *buf)
+{
+   uint32_t value = 0;
+   for(int i=0; i<4; i++)
+      value +=  (uint32_t)(buf[i] << NUMBER_BITS_IN_A_BYTE*(i));
+
+   return value;
+}
+
+void AudioBroadcastStreamALSA::updateCaptureMetaData(char *buf)
+{
+   mReadMetaData.streamId          = read4BytesFromBuffer(buf+0);
+   mReadMetaData.formatId          = read4BytesFromBuffer(buf+4);
+   mReadMetaData.dataOffset        = read4BytesFromBuffer(buf+8);
+   mReadMetaData.frameSize         = read4BytesFromBuffer(buf+12);
+   mReadMetaData.commandOffset     = read4BytesFromBuffer(buf+16);
+   mReadMetaData.commandSize       = read4BytesFromBuffer(buf+20);
+   mReadMetaData.encodedPcmSamples = read4BytesFromBuffer(buf+24);
+   mReadMetaData.timestampMsw      = read4BytesFromBuffer(buf+28);
+   mReadMetaData.timestampLsw      = read4BytesFromBuffer(buf+32);
+   mReadMetaData.flags             = read4BytesFromBuffer(buf+36);
+   ALOGV("streamId: %d, formatId: %d, dataOffset: %d, frameSize: %d",
+           mReadMetaData.streamId, mReadMetaData.formatId,
+           mReadMetaData.dataOffset, mReadMetaData.frameSize);
+
+}
+
 
 }       // namespace android_audio_legacy
