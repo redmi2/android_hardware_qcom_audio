@@ -130,14 +130,14 @@ class AudioBitstreamSM;
 
 //Required for Tunnel
 #define TUNNEL_DECODER_BUFFER_SIZE 4800
-#define TUNNEL_DECODER_BUFFER_COUNT 512
+#define TUNNEL_DECODER_BUFFER_COUNT 256
 #define SIGNAL_EVENT_THREAD 2
 #define SIGNAL_PLAYBACK_THREAD 2
 //Values to exit poll via eventfd
 #define KILL_EVENT_THREAD 1
 #define KILL_PLAYBACK_THREAD 1
 #define KILL_CAPTURE_THREAD 1
-#define NUM_FDS 2
+#define NUM_FDS 3
 #define AFE_PROXY_SAMPLE_RATE 48000
 #define AFE_PROXY_CHANNEL_COUNT 2
 
@@ -234,7 +234,7 @@ public:
     status_t    setCaptureFormat(const char *value);
     status_t    setWMAParams(alsa_handle_t* , int[], int);
     int         getALSABufferSize(alsa_handle_t *handle);
-    status_t    setHDMIChannelCount();
+    status_t    setHDMIChannelCount(int channels);
     void        switchDeviceUseCase(alsa_handle_t *handle, uint32_t devices,
                                             uint32_t mode);
     void        setDeviceList(ALSAHandleList *mDeviceList);
@@ -478,11 +478,13 @@ private:
     size_t              mBufferSize;
     int                 mFormat;
     int                 mDevices;
+    int                 mSecDevices;
     uint32_t            mStreamVol;
     bool                mPowerLock;
     bool                mRoutePcmAudio;
     bool                mRouteAudioToA2dp;
     bool                mUseTunnelDecoder;
+    bool                mUseDualTunnel;
     bool                mCaptureFromProxy;
     bool                mUseMS11Decoder;
     uint32_t            mSessionId;
@@ -501,11 +503,12 @@ private:
     uint32_t            mCurDevice;
     int32_t             mSpdifFormat;
     int32_t             mHdmiFormat;
-    uint64_t            hw_ptr;
+    uint64_t            hw_ptr[2];
 
     AudioHardwareALSA  *mParent;
     alsa_handle_t *     mPcmRxHandle;
     alsa_handle_t *     mCompreRxHandle;
+    alsa_handle_t *     mSecCompreRxHandle;
     ALSADevice *        mALSADevice;
     snd_use_case_mgr_t *mUcMgr;
     SoftMS11           *mMS11Decoder;
@@ -545,9 +548,10 @@ private:
         int32_t memBufsize;
         uint32_t bytesToWrite;
     };
-    List<BuffersAllocated> mInputMemEmptyQueue;
-    List<BuffersAllocated> mInputMemFilledQueue;
-    List<BuffersAllocated> mInputBufPool;
+    List<BuffersAllocated> mInputMemEmptyQueue[2];
+    List<BuffersAllocated> mInputMemFilledQueue[2];
+    List<BuffersAllocated> mInputBufPool[2];
+    int mBuffPoolInitDone;
 
     //Declare all the threads
     pthread_t mEventThread;

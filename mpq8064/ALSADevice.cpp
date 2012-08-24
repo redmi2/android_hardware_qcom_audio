@@ -117,14 +117,29 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     int format = handle->format;
 
     bool dtsTranscode = false;
+    bool dtsPassThrough = false;
     char spdifFormat[20];
     char hdmiFormat[20];
-
+    int hdmiChannels = 8;
     property_get("mpq.audio.spdif.format",spdifFormat,"0");
     property_get("mpq.audio.hdmi.format",hdmiFormat,"0");
     if (!strncmp(spdifFormat,"dts",sizeof(spdifFormat)) ||
         !strncmp(hdmiFormat,"dts",sizeof(hdmiFormat)))
         dtsTranscode = true;
+    if (!strncmp(spdifFormat,"dts",sizeof(spdifFormat)) &&
+        !strncmp(hdmiFormat,"dts",sizeof(hdmiFormat)))
+        dtsPassThrough = true;
+    if ((dtsTranscode)
+        && (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
+                          strlen(SND_USE_CASE_VERB_HIFI_TUNNEL2)) ||
+        !strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
+                          strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2)))) { /*||
+        !strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL3,
+                          strlen(SND_USE_CASE_VERB_HIFI_TUNNEL3)) ||
+        !strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL3,
+                          strlen(SND_USE_CASE_MOD_PLAY_TUNNEL3)))) {*/
+        dtsPassThrough = true;
+    }
 
     reqBuffSize = handle->bufferSize;
     if ((!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
@@ -176,20 +191,20 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
                  (format == AUDIO_FORMAT_EAC3)) {
             ALOGV("AC3 CODEC");
             compr_params.codec.id = compr_cap.codecs[2];
-            err = setHDMIChannelCount();
-            if(err != OK) {
-                ALOGE("setHDMIChannelCount err = %d", err);
-                return err;
-            }
+            hdmiChannels = 2;
         } else if(format == AUDIO_FORMAT_DTS_LBR) {
              ALOGV("DTS LBR CODEC");
              compr_params.codec.id = compr_cap.codecs[6];
         } else if(format == AUDIO_FORMAT_MP3) {
              ALOGV("MP3 CODEC");
              compr_params.codec.id = compr_cap.codecs[0];
-        } else if(format == AUDIO_FORMAT_DTS) {
+        } else if(format == AUDIO_FORMAT_DTS && dtsPassThrough == false) {
              ALOGV("DTS CODEC");
              compr_params.codec.id = compr_cap.codecs[5];
+        } else if(format == AUDIO_FORMAT_DTS) {
+             ALOGV("DTS PASSTHROUGH CODEC");
+             compr_params.codec.id = compr_cap.codecs[7];
+             hdmiChannels = 2;
         } else {
              ALOGE("format not supported to open tunnel device");
              return BAD_VALUE;
@@ -202,6 +217,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
             err = -errno;
             return err;
         }
+        handle->channels = 6;
     }
     if(handle->sampleRate > 48000) {
         ALOGE("Sample rate >48000, opening the driver with 48000Hz");
@@ -209,6 +225,13 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     }
     if(handle->channels > 8)
         handle->channels = 8;
+    if (handle->devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+        err = setHDMIChannelCount(hdmiChannels);
+        if(err != OK) {
+            ALOGE("setHDMIChannelCount err = %d", err);
+            return err;
+        }
+    }
     params = (snd_pcm_hw_params*) calloc(1, sizeof(struct snd_pcm_hw_params));
     if (!params) {
 		//SMANI:: Commented to fix build issues. FIX IT.
@@ -244,6 +267,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     }
     else {
         param_set_min(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, reqBuffSize);
+        param_set_int(params, SNDRV_PCM_HW_PARAM_PERIODS, TUNNEL_DECODER_BUFFER_COUNT); 
     }
 
     param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 16);
@@ -1686,11 +1710,13 @@ int ALSADevice::getALSABufferSize(alsa_handle_t *handle) {
     return bufferSize;
 }
 
-status_t ALSADevice::setHDMIChannelCount()
+status_t ALSADevice::setHDMIChannelCount(int channels)
 {
     status_t err = NO_ERROR;
-
-    err = setMixerControl("HDMI_RX Channels","Two");
+    if(channels == 2)
+        err = setMixerControl("HDMI_RX Channels","Two");
+    else
+        err = setMixerControl("HDMI_RX Channels","Eight");
     if(err) {
         ALOGE("setHDMIChannelCount error = %d",err);
     }
