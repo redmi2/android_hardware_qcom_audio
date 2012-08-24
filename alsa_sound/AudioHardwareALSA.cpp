@@ -85,7 +85,7 @@ AudioHardwareALSA::AudioHardwareALSA() :
 {
     FILE *fp;
     char soundCardInfo[200];
-    char platform[128], baseband[128];
+    char platform[128], baseband[128], audio_init[128];
     int codec_rev = 2;
     mALSADevice = new ALSADevice();
     mDeviceList.clear();
@@ -94,6 +94,8 @@ AudioHardwareALSA::AudioHardwareALSA() :
     mSGLTECallActive = 0;
     mIsFmActive = 0;
     mDevSettingsFlag = 0;
+    bool audio_init_done = false;
+    int sleep_retry = 0;
 #ifdef QCOM_USBAUDIO_ENABLED
     mAudioUsbALSA = new AudioUsbALSA();
     musbPlaybackState = 0;
@@ -126,6 +128,18 @@ AudioHardwareALSA::AudioHardwareALSA() :
             }
         }
         fclose(fp);
+    }
+
+    while (audio_init_done == false && sleep_retry < MAX_SLEEP_RETRY) {
+        property_get("qcom.audio.init", audio_init, NULL);
+        ALOGD("qcom.audio.init is set to %s\n",audio_init);
+        if(!strncmp(audio_init, "complete", sizeof("complete"))) {
+            audio_init_done = true;
+        } else {
+            ALOGD("Sleeping for 50 ms");
+            usleep(AUDIO_INIT_SLEEP_WAIT*1000);
+            sleep_retry++;
+        }
     }
 
     if (codec_rev == 1) {
