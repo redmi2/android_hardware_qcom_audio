@@ -537,6 +537,12 @@ String8 AudioHardwareALSA::getParameters(const String8& keys)
 #endif
 
 
+    key = String8("tunneled-input-formats");
+    if ( param.get(key,value) == NO_ERROR ) {
+        ALOGD("Add tunnel AWB to audio parameter");
+        param.addInt(String8("AWB"), true );
+    }
+
     ALOGV("AudioHardwareALSA::getParameters() %s", param.toString().string());
     return param.toString();
 }
@@ -1153,7 +1159,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
     AudioStreamInALSA *in = 0;
     ALSAHandleList::iterator it;
 
-    ALOGD("openInputStream: devices 0x%x channels %d sampleRate %d", devices, *channels, *sampleRate);
+    ALOGD("openInputStream: devices 0x%x format 0x%x channels %d sampleRate %d", devices, *format, *channels, *sampleRate);
     if (devices & (devices - 1)) {
         if (status) *status = err;
         return in;
@@ -1257,10 +1263,13 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         return in;
       } else
       {
+        ALOGV("Device is not in communication");
         for(ALSAHandleList::iterator itDev = mDeviceList.begin();
               itDev != mDeviceList.end(); ++itDev)
         {
             if((0 == strncmp(itDev->useCase, SND_USE_CASE_VERB_HIFI_REC, MAX_UC_LEN))
+              ||(0 == strncmp(itDev->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED, MAX_UC_LEN))
+              ||(0 == strncmp(itDev->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED, MAX_UC_LEN))
               ||(0 == strncmp(itDev->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, MAX_UC_LEN))
               ||(0 == strncmp(itDev->useCase, SND_USE_CASE_VERB_HIFI_LOWLATENCY_REC, MAX_UC_LEN))
               ||(0 == strncmp(itDev->useCase, SND_USE_CASE_MOD_CAPTURE_LOWLATENCY_MUSIC, MAX_UC_LEN))
@@ -1298,7 +1307,10 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         alsa_handle.bufferSize = bufferSize;
         alsa_handle.devices = devices;
         alsa_handle.handle = 0;
-        alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
+        if(*format == AudioSystem::PCM_16_BIT)
+            alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
+        else
+            alsa_handle.format = *format;
         alsa_handle.channels = VOICE_CHANNEL_MODE;
         alsa_handle.sampleRate = android::AudioRecord::DEFAULT_SAMPLE_RATE;
         alsa_handle.latency = RECORD_LATENCY;
@@ -1341,6 +1353,9 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                 property_get("persist.audio.lowlatency.rec",value,"0");
                 if (!strcmp("true", value)) {
                     strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_LOWLATENCY_MUSIC, sizeof(alsa_handle.useCase));
+                } else if (*format == AudioSystem::AMR_WB) {
+                    ALOGV("Format AMR_WB, open compressed capture");
+                    strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED, sizeof(alsa_handle.useCase));
                 } else {
                     strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, sizeof(alsa_handle.useCase));
                 }
@@ -1381,6 +1396,8 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                 property_get("persist.audio.lowlatency.rec",value,"0");
                 if (!strcmp("true", value)) {
                     strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_HIFI_LOWLATENCY_REC, sizeof(alsa_handle.useCase));
+                } else if (*format == AudioSystem::AMR_WB) {
+                    strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED, sizeof(alsa_handle.useCase));
                 } else {
                     strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_HIFI_REC, sizeof(alsa_handle.useCase));
                 }
@@ -1431,6 +1448,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
 
         if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC) ||
            !strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_LOWLATENCY_REC) ||
+           !strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED) ||
 #ifdef QCOM_FM_ENABLED
            !strcmp(it->useCase, SND_USE_CASE_VERB_FM_REC) ||
            !strcmp(it->useCase, SND_USE_CASE_VERB_FM_A2DP_REC) ||
@@ -1448,7 +1466,9 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
 #ifdef QCOM_SSR_ENABLED
         if (6 == it->channels) {
             if (!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC, strlen(SND_USE_CASE_VERB_HIFI_REC))
-                || !strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC))) {
+                || !strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED, strlen(SND_USE_CASE_VERB_HIFI_REC_COMPRESSED))
+                || !strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC))
+                || !strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED))) {
                 ALOGV("OpenInoutStream: Use larger buffer size for 5.1(%s) recording ", it->useCase);
                 it->bufferSize = getInputBufferSize(it->sampleRate,*format,it->channels);
 
@@ -1464,6 +1484,10 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         }
 #endif
         err = mALSADevice->open(&(*it));
+        if (*format == AudioSystem::AMR_WB) {
+             ALOGV("### Setting bufsize to 61");
+             it->bufferSize = 61;
+        }
         if (err) {
            ALOGE("Error opening pcm input device");
         } else {

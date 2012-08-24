@@ -132,8 +132,11 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     struct snd_compr_params compr_params;
     uint32_t codec_id = 0;
 
+    ALOGD("handle->format: 0x%x", handle->format);
     if ((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
-        (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL))) {
+        (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL)) ||
+        (!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED)) ||
+        (!strcmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED))) {
         ALOGV("Tunnel mode detected...");
         //get the list of codec supported by hardware
         if (ioctl(handle->handle->fd, SNDRV_COMPRESS_GET_CAPS, &compr_cap)) {
@@ -147,6 +150,11 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
         }
         else if (handle->format == AUDIO_FORMAT_AMR_WB) {
           codec_id = get_compressed_format("AMR_WB");
+          if ((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED)) ||
+              (!strcmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED))) {
+              compr_params.codec.options.generic.reserved[0] = 8; /*band mode - 23.85 kbps*/
+              compr_params.codec.options.generic.reserved[1] = 0; /*dtx mode - disable*/
+          }
           ALOGV("### AMR WB CODEC codec_id %d",codec_id);
         }
         else if (handle->format == AUDIO_FORMAT_AMR_WB_PLUS) {
@@ -193,7 +201,9 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
 #ifdef QCOM_SSR_ENABLED
     if (channels == 6) {
         if (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC, strlen(SND_USE_CASE_VERB_HIFI_REC))
-            || !strncmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC))) {
+            || !strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED, strlen(SND_USE_CASE_VERB_HIFI_REC_COMPRESSED))
+            || !strncmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC))
+            || !strncmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED))) {
             ALOGV("HWParams: Use 4 channels in kernel for 5.1(%s) recording ", handle->useCase);
             channels = 4;
             reqBuffSize = DEFAULT_IN_BUFFER_SIZE;
@@ -222,12 +232,15 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
             || handle->format == AudioSystem::EVRCB
             || handle->format == AudioSystem::EVRCWB
 #endif
-            )
+            ) {
             if ((strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL)) &&
-                (strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL))) {
+                (strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL)) &&
+                (strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED)) &&
+                (strcmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED))) {
               format = SNDRV_PCM_FORMAT_SPECIAL;
               ALOGW("setting format to SNDRV_PCM_FORMAT_SPECIAL");
             }
+        }
     }
     //TODO: Add format setting for tunnel mode using the usecase.
     param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT,
@@ -259,10 +272,17 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     handle->handle->channels = handle->channels;
     handle->periodSize = handle->handle->period_size;
     if (strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC) &&
+        strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED) &&
         strcmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC) &&
+        strcmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED) &&
         (6 != handle->channels)) {
         //Do not update buffersize for 5.1 recording
-        handle->bufferSize = handle->handle->period_size;
+        if (handle->format == AUDIO_FORMAT_AMR_WB) {
+            ALOGV("### format AMWB, set bufsize to 61");
+            handle->bufferSize = 61;
+        } else {
+            handle->bufferSize = handle->handle->period_size;
+        }
     }
 
     return NO_ERROR;
@@ -285,7 +305,9 @@ status_t ALSADevice::setSoftwareParams(alsa_handle_t *handle)
 #ifdef QCOM_SSR_ENABLED
     if (channels == 6) {
         if (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC, strlen(SND_USE_CASE_VERB_HIFI_REC))
-            || !strncmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC))) {
+            || !strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED, strlen(SND_USE_CASE_VERB_HIFI_REC_COMPRESSED))
+            || !strncmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC))
+            || !strncmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED))) {
             ALOGV("SWParams: Use 4 channels in kernel for 5.1(%s) recording ", handle->useCase);
             channels = 4;
         }
@@ -370,7 +392,9 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
 #ifdef QCOM_SSR_ENABLED
     if ((devices & AudioSystem::DEVICE_IN_BUILTIN_MIC) && ( 6 == handle->channels)) {
         if (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC, strlen(SND_USE_CASE_VERB_HIFI_REC))
-            || !strncmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC))) {
+            || !strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED, strlen(SND_USE_CASE_VERB_HIFI_REC_COMPRESSED))
+            || !strncmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC))
+            || !strncmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED))) {
             ALOGV(" switchDevice , use ssr devices for channels:%d usecase:%s",handle->channels,handle->useCase);
             setFlags(SSRQMIC_FLAG);
         }
@@ -587,7 +611,7 @@ status_t ALSADevice::open(alsa_handle_t *handle)
 
     close(handle);
 
-    ALOGD("open: handle %p", handle);
+    ALOGD("open: handle %p, format 0x%x", handle, handle->format);
 
     // ASoC multicomponent requires a valid path (frontend/backend) for
     // the device to be opened
@@ -620,7 +644,9 @@ status_t ALSADevice::open(alsa_handle_t *handle)
         flags |= PCM_QUAD;
     } else if (handle->channels == 6 ) {
         if (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC, strlen(SND_USE_CASE_VERB_HIFI_REC))
-            || !strncmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC))) {
+            || !strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED, strlen(SND_USE_CASE_VERB_HIFI_REC_COMPRESSED))
+            || !strncmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC))
+            || !strncmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED))) {
             flags |= PCM_QUAD;
         } else {
             flags |= PCM_5POINT1;
@@ -1174,6 +1200,8 @@ int ALSADevice::getUseCaseType(const char *useCase)
             MAX_LEN(useCase, SND_USE_CASE_VERB_HIFI_REC)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_HIFI_LOWLATENCY_REC,
             MAX_LEN(useCase, SND_USE_CASE_VERB_HIFI_LOWLATENCY_REC)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED,
+            MAX_LEN(useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_FM_REC,
             MAX_LEN(useCase, SND_USE_CASE_VERB_FM_REC)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_FM_A2DP_REC,
@@ -1185,7 +1213,9 @@ int ALSADevice::getUseCaseType(const char *useCase)
         !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_FM,
             MAX_LEN(useCase, SND_USE_CASE_MOD_CAPTURE_FM)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_A2DP_FM,
-            MAX_LEN(useCase, SND_USE_CASE_MOD_CAPTURE_A2DP_FM))) {
+            MAX_LEN(useCase, SND_USE_CASE_MOD_CAPTURE_A2DP_FM)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED,
+            MAX_LEN(useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED))) {
         return USECASE_TYPE_TX;
     } else if (!strncmp(useCase, SND_USE_CASE_VERB_VOICECALL,
             MAX_LEN(useCase, SND_USE_CASE_VERB_VOICECALL)) ||
