@@ -181,6 +181,9 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
                 ALOGE("setHDMIChannelCount err = %d", err);
                 return err;
             }
+        } else if(format == AUDIO_FORMAT_DTS_LBR) {
+             ALOGV("DTS LBR CODEC");
+             compr_params.codec.id = compr_cap.codecs[6];
         } else if(format == AUDIO_FORMAT_MP3) {
              ALOGV("MP3 CODEC");
              compr_params.codec.id = compr_cap.codecs[0];

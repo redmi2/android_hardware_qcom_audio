@@ -188,7 +188,8 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
         mAacConfigDataSet = false; // flags if AAC config to be set(which is sent in first buffer)
 
     } else if(format == AUDIO_FORMAT_WMA || format == AUDIO_FORMAT_WMA_PRO ||
-              format == AUDIO_FORMAT_DTS || format == AUDIO_FORMAT_MP3){
+              format == AUDIO_FORMAT_DTS || format == AUDIO_FORMAT_MP3 ||
+              format == AUDIO_FORMAT_DTS_LBR){
         // In this case, DSP will decode and route the PCM data to output devices
         mUseTunnelDecoder = true;
         mWMAConfigDataSet = false;
