@@ -800,6 +800,9 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
                 device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET;
             }
             if (device2 == 0) {
+                device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_FM_TX;
+            }
+            if (device2 == 0) {
                 device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_SPEAKER;
             }
 
