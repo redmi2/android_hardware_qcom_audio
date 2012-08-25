@@ -111,9 +111,8 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
 
     int write_pending = bytes;
 
-    if((mHandle->handle == NULL) && (mHandle->rxHandle == NULL) &&
-         (strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) &&
-         (strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+    if((strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) &&
+       (strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
         mParent->mLock.lock();
         /* PCM handle might be closed and reopened immediately to flush
          * the buffers, recheck and break if PCM handle is valid */
@@ -192,7 +191,9 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
                 }
             }
 #endif
-            if (mParent->mRouteAudioToA2dp) {
+        }
+        if (mParent->mRouteAudioToA2dp) {
+            if (! (mParent->getA2DPActiveUseCases_l() & AudioHardwareALSA::A2DPHardwareOutput)) {
                 status_t err = NO_ERROR;
                 err = mParent->startA2dpPlayback_l(AudioHardwareALSA::A2DPHardwareOutput);
                 if(err) {
