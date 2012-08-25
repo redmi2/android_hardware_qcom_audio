@@ -1333,6 +1333,8 @@ static unsigned calculate_audpre_table_index(unsigned index)
 }
 size_t AudioHardware::getInputBufferSize(uint32_t sampleRate, int format, int channelCount)
 {
+    ALOGD("AudioHardware::getInputBufferSize sampleRate %d format %d channelCount %d"
+            ,sampleRate, format, channelCount);
     if ( (format != AudioSystem::PCM_16_BIT) &&
          (format != AudioSystem::AMR_NB)     &&
          (format != AudioSystem::EVRC)       &&
