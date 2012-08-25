@@ -695,11 +695,6 @@ status_t AudioHardwareALSA::doRouting(int device)
                 if (device != mCurDevice) {
                    mALSADevice->route(&(*it),(uint32_t)device, newMode);
                 }
-                err = startA2dpPlayback_l(AudioHardwareALSA::A2DPHardwareOutput);
-                if(err) {
-                    ALOGW("startA2dpPlayback_l for hardware output failed err = %d", err);
-                    stopA2dpPlayback_l(AudioHardwareALSA::A2DPHardwareOutput);
-                }
             }
             if (device != mCurDevice) {
                 resumeIfUseCaseTunnelOrLPA();
@@ -2149,9 +2144,9 @@ void AudioHardwareALSA::a2dpThreadFunc() {
         {
             Mutex::Autolock autolock1(mA2dpMutex);
             if (!mA2dpStream || !mIsA2DPEnabled ||
-                    !mALSADevice->isProxyDeviceOpened() ||
-                    (mALSADevice->isProxyDeviceSuspended()) ||
-                    (err != NO_ERROR)) {
+                !mALSADevice->isProxyDeviceOpened() ||
+                (mALSADevice->isProxyDeviceSuspended()) ||
+                (err != NO_ERROR)) {
                 ALOGD("A2DPThreadEntry:: proxy opened = %d,\
                         proxy suspended = %d,err =%d,\
                         mA2dpStream = %p",\

@@ -2055,7 +2055,7 @@ status_t ALSADevice::openProxyDevice()
        ALOGE("Failed to pcm_prepare on Proxy device");
        goto bail;
    }
-   mProxyParams.mProxyState = proxy_params::EProxyOpened;
+   mProxyParams.mProxyState = proxy_params::EProxySuspended;
    return NO_ERROR;
 
 bail:
