@@ -820,12 +820,6 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
         if (mAvailableOutputDevices & AudioSystem::DEVICE_OUT_FM) {
             device |= AudioSystem::DEVICE_OUT_FM;
         }
-        if (mAvailableOutputDevices & AudioSystem::DEVICE_OUT_ANC_HEADSET) {
-            device |= AudioSystem::DEVICE_OUT_ANC_HEADSET;
-        }
-        if (mAvailableOutputDevices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE) {
-            device |= AudioSystem::DEVICE_OUT_ANC_HEADPHONE;
-        }
 
         } break;
 
@@ -1069,7 +1063,7 @@ AudioSystem::device_connection_state AudioPolicyManager::getDeviceConnectionStat
             }
             if (audio_is_usb_device((audio_devices_t)device) &&
                 (!mHasUsb || (address != "" && mUsbCardAndDevice != address))) {
-                ALOGE("setDeviceConnectionState() invalid device: %x", device);
+                ALOGE("getDeviceConnectionState() invalid device: %x", device);
                 return state;
             }
             state = AudioSystem::DEVICE_STATE_AVAILABLE;
