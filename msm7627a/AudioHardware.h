@@ -228,7 +228,7 @@ public:
     virtual    void        closeOutputStream(AudioStreamOut* out);
     virtual    void        closeInputStream(AudioStreamIn* in);
 
-    virtual    size_t      getInputBufferSize(uint32_t sampleRate, int format, audio_channel_mask_t channelCount);
+    virtual    size_t      getInputBufferSize(uint32_t sampleRate, int format, int channelCount);
                void        clearCurDevice() { mCurSndDevice = -1; }
 #ifdef QCOM_FM_ENABLED
                 int IsFmon() const { return (mFmFd != -1); }
