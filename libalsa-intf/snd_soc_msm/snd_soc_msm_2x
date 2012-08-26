@@ -5702,6 +5702,40 @@ SectionModifier
 EndSection
 
 SectionModifier
+        Name "Play VoiceHDMI"
+
+        EnableSequence
+        EndSequence
+
+        DisableSequence
+                'HDMI_RX_Voice Mixer CSVoice':1:0
+                'Voice_Tx Mixer SLIM_0_TX_Voice':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 2
+        capturePCM 2
+
+EndSection
+
+SectionModifier
+        Name "Play VoiceHDMI Tx"
+
+        EnableSequence
+                'HDMI_RX_Voice Mixer CSVoice':1:1
+                'Voice_Tx Mixer SLIM_0_TX_Voice':1:1
+        EndSequence
+
+        DisableSequence
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 2
+        capturePCM 2
+
+EndSection
+
+SectionModifier
 	Name "Play VoiceBT SCO Rx"
 
 	EnableSequence
