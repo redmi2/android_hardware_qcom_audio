@@ -1688,15 +1688,9 @@ uint32_t AudioSessionOutALSA::channelMapToChannels(uint32_t channelMap) {
 
 void AudioSessionOutALSA::reset() {
 
-    for(ALSAHandleList::iterator it = mParent->mDeviceList.begin();
-        it != mParent->mDeviceList.end(); ++it) {
-        alsa_handle_t *it_dup = &(*it);
-        if(mCompreRxHandle == it_dup || mPcmRxHandle == it_dup ||
-            mSecCompreRxHandle == it_dup) {
-            mParent->mDeviceList.erase(it);
-        }
-    }
-
+    alsa_handle_t *compreRxHandle_dup = mCompreRxHandle;
+    alsa_handle_t *pcmRxHandle_dup = mPcmRxHandle;
+    alsa_handle_t *secCompreRxHandle_dup = mSecCompreRxHandle;
 
     if(mPcmRxHandle) {
         closeDevice(mPcmRxHandle);
@@ -1725,6 +1719,15 @@ void AudioSessionOutALSA::reset() {
     if(mBitstreamSM) {
         delete mBitstreamSM;
         mBitstreamSM = NULL;
+    }
+
+    for(ALSAHandleList::iterator it = mParent->mDeviceList.begin();
+        it != mParent->mDeviceList.end(); ++it) {
+        alsa_handle_t *it_dup = &(*it);
+        if(compreRxHandle_dup == it_dup || pcmRxHandle_dup == it_dup ||
+            secCompreRxHandle_dup == it_dup) {
+            mParent->mDeviceList.erase(it);
+        }
     }
 
     mSessionId = -1;
