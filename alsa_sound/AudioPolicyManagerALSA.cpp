@@ -762,7 +762,9 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
                 /* if((strategy == STRATEGY_MEDIA || a2dpUsedForSonification())) {
                    break;
                 } */
-                device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP;
+                if (device2 == 0) {
+                    device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP;
+                }
                 if (device2 == 0) {
                     device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES;
                 }
@@ -817,12 +819,6 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
 
         if (mAvailableOutputDevices & AudioSystem::DEVICE_OUT_FM) {
             device |= AudioSystem::DEVICE_OUT_FM;
-        }
-        if (mAvailableOutputDevices & AudioSystem::DEVICE_OUT_ANC_HEADSET) {
-            device |= AudioSystem::DEVICE_OUT_ANC_HEADSET;
-        }
-        if (mAvailableOutputDevices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE) {
-            device |= AudioSystem::DEVICE_OUT_ANC_HEADPHONE;
         }
 
         } break;
@@ -1067,7 +1063,7 @@ AudioSystem::device_connection_state AudioPolicyManager::getDeviceConnectionStat
             }
             if (audio_is_usb_device((audio_devices_t)device) &&
                 (!mHasUsb || (address != "" && mUsbCardAndDevice != address))) {
-                ALOGE("setDeviceConnectionState() invalid device: %x", device);
+                ALOGE("getDeviceConnectionState() invalid device: %x", device);
                 return state;
             }
             state = AudioSystem::DEVICE_STATE_AVAILABLE;
