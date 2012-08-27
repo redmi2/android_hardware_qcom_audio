@@ -131,6 +131,13 @@ static int out_set_parameters(struct audio_stream *stream, const char *kvpairs)
     return out->qcom_out->setParameters(String8(kvpairs));
 }
 
+static int out_bcast_set_parameters(struct audio_stream *stream, const char *kvpairs)
+{
+    struct qcom_broadcast_stream *out =
+        reinterpret_cast<struct qcom_broadcast_stream *>(stream);
+    return out->qcom_out->setParameters(String8(kvpairs));
+}
+
 static char * out_get_parameters(const struct audio_stream *stream, const char *keys)
 {
     const struct qcom_stream_out *out =
@@ -640,7 +647,7 @@ static int adev_open_broadcast_stream(struct audio_hw_device *dev,
     out->stream.common.set_format = out_set_format;
     out->stream.common.standby = out_standby;
     out->stream.common.dump = out_dump;
-    out->stream.common.set_parameters = out_set_parameters;
+    out->stream.common.set_parameters = out_bcast_set_parameters;
     out->stream.common.get_parameters = out_get_parameters;
     out->stream.common.add_audio_effect = out_add_audio_effect;
     out->stream.common.remove_audio_effect = out_remove_audio_effect;
