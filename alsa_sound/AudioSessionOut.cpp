@@ -114,6 +114,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     mEventThreadAlive   = false;
     mKillEventThread    = false;
     mObserver           = NULL;
+    mOutputMetadataLength = 0;
 
     if(devices == 0) {
         ALOGE("No output device specified");
@@ -217,6 +218,8 @@ status_t AudioSessionOutALSA::openAudioSessionDevice(int type, int devices)
         } else {
             status = openDevice(SND_USE_CASE_MOD_PLAY_TUNNEL, false, devices);
         }
+        mOutputMetadataLength = sizeof(output_metadata_handle_t);
+        ALOGD("openAudioSessionDevice - mOutputMetadataLength = %d", mOutputMetadataLength);
     }
     if(use_case) {
         free(use_case);
@@ -280,11 +283,27 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
     //    buffer queue
     List<BuffersAllocated>::iterator it = mEmptyQueue.begin();
     BuffersAllocated buf = *it;
-    mEmptyQueue.erase(it);
+    if(bytes)
+        mEmptyQueue.erase(it);
     mEmptyQueueMutex.unlock();
 
     memset(buf.memBuf, 0, mAlsaHandle->handle->period_size);
-    memcpy(buf.memBuf, buffer, bytes);
+    if((!strncmp(mAlsaHandle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
+            strlen(SND_USE_CASE_VERB_HIFI_TUNNEL))) ||
+            (!strncmp(mAlsaHandle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL,
+            strlen(SND_USE_CASE_MOD_PLAY_TUNNEL)))) {
+        updateMetaData(bytes);
+
+        memcpy(buf.memBuf, &mOutputMetadataTunnel, mOutputMetadataLength);
+        ALOGD("Copy Metadata = %d, bytes = %d", mOutputMetadataLength, bytes);
+
+        if(bytes == 0) {
+          err = pcm_write(mAlsaHandle->handle, buf.memBuf, mAlsaHandle->handle->period_size);
+          buf.bytesToWrite = bytes;
+          return err;
+        }
+    }
+    memcpy((buf.memBuf + mOutputMetadataLength), buffer, bytes);
     buf.bytesToWrite = bytes;
 
     mFilledQueueMutex.lock();
@@ -295,7 +314,7 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
     ALOGV("PCM write start");
     err = pcm_write(mAlsaHandle->handle, buf.memBuf, mAlsaHandle->handle->period_size);
     ALOGV("PCM write complete");
-    if (bytes < mAlsaHandle->handle->period_size) {
+    if (bytes < (mAlsaHandle->handle->period_size - mOutputMetadataLength)) {
         ALOGV("Last buffer case");
         if ( ioctl(mAlsaHandle->handle->fd, SNDRV_PCM_IOCTL_START) < 0 ) {
             ALOGE("Audio Start failed");
@@ -435,11 +454,24 @@ void  AudioSessionOutALSA::eventThreadEntry() {
 
             //Post EOS in case the filled queue is empty and EOS is reached.
             if (mFilledQueue.empty() && mReachedEOS) {
-                ALOGV("Posting the EOS to the observer player %p", mObserver);
-                mEosEventReceived = true;
-                if (mObserver != NULL) {
-                    ALOGV("mObserver: posting EOS");
-                    mObserver->postEOS(0);
+                 mFilledQueueMutex.unlock();
+                 if (mObserver != NULL) {
+                     if((!strncmp(mAlsaHandle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
+                             strlen(SND_USE_CASE_VERB_HIFI_TUNNEL))) ||
+                             (!strncmp(mAlsaHandle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL,
+                             strlen(SND_USE_CASE_MOD_PLAY_TUNNEL)))) {
+                         ALOGD("Audio Drain DONE ++");
+                         if ( ioctl(mAlsaHandle->handle->fd, SNDRV_COMPRESS_DRAIN) < 0 ) {
+                             ALOGE("Audio Drain failed");
+                         }
+                         ALOGD("Audio Drain DONE --");
+                     }
+                     ALOGV("Posting the EOS to the observer player %p", mObserver);
+                     mEosEventReceived = true;
+                    if(mReachedEOS) {
+                        ALOGV("mObserver: posting EOS");
+                        mObserver->postEOS(0);
+                    }
                 }
             }
             mFilledQueueMutex.unlock();
@@ -600,7 +632,7 @@ status_t AudioSessionOutALSA::flush()
 
     ALOGV("Transferred all the buffers from Filled queue to "
           "Empty queue to handle seek");
-
+    mReachedEOS = false;
     // 3.) If its in start state,
     //          Pause and flush the driver and Resume it again
     //    If its in paused state,
@@ -611,7 +643,7 @@ status_t AudioSessionOutALSA::flush()
             ALOGE("Audio Pause failed");
             return UNKNOWN_ERROR;
         }
-        mReachedEOS = false;
+        //mReachedEOS = false;
         if ((err = drain()) != OK)
             return err;
     } else {
@@ -821,6 +853,13 @@ void AudioSessionOutALSA::reset() {
         }
     }
     mParent->mLock.unlock();
+}
+void AudioSessionOutALSA::updateMetaData(size_t bytes) {
+    mOutputMetadataTunnel.metadataLength = sizeof(mOutputMetadataTunnel);
+    mOutputMetadataTunnel.timestamp = 0;
+    mOutputMetadataTunnel.bufferLength =  bytes;
+    ALOGD("bytes = %d , mAlsaHandle->handle->period_size = %d ",
+            bytes, mAlsaHandle->handle->period_size);
 }
 
 }       // namespace android_audio_legacy
