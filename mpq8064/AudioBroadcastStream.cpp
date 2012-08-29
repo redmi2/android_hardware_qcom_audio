@@ -971,6 +971,7 @@ status_t AudioBroadcastStreamALSA::openPcmDevice(int devices)
         ALOGE("setPlaybackFormat Failed");
         return BAD_VALUE;
     }
+    mInputBufferSize = DEFAULT_OUT_BUFFER_SIZE_PER_CHANNEL * mChannels;
     snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
     if ((use_case == NULL) ||
         (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
