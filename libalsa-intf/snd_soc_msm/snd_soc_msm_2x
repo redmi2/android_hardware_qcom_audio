@@ -1278,11 +1278,11 @@ SectionVerb
 	Name "HiFi Low PowerBT SCO Rx"
 
 	EnableSequence
-		'"INTERNAL_BT_SCO_RX Audio Mixer MultiMedia3':1:1
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia3':1:1
 	EndSequence
 
 	DisableSequence
-		'"INTERNAL_BT_SCO_RX Audio Mixer MultiMedia3':1:0
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia3':1:0
 	EndSequence
 
 	# ALSA PCMs
@@ -1294,11 +1294,11 @@ SectionVerb
 	Name "HiFi Low PowerBT SCO WB Rx"
 
 	EnableSequence
-		'"INTERNAL_BT_SCO_RX Audio Mixer MultiMedia3':1:1
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia3':1:1
 	EndSequence
 
 	DisableSequence
-		'"INTERNAL_BT_SCO_RX Audio Mixer MultiMedia3':1:0
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia3':1:0
 	EndSequence
 
 	# ALSA PCMs
@@ -3332,11 +3332,11 @@ SectionVerb
 	Name "HiFi LowlatencyBT SCO Rx"
 
 	EnableSequence
-		'"INTERNAL_BT_SCO_RX Audio Mixer MultiMedia5':1:1
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia5':1:1
 	EndSequence
 
 	DisableSequence
-		'"INTERNAL_BT_SCO_RX Audio Mixer MultiMedia5':1:0
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia5':1:0
 	EndSequence
 
 	# ALSA PCMs
@@ -3348,11 +3348,11 @@ SectionVerb
 	Name "HiFi LowlatencyBT SCO WB Rx"
 
 	EnableSequence
-		'"INTERNAL_BT_SCO_RX Audio Mixer MultiMedia5':1:1
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia5':1:1
 	EndSequence
 
 	DisableSequence
-		'"INTERNAL_BT_SCO_RX Audio Mixer MultiMedia5':1:0
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia5':1:0
 	EndSequence
 
 	# ALSA PCMs
@@ -5586,11 +5586,11 @@ SectionModifier
 	Name "Play LPABT SCO Rx"
 
 	EnableSequence
-		'"INTERNAL_BT_SCO_RX Audio Mixer MultiMedia3':1:1
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia3':1:1
 	EndSequence
 
 	DisableSequence
-		'"INTERNAL_BT_SCO_RX Audio Mixer MultiMedia3':1:0
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia3':1:0
 	EndSequence
 
 	# ALSA PCMs
@@ -5602,11 +5602,11 @@ SectionModifier
 	Name "Play LPABT SCO WB Rx"
 
 	EnableSequence
-		'"INTERNAL_BT_SCO_RX Audio Mixer MultiMedia3':1:1
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia3':1:1
 	EndSequence
 
 	DisableSequence
-		'"INTERNAL_BT_SCO_RX Audio Mixer MultiMedia3':1:0
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia3':1:0
 	EndSequence
 
 	# ALSA PCMs
