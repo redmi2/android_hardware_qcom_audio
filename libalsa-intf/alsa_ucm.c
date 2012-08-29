@@ -1010,8 +1010,11 @@ const char *ident, int enable, int ctrl_list_type)
         current_device =
         snd_ucm_get_value_at_index(uc_mgr->card_ctxt_ptr->dev_list_head, index);
         if (current_device != NULL) {
-            uc_index = get_use_case_index(uc_mgr, current_device,
-                       CTRL_LIST_DEVICE);
+            if ((uc_index = get_use_case_index(uc_mgr, current_device,
+                       CTRL_LIST_DEVICE)) < 0) {
+                ALOGE("No valid device found: %s", current_device);
+                continue;
+            }
             dev_cap = dev_list[uc_index].capability;
             if (!capability) {
                 capability = dev_list[uc_index].capability;
@@ -1090,7 +1093,11 @@ const char *ident, const char *device, int enable, int ctrl_list_type)
         uc_mgr->card_ctxt_ptr->use_case_verb_list[verb_index].device_ctrls;
     if (device != NULL) {
         if (enable) {
-            dev_index = get_use_case_index(uc_mgr, device, CTRL_LIST_DEVICE);
+            if ((dev_index =
+                get_use_case_index(uc_mgr, device, CTRL_LIST_DEVICE)) < 0) {
+                ALOGE("No valid device found: %s", device);
+                return dev_index;
+            }
             capability = dev_list[dev_index].capability;
             if (!snd_ucm_get_status_at_index(
                 uc_mgr->card_ctxt_ptr->dev_list_head, device)) {
@@ -1107,7 +1114,11 @@ const char *ident, const char *device, int enable, int ctrl_list_type)
 	ALOGV("Applying mixer controls for use case: %s", use_case);
         if ((uc_index = get_use_case_index(uc_mgr, use_case, ctrl_list_type)) < 0) {
             ALOGV("No valid use case found: %s", use_case );
-            uc_index = get_use_case_index(uc_mgr, ident, ctrl_list_type);
+            if ((uc_index =
+                get_use_case_index(uc_mgr, ident, ctrl_list_type)) < 0) {
+                    ALOGE("No valid use case found: %s", ident);
+                    return uc_index;
+            }
             if (snd_use_case_apply_mixer_controls(uc_mgr, ident, enable,
                 ctrl_list_type, uc_index) < 0) {
                  ALOGV("use case %s not valid without device combination also",
@@ -1118,7 +1129,11 @@ const char *ident, const char *device, int enable, int ctrl_list_type)
                       ctrl_list_type, uc_index);
         }
     } else {
-        uc_index = get_use_case_index(uc_mgr, ident, ctrl_list_type);
+        if ((uc_index =
+            get_use_case_index(uc_mgr, ident, ctrl_list_type)) < 0) {
+            ALOGE("No valid use case found: %s", ident);
+            return uc_index;
+        }
         if (snd_use_case_apply_mixer_controls(uc_mgr, ident, enable,
             ctrl_list_type, uc_index) < 0) {
              ALOGV("use case %s not valid without device combination also",
@@ -1147,7 +1162,11 @@ const char *device, int enable)
         verb_index = 0;
     dev_list =
          uc_mgr->card_ctxt_ptr->use_case_verb_list[verb_index].device_ctrls;
-    dev_index = get_use_case_index(uc_mgr, device, CTRL_LIST_DEVICE);
+    if ((dev_index =
+        get_use_case_index(uc_mgr, device, CTRL_LIST_DEVICE)) < 0) {
+        ALOGE("No valid device %s found", device);
+        return dev_index;
+    }
     capability = dev_list[dev_index].capability;
     if (strncmp(uc_mgr->card_ctxt_ptr->current_verb, SND_USE_CASE_VERB_INACTIVE,
         strlen(SND_USE_CASE_VERB_INACTIVE))) {
@@ -1200,8 +1219,10 @@ const char *device, int enable)
             use_case[0] = 0;
             strlcpy(use_case, uc_mgr->card_ctxt_ptr->current_verb,
                 sizeof(use_case));
-            uc_index = get_use_case_index(uc_mgr, use_case, CTRL_LIST_VERB);
-            if (capability == CAP_VOICE ||
+            if ((uc_index =
+                get_use_case_index(uc_mgr, use_case, CTRL_LIST_VERB)) < 0) {
+                ALOGE("No valid use case %s found", use_case);
+            } else if (capability == CAP_VOICE ||
                 capability ==
                 getUseCaseType(uc_mgr->card_ctxt_ptr->current_verb) ||
                 getUseCaseType(uc_mgr->card_ctxt_ptr->current_verb) ==
@@ -1271,9 +1292,11 @@ const char *device, int enable)
                 }
                 use_case[0] = 0;
                 strlcpy(use_case, ident_value, sizeof(use_case));
-                uc_index =
-                    get_use_case_index(uc_mgr, ident_value, CTRL_LIST_MODIFIER);
-                if (capability == CAP_VOICE ||
+                if ((uc_index =
+                    get_use_case_index(uc_mgr, ident_value,
+                    CTRL_LIST_MODIFIER)) < 0) {
+                    ALOGE("No valid use case %s found", ident_value);
+                } else if (capability == CAP_VOICE ||
                     capability == getUseCaseType(ident_value) ||
                     getUseCaseType(ident_value) == CAP_VOICE) {
                     ALOGV("set %d for use case value: %s", enable, use_case);
@@ -1343,7 +1366,11 @@ static int set_controls_of_device_for_usecase(snd_use_case_mgr_t *uc_mgr,
         verb_index = 0;
     dev_list =
          uc_mgr->card_ctxt_ptr->use_case_verb_list[verb_index].device_ctrls;
-    dev_index = get_use_case_index(uc_mgr, device, CTRL_LIST_DEVICE);
+    if ((dev_index =
+        get_use_case_index(uc_mgr, device, CTRL_LIST_DEVICE)) < 0) {
+        ALOGE("No valid device %s found", device);
+        return dev_index;
+    }
     capability = dev_list[dev_index].capability;
     if (usecase != NULL) {
         strlcpy(use_case, usecase, sizeof(use_case));
@@ -1564,10 +1591,15 @@ int snd_use_case_set(snd_use_case_mgr_t *uc_mgr,
                 ALOGE("Invalid device: Device not part of enabled device list");
             } else {
                 ALOGV("disdev: device value to be disabled: %s", value);
-                index = get_use_case_index(uc_mgr, value, CTRL_LIST_DEVICE);
-                /* Apply Mixer controls for corresponding device and modifier */
-                ret = snd_use_case_apply_mixer_controls(uc_mgr, value, 0,
+                if ((index =
+                    get_use_case_index(uc_mgr, value, CTRL_LIST_DEVICE)) < 0) {
+                    ALOGE("Device %s not found", value);
+                    ret = -EINVAL;
+                } else {
+                    /* Apply Mixer controls for device and modifier */
+                    ret = snd_use_case_apply_mixer_controls(uc_mgr, value, 0,
                           CTRL_LIST_DEVICE, index);
+                }
             }
         }
     } else if (!strncmp(identifier, "_enamod", 7)) {
