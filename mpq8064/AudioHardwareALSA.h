@@ -501,6 +501,7 @@ private:
     uint32_t            mCurDevice;
     int32_t             mSpdifFormat;
     int32_t             mHdmiFormat;
+    uint64_t            hw_ptr;
 
     AudioHardwareALSA  *mParent;
     alsa_handle_t *     mPcmRxHandle;
