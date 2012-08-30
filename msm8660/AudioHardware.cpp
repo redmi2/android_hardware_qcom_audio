@@ -2736,7 +2736,7 @@ AudioHardware::AudioSessionOutLPA::~AudioSessionOutLPA()
     mWriteCv.signal();
 
     //TODO: This might need to be Locked using Parent lock
-    reset();
+//    reset();
     //standby();//TODO Do we really need standby?
 
 }
@@ -3410,6 +3410,7 @@ void AudioHardware::AudioSessionOutLPA::reset()
 
     if (temp == NULL) {
         ALOGE("LPA node does not exist");
+        return ;
     }
     ALOGD("Deroute lpa playback stream");
     if(msm_route_stream(PCM_PLAY, temp->dec_id,DEV_ID(temp->dev_id), 0)) {
