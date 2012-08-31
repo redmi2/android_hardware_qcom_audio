@@ -608,23 +608,20 @@ status_t AudioHardwareALSA::doRouting(int device)
             !(device & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) &&
              (musbPlaybackState)){
                 //USB unplugged
-                device &= ~ AudioSystem::DEVICE_OUT_PROXY;
-                device &= ~ AudioSystem::DEVICE_IN_PROXY;
                 ALSAHandleList::iterator it = mDeviceList.end();
                 it--;
                 mALSADevice->route(&(*it), (uint32_t)device, newMode);
-                ALOGE("USB UNPLUGGED, setting musbPlaybackState to 0");
+                ALOGD("USB UNPLUGGED, setting musbPlaybackState to 0");
                 musbPlaybackState = 0;
                 musbRecordingState = 0;
                 closeUSBRecording();
                 closeUSBPlayback();
         } else if((device & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
                   (device & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)){
-                    ALOGE("Routing everything to prox now");
+                    ALOGD("Routing everything to prox now");
                     ALSAHandleList::iterator it = mDeviceList.end();
                     it--;
-                    mALSADevice->route(&(*it), AudioSystem::DEVICE_OUT_PROXY,
-                                       newMode);
+                    mALSADevice->route(&(*it), device, newMode);
                     for(it = mDeviceList.begin(); it != mDeviceList.end(); ++it) {
                          if((!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) ||
                             (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_LPA))) {
@@ -910,8 +907,6 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
              (mCurDevice & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)||
              (mCurDevice & AudioSystem::DEVICE_OUT_PROXY)){
               ALOGD("Routing to proxy for normal voip call in openOutputStream");
-              mCurDevice |= AudioSystem::DEVICE_OUT_PROXY;
-              alsa_handle.devices = AudioSystem::DEVICE_OUT_PROXY;
               mALSADevice->route(&(*it), mCurDevice, AudioSystem::MODE_IN_COMMUNICATION);
 #ifdef QCOM_USBAUDIO_ENABLED
                 ALOGD("enabling VOIP in openoutputstream, musbPlaybackState: %d", musbPlaybackState);
@@ -974,13 +969,6 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
       ALSAHandleList::iterator it = mDeviceList.end();
       it--;
       ALOGD("useCase %s", it->useCase);
-#ifdef QCOM_USBAUDIO_ENABLED
-      if((devices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
-         (devices & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)){
-          ALOGE("Routing to proxy for normal playback in openOutputStream");
-          devices |= AudioSystem::DEVICE_OUT_PROXY;
-      }
-#endif
       mALSADevice->route(&(*it), devices, mode());
       if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI)) {
           snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_HIFI);
@@ -1062,7 +1050,6 @@ AudioHardwareALSA::openOutputSession(uint32_t devices,
     if((devices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
        (devices & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)){
         ALOGE("Routing to proxy for LPA in openOutputSession");
-        devices |= AudioSystem::DEVICE_OUT_PROXY;
         mALSADevice->route(&(*it), devices, mode());
         devices = AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET;
         ALOGD("Starting USBPlayback for LPA");
@@ -1537,14 +1524,6 @@ void AudioHardwareALSA::handleFm(int device)
         mDeviceList.push_back(alsa_handle);
         ALSAHandleList::iterator it = mDeviceList.end();
         it--;
-#ifdef QCOM_USBAUDIO_ENABLED
-        if((device & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
-           (device & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)){
-            device |= AudioSystem::DEVICE_OUT_PROXY;
-            alsa_handle.devices = AudioSystem::DEVICE_OUT_PROXY;
-            ALOGE("Routing to proxy for FM case");
-        }
-#endif
         mALSADevice->route(&(*it), (uint32_t)device, newMode);
         if(!strcmp(it->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO)) {
             snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_DIGITAL_RADIO);
@@ -1656,13 +1635,6 @@ char *use_case;
     mDeviceList.push_back(alsa_handle);
     ALSAHandleList::iterator it = mDeviceList.end();
     it--;
-#ifdef QCOM_USBAUDIO_ENABLED
-    if((device & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
-       (device & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)){
-        device |= AudioSystem::DEVICE_OUT_PROXY;
-        alsa_handle.devices = device;
-    }
-#endif
     setInChannels(device);
     mALSADevice->route(&(*it), (uint32_t)device, mode);
     if (!strcmp(it->useCase, verb)) {
