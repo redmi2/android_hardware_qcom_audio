@@ -118,7 +118,7 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
          * the buffers, recheck and break if PCM handle is valid */
         if (mHandle->handle == NULL && mHandle->rxHandle == NULL) {
             ALOGV("mDevices =0x%x", mDevices);
-            if(mDevices &  AudioSystem::DEVICE_OUT_PROXY) {
+            if(mDevices &  AudioSystem::DEVICE_OUT_ALL_A2DP) {
                 ALOGV("StreamOut write - mRouteAudioToA2dp = %d ", mParent->mRouteAudioToA2dp);
                 mParent->mRouteAudioToA2dp = true;
             }
