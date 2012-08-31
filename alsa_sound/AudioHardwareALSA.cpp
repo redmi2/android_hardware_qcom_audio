@@ -655,6 +655,12 @@ status_t AudioHardwareALSA::doRouting(int device)
                                  startUsbPlaybackIfNotStarted();
                                  musbPlaybackState |= USBPLAYBACKBIT_LPA;
                                  break;
+                         } else if((!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
+                                   (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL))) {
+                                    ALOGD("doRouting: Tunnel Player device switch to proxy");
+                                    startUsbPlaybackIfNotStarted();
+                                    musbPlaybackState |= USBPLAYBACKBIT_TUNNEL;
+                                    break;
                          } else if((!strcmp(it->useCase, SND_USE_CASE_VERB_VOICECALL)) ||
                                    (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_VOICE))) {
                                     ALOGD("doRouting: VOICE device switch to proxy");

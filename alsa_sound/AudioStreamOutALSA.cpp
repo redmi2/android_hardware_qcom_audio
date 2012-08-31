@@ -314,6 +314,9 @@ status_t AudioStreamOutALSA::close()
       else if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) ||
               (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_LPA))) {
         mParent->musbPlaybackState &= ~USBPLAYBACKBIT_LPA;
+    } else if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
+              (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL))) {
+        mParent->musbPlaybackState &= ~USBPLAYBACKBIT_TUNNEL;
     } else {
         mParent->musbPlaybackState &= ~USBPLAYBACKBIT_MUSIC;
     }
@@ -350,6 +353,10 @@ status_t AudioStreamOutALSA::standby()
         (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_LPA))) {
         ALOGD("Deregistering LPA bit");
         mParent->musbPlaybackState &= ~USBPLAYBACKBIT_LPA;
+    } else if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
+             (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL))) {
+        ALOGD("Deregistering Tunnel Player bit");
+        mParent->musbPlaybackState &= ~USBPLAYBACKBIT_TUNNEL;
     } else {
         ALOGD("Deregistering MUSIC bit, musbPlaybackState: %d", mParent->musbPlaybackState);
         mParent->musbPlaybackState &= ~USBPLAYBACKBIT_MUSIC;
