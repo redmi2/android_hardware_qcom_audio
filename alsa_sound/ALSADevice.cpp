@@ -1325,7 +1325,12 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
              } else if (mDevSettingsFlag & TTY_HCO) {
                  return strdup(SND_USE_CASE_DEV_TTY_HANDSET_RX); /* HANDSET RX */
              }
-        }else if ((devices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET) ||
+        } else if (devices & AudioSystem::DEVICE_OUT_ALL_A2DP &&
+                   devices & AudioSystem::DEVICE_OUT_SPEAKER) {
+            return strdup(SND_USE_CASE_DEV_PROXY_RX_SPEAKER);
+        } else if (devices & AudioSystem::DEVICE_OUT_ALL_A2DP) {
+            return strdup(SND_USE_CASE_DEV_PROXY_RX);
+        } else if ((devices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET) ||
                   (devices & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)) {
              return strdup(SND_USE_CASE_DEV_PROXY_RX); /* PROXY RX */
         } else if( (devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
@@ -1415,16 +1420,13 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
                 return strdup(SND_USE_CASE_DEV_BTSCO_WB_RX); /* BTSCO RX*/
             else
                 return strdup(SND_USE_CASE_DEV_BTSCO_NB_RX); /* BTSCO RX*/
-        } else if ((devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP) ||
-                   (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES) ||
 #ifdef QCOM_VOIP_ENABLED
-                   (devices & AudioSystem::DEVICE_OUT_DIRECTOUTPUT) ||
-#endif
-                   (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER)) {
+        } else if (devices & AudioSystem::DEVICE_OUT_DIRECTOUTPUT) {
             /* Nothing to be done, use current active device */
             if (strncmp(mCurRxUCMDevice, "None", 4)) {
                 return strdup(mCurRxUCMDevice);
             }
+#endif
         } else if (devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
             return strdup(SND_USE_CASE_DEV_HDMI); /* HDMI RX */
 #ifdef QCOM_PROXY_DEVICE_ENABLED
@@ -1900,7 +1902,7 @@ ssize_t  ALSADevice::readFromProxy(void **captureBuffer , ssize_t *bufferSize) {
                capture_handle->running = 0;
                capture_handle->start = 0;
                continue;
-        }else if(err != NO_ERROR){
+        } else if (err != NO_ERROR) {
                 ALOGE("Error: Sync ptr returned %d", err);
                 break;
         }

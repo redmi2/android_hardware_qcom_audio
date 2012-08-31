@@ -828,7 +828,8 @@ protected:
       A2DPDirectOutput = 0x2,
       A2DPBroadcast = 0x4,
       A2DPVoip = 0x8,
-      A2DPFm = 0x16,
+      A2DPFm = 0x10,
+      A2DPAllOutputs = 0x20,
     };
     uint32_t mA2DPActiveUseCases;
 
