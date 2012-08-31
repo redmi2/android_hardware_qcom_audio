@@ -511,6 +511,12 @@ String8 AudioHardwareALSA::getParameters(const String8& keys)
     }
 
 #ifdef QCOM_FM_ENABLED
+
+    key = String8(AudioParameter::keyHandleA2dpDevice);
+    if ( param.get(key,value) == NO_ERROR ) {
+        param.add(key, String8("true"));
+    }
+
     key = String8("Fm-radio");
     if ( param.get(key,value) == NO_ERROR ) {
         if ( mIsFmActive ) {
@@ -686,7 +692,9 @@ status_t AudioHardwareALSA::doRouting(int device)
                 (!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER,
                             strlen(SND_USE_CASE_VERB_HIFI_LOW_POWER))) ||
                 (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_LPA,
-                            strlen(SND_USE_CASE_MOD_PLAY_LPA)))) {
+                            strlen(SND_USE_CASE_MOD_PLAY_LPA)))||
+                (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_FM,
+                            strlen(SND_USE_CASE_MOD_PLAY_FM)))) {
                 if (device != mCurDevice) {
                     mALSADevice->route(&(*it),(uint32_t)device, newMode);
                 }
@@ -724,7 +732,10 @@ status_t AudioHardwareALSA::doRouting(int device)
                 (!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER,
                             strlen(SND_USE_CASE_VERB_HIFI_LOW_POWER))) ||
                 (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_LPA,
-                            strlen(SND_USE_CASE_MOD_PLAY_LPA)))) {
+                            strlen(SND_USE_CASE_MOD_PLAY_LPA)))||
+                (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_FM,
+                            strlen(SND_USE_CASE_MOD_PLAY_FM)))) {
+
                 err = stopA2dpPlayback_l(AudioHardwareALSA::A2DPDirectOutput);
             }
             else {
@@ -1632,6 +1643,16 @@ int newMode = mode();
             musbPlaybackState |= USBPLAYBACKBIT_FM;
         }
 #endif
+    if (device & AudioSystem::DEVICE_OUT_PROXY &&
+                    mRouteAudioToA2dp == true )  {
+            status_t err = NO_ERROR;
+            err = startA2dpPlayback_l(AudioHardwareALSA::A2DPDirectOutput);
+            if(err) {
+                ALOGW("startA2dpPlayback_l for hardware output failed err = %d", err);
+                stopA2dpPlayback_l(AudioHardwareALSA::A2DPDirectOutput);
+            }
+        }
+
     } else if (!(device & AudioSystem::DEVICE_OUT_FM) && mIsFmActive == 1) {
         //i Stop FM Radio
         ALOGV("Stop FM");
@@ -1653,6 +1674,13 @@ int newMode = mode();
             closeUsbPlaybackIfNothingActive();
         }
 #endif
+        if (device & AudioSystem::DEVICE_OUT_PROXY &&
+                    mRouteAudioToA2dp == true )  {
+            status_t err = NO_ERROR;
+            err = stopA2dpPlayback_l(AudioHardwareALSA::A2DPDirectOutput);
+            ALOGW("stopA2dpPlayback_l for hardware output failed err = %d", err);
+        }
+
     }
 }
 #endif
