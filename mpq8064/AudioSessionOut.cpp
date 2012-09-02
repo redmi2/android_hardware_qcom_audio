@@ -1688,6 +1688,16 @@ uint32_t AudioSessionOutALSA::channelMapToChannels(uint32_t channelMap) {
 
 void AudioSessionOutALSA::reset() {
 
+    for(ALSAHandleList::iterator it = mParent->mDeviceList.begin();
+        it != mParent->mDeviceList.end(); ++it) {
+        alsa_handle_t *it_dup = &(*it);
+        if(mCompreRxHandle == it_dup || mPcmRxHandle == it_dup ||
+            mSecCompreRxHandle == it_dup) {
+            mParent->mDeviceList.erase(it);
+        }
+    }
+
+
     if(mPcmRxHandle) {
         closeDevice(mPcmRxHandle);
         mPcmRxHandle = NULL;
@@ -1715,20 +1725,6 @@ void AudioSessionOutALSA::reset() {
     if(mBitstreamSM) {
         delete mBitstreamSM;
         mBitstreamSM = NULL;
-    }
-
-    for(ALSAHandleList::iterator it = mParent->mDeviceList.begin();
-            it != mParent->mDeviceList.end(); ++it) {
-        if((!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
-                            strlen(SND_USE_CASE_VERB_HIFI_TUNNEL))) ||
-           (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL,
-                            strlen(SND_USE_CASE_MOD_PLAY_TUNNEL))) ||
-           (!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI2,
-                            strlen(SND_USE_CASE_VERB_HIFI2))) ||
-           (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_MUSIC2,
-                            strlen(SND_USE_CASE_MOD_PLAY_MUSIC2)))) {
-            mParent->mDeviceList.erase(it);
-        }
     }
 
     mSessionId = -1;
