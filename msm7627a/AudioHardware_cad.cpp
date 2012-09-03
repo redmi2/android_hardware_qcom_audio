@@ -1004,8 +1004,6 @@ status_t AudioHardware::setMasterVolume(float v)
 static status_t do_route_audio_rpc(uint32_t device,
                                    bool ear_mute, bool mic_mute, int m7xsnddriverfd)
 {
-    if (device == -1UL)
-        return NO_ERROR;
 
     ALOGW("rpc_snd_set_device(%d, %d, %d)\n", device, ear_mute, mic_mute);
 
@@ -1103,6 +1101,12 @@ static status_t do_route_audio_rpc(uint32_t device,
         args.device.rx_device = CAD_HW_DEVICE_ID_FM_DIGITAL_BT_A2DP_SPKR;
         args.device.tx_device = CAD_HW_DEVICE_ID_NONE;
         ALOGV("In SND_DEVICE_FM_DIGITAL_BT_A2DP_HEADSET");
+    }
+    else if(device == SND_DEVICE_CURRENT)
+    {
+        args.device.rx_device = CAD_HW_DEVICE_ID_CURRENT_RX;
+        args.device.tx_device = CAD_HW_DEVICE_ID_CURRENT_TX;
+        ALOGV("In SND_DEVICE_CURRENT");
     }
 
     if(args.device.rx_device == -1 || args.device.tx_device == -1) {
