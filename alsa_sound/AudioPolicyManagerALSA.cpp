@@ -188,6 +188,8 @@ status_t AudioPolicyManager::setDeviceConnectionState(AudioSystem::audio_devices
                    device == AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_HEADSET ||
                    device == AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_CARKIT) {
             device = AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET;
+        } else if(device == AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET){
+            device = AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET;
         } else if(device == AudioSystem::DEVICE_OUT_ANC_HEADSET){
                device = AudioSystem::DEVICE_IN_ANC_HEADSET; //wait for actual ANC device
         } else {
@@ -914,7 +916,9 @@ audio_devices_t AudioPolicyManager::getDeviceForInputSource(int inputSource)
             device = AudioSystem::DEVICE_IN_WIRED_HEADSET;
         } else if (mAvailableInputDevices & AudioSystem::DEVICE_IN_ANC_HEADSET) {
             device = AudioSystem::DEVICE_IN_ANC_HEADSET;
-        } else if (mAvailableInputDevices & AudioSystem::DEVICE_IN_BUILTIN_MIC) {
+        } else if (mAvailableInputDevices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) {
+            device = AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET;
+        } else {
             device = AudioSystem::DEVICE_IN_BUILTIN_MIC;
         }
         break;
