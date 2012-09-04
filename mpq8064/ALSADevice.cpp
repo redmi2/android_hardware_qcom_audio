@@ -140,6 +140,11 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
                           strlen(SND_USE_CASE_MOD_PLAY_TUNNEL3)))) {*/
         dtsPassThrough = true;
     }
+    params = (snd_pcm_hw_params*) calloc(1, sizeof(struct snd_pcm_hw_params));
+    if (!params) {
+        return NO_INIT;
+    }
+    param_init(params);
 
     reqBuffSize = handle->bufferSize;
     if ((!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
@@ -156,6 +161,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
             return err;
         }
 
+        param_set_int(params, SNDRV_PCM_HW_PARAM_PERIODS, TUNNEL_DECODER_BUFFER_COUNT);
         minPeroid = compr_cap.min_fragment_size;
         maxPeroid = compr_cap.max_fragment_size;
         ALOGV("Min peroid size = %d , Maximum Peroid size = %d",\
@@ -165,7 +171,6 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
             ALOGV("WMA CODEC");
             if (format == AUDIO_FORMAT_WMA_PRO) {
                 compr_params.codec.id = compr_cap.codecs[4];
-                compr_params.codec.ch_in = handle->channels;
             }
             else {
                 compr_params.codec.id = compr_cap.codecs[3];
@@ -182,7 +187,8 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
             compr_params.codec.options.wma.channelmask = mWMA_params[5];
             compr_params.codec.options.wma.encodeopt1 = mWMA_params[6];
             compr_params.codec.options.wma.encodeopt2 = mWMA_params[7];
-			compr_params.codec.sample_rate = handle->sampleRate;
+            compr_params.codec.sample_rate = handle->sampleRate;
+            compr_params.codec.ch_in = handle->channels;
         } else if(format == AUDIO_FORMAT_AAC || format == AUDIO_FORMAT_HE_AAC_V1 ||
            format == AUDIO_FORMAT_HE_AAC_V2 || format == AUDIO_FORMAT_AAC_ADIF) {
             ALOGV("AAC CODEC");
@@ -217,7 +223,8 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
             err = -errno;
             return err;
         }
-        handle->channels = 6;
+
+        handle->channels = 8;
     }
     if(handle->sampleRate > 48000) {
         ALOGE("Sample rate >48000, opening the driver with 48000Hz");
@@ -232,17 +239,10 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
             return err;
         }
     }
-    params = (snd_pcm_hw_params*) calloc(1, sizeof(struct snd_pcm_hw_params));
-    if (!params) {
-		//SMANI:: Commented to fix build issues. FIX IT.
-        //ALOG_ALWAYS_FATAL("Failed to allocate ALSA hardware parameters!");
-        return NO_INIT;
-    }
 
     ALOGD("setHardwareParams: reqBuffSize %d channels %d sampleRate %d",
          (int) reqBuffSize, handle->channels, handle->sampleRate);
 
-    param_init(params);
     param_set_mask(params, SNDRV_PCM_HW_PARAM_ACCESS,
         (handle->handle->flags & PCM_MMAP) ? SNDRV_PCM_ACCESS_MMAP_INTERLEAVED
         : SNDRV_PCM_ACCESS_RW_INTERLEAVED);
@@ -267,7 +267,6 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     }
     else {
         param_set_min(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, reqBuffSize);
-        param_set_int(params, SNDRV_PCM_HW_PARAM_PERIODS, TUNNEL_DECODER_BUFFER_COUNT); 
     }
 
     param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 16);
