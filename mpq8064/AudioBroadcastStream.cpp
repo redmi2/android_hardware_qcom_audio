@@ -162,15 +162,11 @@ AudioBroadcastStreamALSA::~AudioBroadcastStreamALSA()
     mWriteCv.signal();
 
     exitFromCaptureThread();
-    exitFromPlaybackThread();
 
-    for(ALSAHandleList::iterator it = mParent->mDeviceList.begin();
-        it != mParent->mDeviceList.end(); ++it) {
-        alsa_handle_t *it_dup = &(*it);
-        if(mCompreRxHandle == it_dup || mPcmRxHandle == it_dup) {
-            mParent->mDeviceList.erase(it);
-        }
-    }
+    alsa_handle_t *compreRxHandle_dup = mCompreRxHandle;
+    alsa_handle_t *pcmRxHandle_dup = mPcmRxHandle;
+    alsa_handle_t *compreTxHandle_dup = mCompreTxHandle;
+    alsa_handle_t *pcmTxHandle_dup = mPcmTxHandle;
 
     if(mPcmTxHandle)
         closeDevice(mPcmTxHandle);
@@ -178,12 +174,23 @@ AudioBroadcastStreamALSA::~AudioBroadcastStreamALSA()
     if(mCompreTxHandle)
         closeDevice(mCompreTxHandle);
 
+    exitFromPlaybackThread();
 
     if(mPcmRxHandle)
         closeDevice(mPcmRxHandle);
 
     if(mCompreRxHandle)
         closeDevice(mCompreRxHandle);
+
+    for(ALSAHandleList::iterator it = mParent->mDeviceList.begin();
+        it != mParent->mDeviceList.end(); ++it) {
+        alsa_handle_t *it_dup = &(*it);
+        if(compreRxHandle_dup == it_dup || pcmRxHandle_dup == it_dup ||
+           compreTxHandle_dup == it_dup || pcmTxHandle_dup == it_dup) {
+            mParent->mDeviceList.erase(it);
+            it_dup = NULL;
+        }
+    }
 
     if(mMS11Decoder)
         delete mMS11Decoder;
@@ -206,7 +213,6 @@ status_t AudioBroadcastStreamALSA::setParameters(const String8& keyValuePairs)
     if (param.getInt(key, device) == NO_ERROR) {
         // Ignore routing if device is 0.
         ALOGD("setParameters(): keyRouting with device %d", device);
-        mDevices = device;
         if(device) {
             //ToDo: Call device setting UCM API here
             doRouting(device);
