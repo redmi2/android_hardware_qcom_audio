@@ -43,13 +43,6 @@ struct pcm {
     int device_no;
     int start;
 };
-
-enum decoder_alias {
-    FORMAT_MP3,
-    FORMAT_AAC,
-    FORMAT_AC3_PASS_THROUGH = 2,
-};
-
 #define FORMAT(v) SNDRV_PCM_FORMAT_##v
 
 #define PCM_OUT        0x00000000
@@ -150,6 +143,7 @@ void param_set_max(struct snd_pcm_hw_params *p, int n, unsigned val);
 int param_set_hw_refine(struct pcm *pcm, struct snd_pcm_hw_params *params);
 int param_set_hw_params(struct pcm *pcm, struct snd_pcm_hw_params *params);
 int param_set_sw_params(struct pcm *pcm, struct snd_pcm_sw_params *sparams);
+int get_compressed_format(const char *format);
 void param_dump(struct snd_pcm_hw_params *p);
 int pcm_prepare(struct pcm *pcm);
 long pcm_avail(struct pcm *pcm);

@@ -130,24 +130,47 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     snd_pcm_format_t format = SNDRV_PCM_FORMAT_S16_LE;
     struct snd_compr_caps compr_cap;
     struct snd_compr_params compr_params;
+    uint32_t codec_id = 0;
 
     if ((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
         (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL))) {
+        ALOGV("Tunnel mode detected...");
+        //get the list of codec supported by hardware
         if (ioctl(handle->handle->fd, SNDRV_COMPRESS_GET_CAPS, &compr_cap)) {
             ALOGE("SNDRV_COMPRESS_GET_CAPS, failed Error no %d \n", errno);
             err = -errno;
             return err;
         }
         if( handle->format == AUDIO_FORMAT_AAC ) {
-            ALOGW("### AAC CODEC");
-            compr_params.codec.id = compr_cap.codecs[1];
+          codec_id = get_compressed_format("AAC");
+          ALOGV("### AAC CODEC codec_id %d",codec_id);
+        }
+        else if (handle->format == AUDIO_FORMAT_AMR_WB) {
+          codec_id = get_compressed_format("AMR_WB");
+          ALOGV("### AMR WB CODEC codec_id %d",codec_id);
+        }
+        else if (handle->format == AUDIO_FORMAT_AMR_WB_PLUS) {
+          codec_id = get_compressed_format("AMR_WB_PLUS");
+          ALOGV("### AMR WB+ CODEC codec_id %d",codec_id);
         }
         else if (handle->format == AUDIO_FORMAT_MP3) {
-            ALOGW("### MP3 CODEC");
-            compr_params.codec.id = compr_cap.codecs[0];
+          codec_id = get_compressed_format("MP3");
+          ALOGV("### MP3 CODEC codec_id %d",codec_id);
         }
         else {
             return UNKNOWN_ERROR;
+        }
+        //find if codec_id matches with any of h/w supported codecs.
+        for (int i = 0; i < compr_cap.num_codecs; i++) {
+          if (compr_cap.codecs[i] == codec_id) {
+            ALOGV("### MatchedFcodec_id %u", codec_id);
+            compr_params.codec.id = codec_id;
+            break;
+          }
+        }
+        if (!compr_params.codec.id) {
+          ALOGE("### Codec %u not supported",codec_id);
+          return UNKNOWN_ERROR;
         }
 
         if (ioctl(handle->handle->fd, SNDRV_COMPRESS_SET_PARAMS, &compr_params)) {
@@ -200,7 +223,11 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
             || handle->format == AudioSystem::EVRCWB
 #endif
             )
+            if ((strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL)) &&
+                (strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL))) {
               format = SNDRV_PCM_FORMAT_SPECIAL;
+              ALOGW("setting format to SNDRV_PCM_FORMAT_SPECIAL");
+            }
     }
     //TODO: Add format setting for tunnel mode using the usecase.
     param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT,
@@ -587,7 +614,7 @@ status_t ALSADevice::open(alsa_handle_t *handle)
 
     if (handle->channels == 1) {
         flags |= PCM_MONO;
-    } 
+    }
 #ifdef QCOM_SSR_ENABLED
     else if (handle->channels == 4 ) {
         flags |= PCM_QUAD;
@@ -598,7 +625,7 @@ status_t ALSADevice::open(alsa_handle_t *handle)
         } else {
             flags |= PCM_5POINT1;
         }
-    } 
+    }
 #endif
     else {
         flags |= PCM_STEREO;
@@ -1082,7 +1109,7 @@ status_t ALSADevice::close(alsa_handle_t *handle)
 status_t ALSADevice::standby(alsa_handle_t *handle)
 {
     int ret;
-    status_t err = NO_ERROR;  
+    status_t err = NO_ERROR;
     struct pcm *h = handle->rxHandle;
     handle->rxHandle = 0;
     ALOGD("standby: handle %p h %p", handle, h);
@@ -1254,8 +1281,8 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
     if (!input) {
         if (!(mDevSettingsFlag & TTY_OFF) &&
             (mCallMode == AudioSystem::MODE_IN_CALL) &&
-            ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) 
-             || (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE) 
+            ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET)
+             || (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE)
 #ifdef QCOM_ANC_HEADSET_ENABLED
              || (devices & AudioSystem::DEVICE_OUT_ANC_HEADSET)
              || (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE)
@@ -1386,7 +1413,7 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
     } else {
         if (!(mDevSettingsFlag & TTY_OFF) &&
             (mCallMode == AudioSystem::MODE_IN_CALL) &&
-            ((devices & AudioSystem::DEVICE_IN_WIRED_HEADSET) 
+            ((devices & AudioSystem::DEVICE_IN_WIRED_HEADSET)
 #ifdef QCOM_ANC_HEADSET_ENABLED
              || (devices & AudioSystem::DEVICE_IN_ANC_HEADSET)
 #endif
@@ -1438,7 +1465,7 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
                     }
                 } else if ((mDevSettingsFlag & QMIC_FLAG) && (mInChannels == 1)) {
                     return strdup(SND_USE_CASE_DEV_QUAD_MIC);
-                } 
+                }
 #ifdef QCOM_SSR_ENABLED
                 else if ((mDevSettingsFlag & QMIC_FLAG) && (mInChannels > 1)) {
                     return strdup(SND_USE_CASE_DEV_SSR_QUAD_MIC);
@@ -1512,7 +1539,7 @@ void ALSADevice::setVoiceVolume(int vol)
         err = csd_client_volume(vol);
         if (err < 0) {
             ALOGE("setVoiceVolume: csd_client error %d", err);
-        } 
+        }
 #endif
     }
 }
