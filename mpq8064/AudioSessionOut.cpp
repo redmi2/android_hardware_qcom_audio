@@ -133,6 +133,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     mMinBytesReqToDecode = 0;
     mObserver            = NULL;
     mCurDevice           = 0;
+    mOutputMetadataLength = 0;
 
     if(devices == 0) {
         ALOGE("No output device specified");
@@ -393,6 +394,7 @@ status_t AudioSessionOutALSA::openTunnelDevice(int devices)
         return BAD_VALUE;
     }
 
+    mOutputMetadataLength = sizeof(output_metadata_handle_t);
     snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
     if ((use_case == NULL) || (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
                                  strlen(SND_USE_CASE_VERB_INACTIVE)))) {
@@ -407,6 +409,7 @@ status_t AudioSessionOutALSA::openTunnelDevice(int devices)
     if(status != NO_ERROR) {
         return status;
     }
+    ALOGD("openTunnelDevice - mOutputMetadataLength = %d", mOutputMetadataLength);
     ALSAHandleList::iterator it = mParent->mDeviceList.end(); it--;
     mCompreRxHandle = &(*it);
 
@@ -542,8 +545,10 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
         if(bytes == 0) {
             if(mFormat == AUDIO_FORMAT_AAC_ADIF)
                 mBitstreamSM->appendSilenceToBitstreamInternalBuffer(mMinBytesReqToDecode,0);
-            else
+            else if(mCompreRxHandle){
+                writeToCompressedDriver((char *)buffer, bytes);
                 return bytes;
+            }
         }
 
         bool    continueDecode=false;
@@ -657,7 +662,7 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
             if((mCompreRxHandle) &&
                ((mSpdifFormat == COMPRESSED_FORMAT) ||
                (mHdmiFormat == COMPRESSED_FORMAT))) {
-                period_size = mCompreRxHandle->periodSize;
+                period_size = mCompreRxHandle->periodSize - mOutputMetadataLength;
                 while(mBitstreamSM->sufficientSamplesToRender(SPDIF_OUT,period_size) == true) {
                     n = writeToCompressedDriver(
                                    mBitstreamSM->getOutputBufferPtr(SPDIF_OUT),
@@ -743,19 +748,24 @@ int32_t AudioSessionOutALSA::writeToCompressedDriver(char *buffer, int bytes)
 
         List<BuffersAllocated>::iterator it = mInputMemEmptyQueue[0].begin();
         BuffersAllocated buf = *it;
-        mInputMemEmptyQueue[0].erase(it);
+        if (bytes)
+            mInputMemEmptyQueue[0].erase(it);
         mInputMemRequestMutex.unlock();
-        memcpy(buf.memBuf, buffer, bytes);
+        updateMetaData(bytes);
+        memcpy(buf.memBuf, &mOutputMetadataTunnel, mOutputMetadataLength);
+        ALOGD("Copy Metadata1 = %d, bytes = %d", mOutputMetadataLength, bytes);
+        memcpy(((uint8_t *)buf.memBuf + mOutputMetadataLength), buffer, bytes);
         buf.bytesToWrite = bytes;
         mInputMemResponseMutex.lock();
-        mInputMemFilledQueue[0].push_back(buf);
+        if (bytes)
+            mInputMemFilledQueue[0].push_back(buf);
         mInputMemResponseMutex.unlock();
 
         ALOGV("PCM write start");
         pcm * local_handle = (struct pcm *)mCompreRxHandle->handle;
         // Set the channel status after first frame decode/transcode and for change
         // in sample rate or channel mode as we close and open the device again
-        if (bytes < local_handle->period_size) {
+        if (bytes && bytes < (local_handle->period_size - mOutputMetadataLength )) {
             ALOGD("Last buffer case");
             mReachedExtractorEOS = true;
         }
@@ -764,19 +774,23 @@ int32_t AudioSessionOutALSA::writeToCompressedDriver(char *buffer, int bytes)
         if (mSecCompreRxHandle) {
                 it = mInputMemEmptyQueue[1].begin();
                 buf = *it;
-                mInputMemEmptyQueue[1].erase(it);
+                if (bytes)
+                    mInputMemEmptyQueue[1].erase(it);
                 mInputMemRequestMutex.unlock();
-                memcpy(buf.memBuf, buffer, bytes);
+                memcpy(buf.memBuf, &mOutputMetadataTunnel, mOutputMetadataLength);
+                ALOGD("Copy Metadata2 = %d, bytes = %d", mOutputMetadataLength, bytes);
+                memcpy(((uint8_t *)buf.memBuf + mOutputMetadataLength), buffer, bytes);
                 buf.bytesToWrite = bytes;
                 mInputMemResponseMutex.lock();
-                mInputMemFilledQueue[1].push_back(buf);
+                if (bytes)
+                    mInputMemFilledQueue[1].push_back(buf);
                 mInputMemResponseMutex.unlock();
 
                 ALOGV("PCM write start second compressed device");
                     local_handle = (struct pcm *)mSecCompreRxHandle->handle;
                     n = pcm_write(local_handle, buf.memBuf, local_handle->period_size);
         }
-        if (bytes < local_handle->period_size) {
+        if (bytes && bytes < (local_handle->period_size - mOutputMetadataLength )) {
             //TODO : Is this code reqd - start seems to fail?
             if (ioctl(local_handle->fd, SNDRV_PCM_IOCTL_START) < 0)
                 ALOGE("AUDIO Start failed");
@@ -862,6 +876,7 @@ void  AudioSessionOutALSA::eventThreadEntry() {
     bool freeBuffer = false;
     bool mCompreCBk = false;
     bool mSecCompreCBk = false;
+    bool mPostedEOS = false;
     struct snd_timer_tread rbuf[4];
     pid_t tid  = gettid();
     androidSetThreadPriority(tid, ANDROID_PRIORITY_AUDIO);
@@ -921,7 +936,7 @@ void  AudioSessionOutALSA::eventThreadEntry() {
         }
 
         if (freeBuffer && !mKillEventThread) {
-            if (mTunnelPaused)
+            if (mTunnelPaused || mPostedEOS)
                 continue;
             ALOGV("After an event occurs");
             if(mCompreCBk)
@@ -971,8 +986,20 @@ void  AudioSessionOutALSA::eventThreadEntry() {
             if (mInputMemFilledQueue[0].empty() && mInputMemFilledQueue[1].empty() && mReachedExtractorEOS) {
                 ALOGV("Posting the EOS to the MPQ player");
                 //post the EOS To MPQ player
-                if (mObserver)
+                if (mObserver) {
+                     ALOGD("Audio Drain1 DONE ++");
+                     if ( ioctl(mCompreRxHandle->handle->fd, SNDRV_COMPRESS_DRAIN) < 0 )
+                         ALOGE("Audio Drain1 failed");
+                     ALOGD("Audio Drain1 DONE --");
+                     if (mSecCompreRxHandle) {
+                         ALOGD("Audio Drain2 DONE ++");
+                         if ( ioctl(mSecCompreRxHandle->handle->fd, SNDRV_COMPRESS_DRAIN) < 0 )
+                             ALOGE("Audio Drain2 failed");
+                         ALOGD("Audio Drain2 DONE --");
+                     }
                      mObserver->postEOS(0);
+                     mPostedEOS = true;
+                }
             }
             else
                 mWriteCv.signal();
@@ -1151,6 +1178,7 @@ status_t AudioSessionOutALSA::flush()
                 ALOGV("Transferred all the buffers from response queue2 to\
                     request queue2 to handle seek");
         }
+        mReachedExtractorEOS = false;
         mInputMemRequestMutex.unlock();
         mInputMemResponseMutex.unlock();
         if (!mTunnelPaused) {
@@ -1166,7 +1194,6 @@ status_t AudioSessionOutALSA::flush()
                         return err;
                 }
             }
-            mReachedExtractorEOS = false;
             if ((err = drainTunnel()) != OK)
                 return err;
         } else {
@@ -1810,6 +1837,14 @@ status_t AudioSessionOutALSA::setPlaybackFormat()
                                   AudioSystem::DEVICE_OUT_AUX_DIGITAL);
     }
     return status;
+}
+
+void AudioSessionOutALSA::updateMetaData(size_t bytes) {
+    mOutputMetadataTunnel.metadataLength = sizeof(mOutputMetadataTunnel);
+    mOutputMetadataTunnel.timestamp = 0;
+    mOutputMetadataTunnel.bufferLength =  bytes;
+    ALOGD("bytes = %d , mCompreRxHandle->handle->period_size = %d ",
+            bytes, mCompreRxHandle->handle->period_size);
 }
 
 }       // namespace android_audio_legacy

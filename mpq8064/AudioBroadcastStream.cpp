@@ -1370,6 +1370,9 @@ void AudioBroadcastStreamALSA::captureThreadEntry()
 
             size = readFromCapturePath(tempBuffer);
             if(size <= 0) {
+                // nothing to write break the driver by sending zero byte hack
+                if (mCaptureCompressedFromDSP)
+                    write_l( (char *)tempBuffer, 0);
                 ALOGE("capturePath returned size = %d", size);
                 if(mCaptureHandle) {
                     status = pcm_prepare(mCaptureHandle->handle);
@@ -1579,6 +1582,11 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
                 ALOGV("mInputMemFilledQueue %d", mInputMemFilledQueue.size());
                 if (mInputMemFilledQueue.empty() && mPlaybackReachedEOS) {
                     ALOGE("Queue Empty");
+                    ALOGD("Audio Drain DONE ++");
+                    if ( ioctl(mCompreRxHandle->handle->fd, SNDRV_COMPRESS_DRAIN) < 0 ) {
+                        ALOGE("Audio Drain failed");
+                    }
+                    ALOGD("Audio Drain DONE --");
                     //post the EOS To Player
 //NOTE: In Broadcast stream, EOS is not available yet. This can be for
 //      furture use
@@ -1719,6 +1727,9 @@ ssize_t AudioBroadcastStreamALSA::write_l(char *buffer, size_t bytes)
     size_t   sent = 0;
     bool     continueDecode;
 
+    if (bytes == 0 && mCompreRxHandle != NULL)
+        writeToCompressedDriver(buffer, bytes);
+
     // set decoder configuration data if any
     if(setDecoderConfig(buffer, bytes)) {
         ALOGD("decoder configuration set");
@@ -1761,7 +1772,8 @@ int32_t AudioBroadcastStreamALSA::writeToCompressedDriver(char *buffer, int byte
 
     List<BuffersAllocated>::iterator it = mInputMemEmptyQueue.begin();
     BuffersAllocated buf = *it;
-    mInputMemEmptyQueue.erase(it);
+    if(bytes)
+        mInputMemEmptyQueue.erase(it);
 
     mInputMemRequestMutex.unlock();
 
@@ -1769,16 +1781,15 @@ int32_t AudioBroadcastStreamALSA::writeToCompressedDriver(char *buffer, int byte
 
     buf.bytesToWrite = bytes;
     mInputMemResponseMutex.lock();
-    mInputMemFilledQueue.push_back(buf);
+    if(bytes)
+        mInputMemFilledQueue.push_back(buf);
     mInputMemResponseMutex.unlock();
 
     pcm * local_handle = (struct pcm *)mCompreRxHandle->handle;
-    if(bytes != 0) {
-        ALOGV("PCM write start");
-        n = pcm_write(local_handle, buf.memBuf, local_handle->period_size);
-        ALOGV("PCM write complete");
-    }
-    if (bytes < local_handle->period_size) {
+    ALOGV("PCM write start");
+    n = pcm_write(local_handle, buf.memBuf, local_handle->period_size);
+    ALOGV("PCM write complete");
+    if (bytes && bytes < local_handle->period_size) {
         ALOGD("Last buffer case");
         uint64_t writeValue = SIGNAL_PLAYBACK_THREAD;
         sys_broadcast::lib_write(mPlaybackfd, &writeValue, sizeof(uint64_t));
