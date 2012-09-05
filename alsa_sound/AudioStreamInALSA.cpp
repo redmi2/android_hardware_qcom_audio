@@ -88,7 +88,9 @@ AudioStreamInALSA::AudioStreamInALSA(AudioHardwareALSA *parent,
     // Call surround sound library init if device is Surround Sound
     if ( handle->channels == 6) {
         if (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC, strlen(SND_USE_CASE_VERB_HIFI_REC))
-            || !strncmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC))) {
+            || !strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED, strlen(SND_USE_CASE_VERB_HIFI_REC_COMPRESSED))
+            || !strncmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC))
+            || !strncmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED))) {
 
             err = initSurroundSoundLibrary(handle->bufferSize);
             if ( NO_ERROR != err) {
@@ -123,7 +125,7 @@ status_t AudioStreamInALSA::setGain(float gain)
 
 ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
 {
-    int period_size;
+    unsigned int period_size;
 
     ALOGV("read:: buffer %p, bytes %d", buffer, bytes);
 
@@ -183,6 +185,8 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                 property_get("persist.audio.lowlatency.rec",value,"0");
                 if (!strcmp("true", value)) {
                     strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_LOWLATENCY_MUSIC, sizeof(mHandle->useCase));
+                } else if(!strcmp(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED)) {
+                    strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED, sizeof(mHandle->useCase));
                 } else {
                     strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, sizeof(mHandle->useCase));
                 }
@@ -227,6 +231,8 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
 #endif
             } else if(!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)){
                     strlcpy(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL, sizeof(mHandle->useCase));
+            } else if(!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED)){
+                strlcpy(mHandle->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED, sizeof(mHandle->useCase));
             } else {
                 char value[128];
                 property_get("persist.audio.lowlatency.rec",value,"0");
@@ -263,6 +269,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
         }
         if (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_REC) ||
             !strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_LOWLATENCY_REC) ||
+            !strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED) ||
             !strcmp(mHandle->useCase, SND_USE_CASE_VERB_FM_REC) ||
             !strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL) ||
             !strcmp(mHandle->useCase, SND_USE_CASE_VERB_FM_A2DP_REC) ||
@@ -410,6 +417,38 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
         buffer = buffer_start;
     } else
 #endif
+    if (mHandle->format == AUDIO_FORMAT_AMR_WB) {
+        ALOGV("AUDIO_FORMAT_AMR_WB");
+        do {
+            if (read_pending < 61) {
+                read_pending = 61;
+            }
+            //We should pcm_read period_size to get complete data from driver
+            n = pcm_read(mHandle->handle, buffer, period_size);
+            if (n < 0) {
+                ALOGE("pcm_read() returned failure: %d", n);
+                return 0;
+            } else {
+                struct snd_compr_audio_info *header = (struct snd_compr_audio_info *) buffer;
+                uint32_t data_offset = header->reserved[0];
+                if (header->frame_size > 0) {
+                    if (sizeof(*header) + data_offset + header->frame_size > period_size) {
+                        ALOGE("AMR WB read buffer overflow. Assign bigger buffer size");
+                        header->frame_size = period_size - sizeof(*header) - data_offset;
+                    }
+                    read += header->frame_size;
+                    read_pending -= header->frame_size;
+                    ALOGV("buffer: %p, data offset: %p, header size: %u, reserved[0]: %u",
+                            buffer, ((uint8_t*)buffer) + sizeof(*header) + data_offset,
+                            sizeof(*header), data_offset);
+                    memmove(buffer, ((uint8_t*)buffer) + sizeof(*header) + data_offset, header->frame_size);
+                    buffer += header->frame_size;
+                } else {
+                    ALOGW("pcm_read() with zero frame size");
+                }
+            }
+        } while (mHandle->handle && read < bytes);
+    } else
     {
 
         do {
