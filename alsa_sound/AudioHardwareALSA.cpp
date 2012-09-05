@@ -693,9 +693,7 @@ status_t AudioHardwareALSA::doRouting(int device)
                 (!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER,
                             strlen(SND_USE_CASE_VERB_HIFI_LOW_POWER))) ||
                 (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_LPA,
-                            strlen(SND_USE_CASE_MOD_PLAY_LPA)))||
-                (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_FM,
-                            strlen(SND_USE_CASE_MOD_PLAY_FM)))) {
+                            strlen(SND_USE_CASE_MOD_PLAY_LPA)))){
                 if (device != mCurDevice) {
                     if((mCurDevice & AudioSystem::DEVICE_OUT_ALL_A2DP) &&
                        (device     & AudioSystem::DEVICE_OUT_ALL_A2DP)) {
@@ -722,6 +720,17 @@ status_t AudioHardwareALSA::doRouting(int device)
                        mALSADevice->route(&(*it),(uint32_t)device, newMode);
                     }
                 }
+
+                if((!strncmp(it->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO,
+                            strlen(SND_USE_CASE_VERB_DIGITAL_RADIO))) ||
+                  (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_FM,
+                            strlen(SND_USE_CASE_MOD_PLAY_FM)))) {
+                    err = startA2dpPlayback_l(AudioHardwareALSA::A2DPFm);
+                    if(err) {
+                        ALOGW("startA2dpPlayback_l for hardware output failed err = %d", err);
+                        stopA2dpPlayback_l(AudioHardwareALSA::A2DPFm);
+                    }
+                }
             }
             if (device != mCurDevice) {
                 resumeIfUseCaseTunnelOrLPA();
@@ -745,12 +754,16 @@ status_t AudioHardwareALSA::doRouting(int device)
                 (!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER,
                             strlen(SND_USE_CASE_VERB_HIFI_LOW_POWER))) ||
                 (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_LPA,
-                            strlen(SND_USE_CASE_MOD_PLAY_LPA)))||
-                (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_FM,
-                            strlen(SND_USE_CASE_MOD_PLAY_FM)))) {
-
+                            strlen(SND_USE_CASE_MOD_PLAY_LPA)))){
                 err = stopA2dpPlayback_l(AudioHardwareALSA::A2DPDirectOutput);
             } else {
+                if((!strncmp(it->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO,
+                            strlen(SND_USE_CASE_VERB_DIGITAL_RADIO))) ||
+                  (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_FM,
+                            strlen(SND_USE_CASE_MOD_PLAY_FM)))) {
+
+                    err = stopA2dpPlayback_l(AudioHardwareALSA::A2DPFm);
+                }
                 err = stopA2dpPlayback_l(AudioHardwareALSA::A2DPHardwareOutput);
             }
             if(err) {
@@ -1652,10 +1665,10 @@ int newMode = mode();
     if (device & AudioSystem::DEVICE_OUT_PROXY &&
                     mRouteAudioToA2dp == true )  {
             status_t err = NO_ERROR;
-            err = startA2dpPlayback_l(AudioHardwareALSA::A2DPDirectOutput);
+            err = startA2dpPlayback_l(AudioHardwareALSA::A2DPFm);
             if(err) {
                 ALOGW("startA2dpPlayback_l for hardware output failed err = %d", err);
-                stopA2dpPlayback_l(AudioHardwareALSA::A2DPDirectOutput);
+                stopA2dpPlayback_l(AudioHardwareALSA::A2DPFm);
             }
         }
 
@@ -1683,7 +1696,7 @@ int newMode = mode();
         if (device & AudioSystem::DEVICE_OUT_PROXY &&
                     mRouteAudioToA2dp == true )  {
             status_t err = NO_ERROR;
-            err = stopA2dpPlayback_l(AudioHardwareALSA::A2DPDirectOutput);
+            err = stopA2dpPlayback_l(AudioHardwareALSA::A2DPFm);
             ALOGW("stopA2dpPlayback_l for hardware output failed err = %d", err);
         }
 
