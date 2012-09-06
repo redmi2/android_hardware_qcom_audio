@@ -3443,9 +3443,8 @@ ssize_t AudioHardware::AudioSessionOutLPA::write(const void* buffer, size_t byte
             ALOGV("Increment for even bytes");
             aio_buf_local.data_len += 1;
         }
-        if (timeStarted == 0) {
+        if (timeStarted == 0)
             timeStarted = nanoseconds_to_microseconds(systemTime(SYSTEM_TIME_MONOTONIC));
-        }
         } else {
             /* Put the buffer back into requestQ */
             ALOGV("mEmptyQueueMutex locking: %d", __LINE__);
@@ -3874,11 +3873,10 @@ status_t AudioHardware::AudioSessionOutLPA::start( ) //TODO YM LPA removed start
         return BAD_VALUE;
     }
     bufferAlloc();
-    if (timeStarted == 0) {
+    if (timeStarted == 0)
         timeStarted = nanoseconds_to_microseconds(systemTime(SYSTEM_TIME_MONOTONIC));// Needed
     }
-    }
-	return NO_ERROR;
+    return NO_ERROR;
 }
 
 status_t AudioHardware::AudioSessionOutLPA::pause()
@@ -3907,23 +3905,23 @@ status_t AudioHardware::AudioSessionOutLPA::flush()
     // 2.) Add all the available buffers to Empty Queue (Maintain order)
     mFilledQueueMutex.lock();
     mEmptyQueueMutex.lock();
-    List<BuffersAllocated>::iterator it = mBufPool.begin();
-    for (; it!=mBufPool.end(); ++it) {
-        memset(it->memBuf, 0x0, (*it).memBufsize);
-        mEmptyQueue.push_back(*it);
+    while (!mFilledQueue.empty()) {
+        List<BuffersAllocated>::iterator it = mFilledQueue.begin();
+        BuffersAllocated buf = *it;
+        buf.bytesToWrite = 0;
+        mEmptyQueue.push_back(buf);
         mFilledQueue.erase(it);
     }
     mEmptyQueueMutex.unlock();
     mFilledQueueMutex.unlock();
     ALOGV("Transferred all the buffers from Filled queue to "
           "Empty queue to handle seek");
-
+    mReachedEOS = false;
     if (!mPaused && !mEosEventReceived) {
         if (ioctl(afd, AUDIO_FLUSH, 0) < 0) {
             ALOGE("Audio Flush failed");
 	    return UNKNOWN_ERROR;
         }
-	mReachedEOS = false;
 	} else {
         mSeeking = true;
          timeStarted = 0; // needed
@@ -3964,11 +3962,14 @@ status_t  AudioHardware::AudioSessionOutLPA::getNextWriteTimestamp(int64_t *time
 
 void AudioHardware::AudioSessionOutLPA::reset()
 {
-    ALOGD("AudioSessionOutMSM8x60::reset()");
+    ALOGD("AudioSessionOutLPA::reset()");
+    requestAndWaitForEventThreadExit();
     status_t status = NO_ERROR;
+    bufferDeAlloc();
     //Close the LPA driver
     ioctl(afd,AUDIO_STOP,0);
-	::close(afd);
+    ::close(afd);
+    ALOGD("AudioSessionOutLPA::reset() complete");
 }
 
 status_t AudioHardware::AudioSessionOutLPA::getRenderPosition(uint32_t *dspFrames)
