@@ -705,7 +705,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
           }
           alsa_handle.module = mALSADevice;
           alsa_handle.bufferSize = bufferSize;
-          alsa_handle.devices = devices;
+          alsa_handle.devices = mCurDevice;
           alsa_handle.activeDevice = devices;
           alsa_handle.handle = 0;
           alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
@@ -888,7 +888,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
            }
            alsa_handle.module = mALSADevice;
            alsa_handle.bufferSize = bufferSize;
-           alsa_handle.devices = devices;
+           alsa_handle.devices = mCurDevice;
            alsa_handle.activeDevice = devices;
            alsa_handle.handle = 0;
            alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
