@@ -317,7 +317,8 @@ status_t AudioHardwareALSA::setMode(int mode)
         status = AudioHardwareBase::setMode(mode);
     }
     if (mode == AudioSystem::MODE_IN_CALL) {
-        mCallState = CS_ACTIVE;
+        if (mCallState == CS_INACTIVE)
+            mCallState = CS_ACTIVE;
     }else if (mode == AudioSystem::MODE_NORMAL) {
         mCallState = 0;
     }
