@@ -463,6 +463,8 @@ public:
 
     virtual status_t    setObserver(void *observer);
 
+    virtual status_t    getBufferInfo(buf_info **buf);
+    virtual status_t    isBufferAvailable(int *isAvail);
     status_t            pause_l();
     status_t            resume_l();
 
