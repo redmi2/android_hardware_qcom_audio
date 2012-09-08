@@ -117,8 +117,10 @@ class AudioBitstreamSM;
 #define NUMBER_BITS_IN_A_BYTE           8
 
 #define PCM_2CH_OUT                 0
+#define PCM_OUT                     0 // should be same as PCM_OUT
 #define PCM_MCH_OUT                 1
 #define SPDIF_OUT                   2
+#define COMPRESSED_OUT              2 // should be same as SPDIF_OUT
 
 #ifndef ALSA_DEFAULT_SAMPLE_RATE
 #define ALSA_DEFAULT_SAMPLE_RATE 44100 // in Hz
@@ -132,6 +134,9 @@ class AudioBitstreamSM;
 //Required for Tunnel
 #define TUNNEL_DECODER_BUFFER_SIZE 4800
 #define TUNNEL_DECODER_BUFFER_COUNT 256
+// To accommodate worst size frame of  AC3 and DTS and meta data
+#define TUNNEL_DECODER_BUFFER_SIZE_BROADCAST  9600
+#define TUNNEL_DECODER_BUFFER_COUNT_BROADCAST 128
 #define SIGNAL_EVENT_THREAD 2
 #define SIGNAL_PLAYBACK_THREAD 2
 //Values to exit poll via eventfd
@@ -160,7 +165,8 @@ struct alsa_handle_t {
     char                useCase[MAX_STR_LEN];
     struct pcm *        handle;
     snd_pcm_format_t    format;
-    uint32_t            channels;
+    uint16_t            channels;
+    uint16_t            timeStampMode;
     uint32_t            sampleRate;
     int                 mode;            // Phone state i.e. incall/normal/incommunication
     unsigned int        latency;         // Delay in usec
@@ -184,7 +190,21 @@ struct compressed_read_metadata_t {
     uint32_t            flags;
 };
 
+struct input_metadata_handle_t {
+    uint64_t            timestamp;
+    uint32_t            bufferLength;
+    uint32_t            consumedLength;
+};
+
+struct output_metadata_handle_t {
+    uint32_t            metadataLength;
+    uint32_t            bufferLength;
+    uint64_t            timestamp;
+    uint32_t            reserved[12];
+};
+
 typedef List<alsa_handle_t> ALSAHandleList;
+typedef List<input_metadata_handle_t> inputMetadataList;
 
 struct use_case_t {
     char                useCase[MAX_STR_LEN];
@@ -666,11 +686,25 @@ private:
     // Decoder Specifics
     bool                mAacConfigDataSet;
     bool                mWMAConfigDataSet;
+    bool                mDDFirstFrameBuffered;
     bool                mPlaybackReachedEOS;
     bool                isSessionPaused;
 
     bool                mRouteAudioToA2dp;
     bool                mCaptureFromProxy;
+    // Avsync Specifics
+    bool                mTimeStampModeSet;
+    uint32_t            mCompleteBufferTimePcm;
+    uint32_t            mCompleteBufferTimeCompre;
+    uint32_t            mPartialBufferTimePcm;
+    uint32_t            mPartialBufferTimeCompre;
+    uint32_t            mOutputMetadataLength;
+    inputMetadataList   mInputMetadataListPcm;
+    inputMetadataList   mInputMetadataListCompre;
+    output_metadata_handle_t mOutputMetadataPcm;
+    output_metadata_handle_t mOutputMetadataCompre;
+    char                *mPcmWriteTempBuffer;
+    char                *mCompreWriteTempBuffer;
 
     // ALSA device handle to route PCM 2.0 playback
     alsa_handle_t      *mPcmRxHandle;
@@ -761,9 +795,22 @@ private:
     void                allocatePlaybackPollFd();
     status_t            openMS11Instance();
     ssize_t             write_l(char *buffer, size_t bytes);
+    void                copyBitstreamInternalBuffer(char *buffer, size_t bytes);
+    uint32_t            setDecoderConfig(char *buffer, size_t bytes);
+    bool                decode(char *buffer, size_t bytes);
+    uint32_t            render(bool continueDecode);
     int32_t             writeToCompressedDriver(char *buffer, int bytes);
     void                resetPlaybackPathVariables();
     void                exitFromPlaybackThread();
+    // Avsync Specifics
+    void                update_input_meta_data_list_pre_decode(uint32_t type);
+    void                update_input_meta_data_list_post_decode(uint32_t type,
+                            uint32_t bytesConsumedInDecode);
+    void                update_time_stamp_pre_write_to_driver(uint32_t type);
+    void                update_time_stamp_post_write_to_driver(uint32_t type,
+                           uint32_t remainingSamples,
+                           uint32_t requiredBufferSize);
+    void                update_input_meta_data_list_post_write(uint32_t type);
 
     //Structure to hold mem buffer information
     class BuffersAllocated {

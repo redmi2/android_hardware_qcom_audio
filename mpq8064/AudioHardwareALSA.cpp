@@ -443,6 +443,7 @@ status_t AudioHardwareALSA::doRouting(int device)
         alsa_handle.rxHandle = 0;
         alsa_handle.mode = mode();
         alsa_handle.ucMgr = mUcMgr;
+        alsa_handle.timeStampMode = SNDRV_PCM_TSTAMP_NONE;
         mIsVoiceCallActive = 1;
         mDeviceList.push_back(alsa_handle);
         ALSAHandleList::iterator it = mDeviceList.end();
@@ -506,6 +507,7 @@ status_t AudioHardwareALSA::doRouting(int device)
         alsa_handle.rxHandle = 0;
         alsa_handle.mode = mode();
         alsa_handle.ucMgr = mUcMgr;
+        alsa_handle.timeStampMode = SNDRV_PCM_TSTAMP_NONE;
         mIsFmActive = 1;
         mDeviceList.push_back(alsa_handle);
         ALSAHandleList::iterator it = mDeviceList.end();
@@ -713,6 +715,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
           alsa_handle.rxHandle = 0;
           alsa_handle.mode = AudioSystem::MODE_IN_COMMUNICATION;
           alsa_handle.ucMgr = mUcMgr;
+          alsa_handle.timeStampMode = SNDRV_PCM_TSTAMP_NONE;
           char *use_case;
           snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
           if ((use_case == NULL) || (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
@@ -764,6 +767,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
       alsa_handle.rxHandle = 0;
       alsa_handle.mode = mode();
       alsa_handle.ucMgr = mUcMgr;
+      alsa_handle.timeStampMode = SNDRV_PCM_TSTAMP_NONE;
 
       char *use_case;
       snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
@@ -894,6 +898,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
            alsa_handle.rxHandle = 0;
            alsa_handle.mode = AudioSystem::MODE_IN_COMMUNICATION;
            alsa_handle.ucMgr = mUcMgr;
+           alsa_handle.timeStampMode = SNDRV_PCM_TSTAMP_NONE;
            snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
            if ((use_case != NULL) && (strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
                                           strlen(SND_USE_CASE_VERB_INACTIVE)))) {
@@ -959,6 +964,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         alsa_handle.rxHandle = 0;
         alsa_handle.mode = newMode;
         alsa_handle.ucMgr = mUcMgr;
+        alsa_handle.timeStampMode = SNDRV_PCM_TSTAMP_NONE;
         snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
         if ((use_case != NULL) && (strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
                                       strlen(SND_USE_CASE_VERB_INACTIVE)))) {
