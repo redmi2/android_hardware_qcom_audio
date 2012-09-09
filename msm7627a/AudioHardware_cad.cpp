@@ -31,7 +31,6 @@
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <cutils/properties.h> // for property_get
-
 // hardware specific functions
 
 extern "C" {
@@ -3129,8 +3128,6 @@ void  AudioHardware::AudioSessionOutLPA::eventThreadEntry()
                                 mObserver->postEOS(0);
                             }
                         }
-                        if (mPaused)
-                            continue;
                         break;
                     }
                 }
@@ -3197,15 +3194,18 @@ status_t AudioHardware::AudioSessionOutLPA::start( ) //TODO YM LPA removed start
 
     ALOGV("LPA playback start");
     if (mPaused) {
+
+        if (ioctl(afd, AUDIO_PAUSE, 0) < 0) {
+            ALOGE("Resume:: LPA driver resume failed");
+            return UNKNOWN_ERROR;
+        }
+
         if (mSeeking) {
             mSeeking = false;
         } else {
-            if (ioctl(afd, AUDIO_PAUSE, 0) < 0) {
-                ALOGE("Resume:: LPA driver resume failed");
-                return UNKNOWN_ERROR;
-            }
             mPaused = false;
         }
+
     } else {
 	    //get config, set config and AUDIO_START LPA driver
 	    int sessionId = 0;
@@ -3279,13 +3279,19 @@ status_t AudioHardware::AudioSessionOutLPA::flush()
           "Empty queue to handle seek");
     mReachedEOS = false;
     if (!mPaused && !mEosEventReceived) {
+
+        if (ioctl(afd, AUDIO_PAUSE, 1) < 0) {
+            ALOGE("Audio Pause failed");
+            return UNKNOWN_ERROR;
+        }
         if (ioctl(afd, AUDIO_FLUSH, 0) < 0) {
             ALOGE("Audio Flush failed");
             return UNKNOWN_ERROR;
         }
-        } else {
+
+    } else {
         mSeeking = true;
-        timeStarted = 0; // needed
+        timeStarted = 0;
     }
     //4.) Skip the current write from the decoder and signal to the Write get
     //   the next set of data from the decoder
