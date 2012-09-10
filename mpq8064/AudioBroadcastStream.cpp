@@ -505,13 +505,10 @@ void AudioBroadcastStreamALSA::updateSampleRateChannelMode()
        mFormat == AudioSystem::HE_AAC_V2) {
         if(mSampleRate > 24000) {
             mSampleRate = DEFAULT_SAMPLING_RATE;
-            mChannels = DEFAULT_CHANNEL_MODE;
-//NOTE: handle the multi channel PCM- do not update the channel mode to 2,
-//      if Multi channel stereo to be supported
         }
+        mChannels = 6;
     } else if(mFormat == AudioSystem::AC3 || mFormat == AudioSystem::AC3_PLUS) {
-        if(mChannels > 2)
-            mChannels = DEFAULT_CHANNEL_MODE;
+        mChannels = 6;
     }
 }
 
