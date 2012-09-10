@@ -147,7 +147,6 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
                 if((mDevices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
                       (mDevices & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)||
                       (mDevices & AudioSystem::DEVICE_OUT_PROXY)) {
-                    mDevices |= AudioSystem::DEVICE_OUT_PROXY;
                     mHandle->module->route(mHandle, mDevices , mParent->mode());
                 }else
 #endif         
@@ -158,7 +157,6 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
             } else if((mDevices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
                       (mDevices & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)||
                       (mDevices & AudioSystem::DEVICE_OUT_PROXY)) {
-                mDevices |= AudioSystem::DEVICE_OUT_PROXY;
                 mHandle->module->route(mHandle, mDevices , mParent->mode());
 #endif
             } else {
@@ -316,6 +314,9 @@ status_t AudioStreamOutALSA::close()
       else if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) ||
               (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_LPA))) {
         mParent->musbPlaybackState &= ~USBPLAYBACKBIT_LPA;
+    } else if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
+              (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL))) {
+        mParent->musbPlaybackState &= ~USBPLAYBACKBIT_TUNNEL;
     } else {
         mParent->musbPlaybackState &= ~USBPLAYBACKBIT_MUSIC;
     }
@@ -352,6 +353,10 @@ status_t AudioStreamOutALSA::standby()
         (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_LPA))) {
         ALOGD("Deregistering LPA bit");
         mParent->musbPlaybackState &= ~USBPLAYBACKBIT_LPA;
+    } else if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
+             (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL))) {
+        ALOGD("Deregistering Tunnel Player bit");
+        mParent->musbPlaybackState &= ~USBPLAYBACKBIT_TUNNEL;
     } else {
         ALOGD("Deregistering MUSIC bit, musbPlaybackState: %d", mParent->musbPlaybackState);
         mParent->musbPlaybackState &= ~USBPLAYBACKBIT_MUSIC;
