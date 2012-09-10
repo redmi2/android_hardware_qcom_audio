@@ -681,9 +681,7 @@ void AudioBroadcastStreamALSA::setRoutingFlagsBasedOnConfig()
                mFormat == AudioSystem::AAC || mFormat == AudioSystem::HE_AAC_V1 ||
                mFormat == AudioSystem::HE_AAC_V2) {
                 mUseMS11Decoder = true;
-                mRoutePCMStereoToDSP = true;
-//              mRoutePCMMchToDSP = true;
-// NOTE: enable this when required MS11 output is Multi channel
+                mRoutePCMMChToDSP = true;
                 if(mAudioSource == QCOM_AUDIO_SOURCE_HDMI_IN)
                     mAacConfigDataSet = false;
                 else
@@ -707,6 +705,12 @@ void AudioBroadcastStreamALSA::setRoutingFlagsBasedOnConfig()
     if(mDevices & AudioSystem::DEVICE_OUT_PROXY)
         mCaptureFromProxy = true;
 
+    if( mRoutePCMMChToDSP &&
+        (mDevices & ~(AudioSystem::DEVICE_OUT_SPDIF |
+          AudioSystem::DEVICE_OUT_AUX_DIGITAL))) {
+          mRoutePCMStereoToDSP = true;
+          mRoutePCMMChToDSP = false;
+    }
     setSpdifHdmiRoutingFlags(mDevices);
 
     if((mSpdifFormat == PCM_FORMAT) ||
@@ -2128,10 +2132,18 @@ bool AudioBroadcastStreamALSA::decode(char *buffer, size_t bytes)
         }
         // copy the output of decoder to HAL internal buffers
         if(mRoutePcmAudio) {
-            bufPtr=mBitstreamSM->getOutputBufferWritePtr(PCM_2CH_OUT);
-            copyOutputBytesSize = mMS11Decoder->copyOutputFromMS11Buf(PCM_2CH_OUT,
-                                                    bufPtr);
-            mBitstreamSM->setOutputBufferWritePtr(PCM_2CH_OUT,copyOutputBytesSize);
+            if(mRoutePCMMChToDSP) {
+                bufPtr=mBitstreamSM->getOutputBufferWritePtr(PCM_MCH_OUT);
+                copyOutputBytesSize = mMS11Decoder->copyOutputFromMS11Buf(PCM_MCH_OUT,
+                                                        bufPtr);
+                mBitstreamSM->setOutputBufferWritePtr(PCM_MCH_OUT,copyOutputBytesSize);
+            }
+            else if(mRoutePCMStereoToDSP) {
+                bufPtr=mBitstreamSM->getOutputBufferWritePtr(PCM_2CH_OUT);
+                copyOutputBytesSize = mMS11Decoder->copyOutputFromMS11Buf(PCM_2CH_OUT,
+                                                        bufPtr);
+                mBitstreamSM->setOutputBufferWritePtr(PCM_2CH_OUT,copyOutputBytesSize);
+            }
         }
         if((mSpdifFormat == COMPRESSED_FORMAT) ||
            (mHdmiFormat == COMPRESSED_FORMAT)) {
