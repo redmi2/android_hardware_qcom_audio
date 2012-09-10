@@ -713,6 +713,15 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
             }
             break;
         }
+        if (mAvailableOutputDevices & AudioSystem::DEVICE_OUT_FM) {
+            device |= AudioSystem::DEVICE_OUT_FM;
+            if (mForceUse[AudioSystem::FOR_MEDIA] == AudioSystem::FORCE_SPEAKER) {
+                device &= ~(AudioSystem::DEVICE_OUT_WIRED_HEADSET);
+                device &= ~(AudioSystem::DEVICE_OUT_WIRED_HEADPHONE);
+                device &= ~(AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET);
+                device |= AudioSystem::DEVICE_OUT_SPEAKER;
+            }
+        }
     break;
 
     case STRATEGY_SONIFICATION:
