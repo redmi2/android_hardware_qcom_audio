@@ -3132,8 +3132,8 @@ SectionVerb
         EndSequence
 
         # ALSA PCMs
-        PlaybackPCM 5
-        CapturePCM 5
+        PlaybackPCM 4
+        CapturePCM 4
 
 EndSection
 }
@@ -3150,6 +3150,7 @@ SectionDevice
 
 	DisableSequence
 		'RX1 MIX1 INP1':0:ZERO
+		'RX1 Digital Volume':1:0
 		'DAC1 Switch':1:0
 	EndSequence
 
@@ -3166,12 +3167,13 @@ SectionDevice
 	EnableSequence
 		'SLIM_0_RX Channels':0:One
 		'RX1 MIX1 INP1':0:RX1
-		'RX1 Digital Volume':1:90
+		'RX1 Digital Volume':1:67
 		'DAC1 Switch':1:1
 	EndSequence
 
 	DisableSequence
 		'RX1 MIX1 INP1':0:ZERO
+		'RX1 Digital Volume':1:0
 		'DAC1 Switch':1:0
 	EndSequence
 
@@ -3243,6 +3245,7 @@ SectionDevice
 	DisableSequence
 		'RX1 MIX1 INP1':0:ZERO
 		'RX1 Digital Volume':1:0
+		'DAC1 Switch':1:0
 	EndSequence
 
 	ACDBID	15:1
