@@ -406,7 +406,7 @@ void ALSADevice::switchDeviceUseCase(alsa_handle_t *handle,
 
     getDevices(devices, mode, &rxDeviceNew, &txDeviceNew);
     getDevices(handle->devices, handle->mode, &rxDeviceOld, &txDeviceOld);
-    if ((rxDeviceNew != NULL) && (txDeviceNew != NULL)) {
+    if ((rxDeviceNew != NULL) && (txDeviceNew != NULL) && (rxDeviceOld != NULL) && (txDeviceOld != NULL)) {
         if (((strcmp(rxDeviceNew, rxDeviceOld)) || (strcmp(txDeviceNew, txDeviceOld))) &&
             (mode == AudioSystem::MODE_IN_CALL))
             inCallDevSwitch = true;
