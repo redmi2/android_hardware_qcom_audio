@@ -1506,7 +1506,16 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
                             return strdup(SND_USE_CASE_DEV_DUAL_MIC_HANDSET_STEREO); /* DUALMIC EF TX */
                     }
                 } else if ((mDevSettingsFlag & QMIC_FLAG) && (mInChannels == 1)) {
-                    return strdup(SND_USE_CASE_DEV_QUAD_MIC);
+                    if (((rxDevice != NULL) &&
+                        !strncmp(rxDevice, SND_USE_CASE_DEV_SPEAKER,
+                        (strlen(SND_USE_CASE_DEV_SPEAKER)+1))) ||
+                        ((rxDevice == NULL) &&
+                        !strncmp(mCurRxUCMDevice, SND_USE_CASE_DEV_SPEAKER,
+                        (strlen(SND_USE_CASE_DEV_SPEAKER)+1)))) {
+                            return strdup(SND_USE_CASE_DEV_QUAD_MIC); /* QUADMIC TX */
+                    } else {
+                        return strdup(SND_USE_CASE_DEV_LINE);
+                    }
                 }
 #ifdef QCOM_SSR_ENABLED
                 else if ((mDevSettingsFlag & QMIC_FLAG) && (mInChannels > 1)) {
