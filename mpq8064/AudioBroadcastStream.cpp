@@ -119,7 +119,8 @@ AudioBroadcastStreamALSA::AudioBroadcastStreamALSA(AudioHardwareALSA *parent,
             *status = BAD_VALUE;
             return;
         }
-        mFormat = format;
+        mFormat             = format;
+        mAacConfigDataSet   = true;
     }
     /* ------------------------------------------------------------------------
     Description: set the output device format
@@ -389,6 +390,7 @@ ssize_t AudioBroadcastStreamALSA::write(const void *buffer, size_t bytes,
     size_t            sent = 0;
     status_t          err;
 
+#if 0
     // 1. Check if MS11 decoder instance is present and if present we need to
     //    preserve the data and supply it to MS 11 decoder.
     if(mMS11Decoder != NULL) {
@@ -423,8 +425,9 @@ ssize_t AudioBroadcastStreamALSA::write(const void *buffer, size_t bytes,
             }
         } while ((mPcmRxHandle->handle) && (sent < bytes));
     }
+#endif
 
-    return bytes;
+    return write_l((char*)buffer,bytes);
 }
 
 status_t AudioBroadcastStreamALSA::dump(int fd, const Vector<String16>& args)
