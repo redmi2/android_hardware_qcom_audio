@@ -1654,7 +1654,7 @@ status_t ALSADevice::setPlaybackFormat(const char *value, int device)
         ALOGE("setPlaybackFormat error = %d",err);
     }
 
-    return err;
+    return NO_ERROR;
 }
 
 status_t ALSADevice::setCaptureFormat(const char *value)

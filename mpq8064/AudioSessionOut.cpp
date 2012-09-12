@@ -1187,8 +1187,10 @@ status_t AudioSessionOutALSA::flush()
         sync_ptr(mPcmRxHandle->handle);
     }*/
     mFrameCount = 0;
-    if(mUseMS11Decoder == true)
+    if(mUseMS11Decoder == true) {
         mBitstreamSM->resetBitstreamPtr();
+        mMS11Decoder->flush();
+    }
     ALOGD("AudioSessionOutALSA::flush X");
     return NO_ERROR;
 }
