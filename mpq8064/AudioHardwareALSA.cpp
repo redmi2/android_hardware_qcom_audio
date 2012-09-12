@@ -100,7 +100,7 @@ AudioHardwareALSA::AudioHardwareALSA() :
         snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm");
     } else {
         ALOGV("Detected tabla 2.x sound card");
-        snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm_2x");
+        snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm_2x_mpq");
     }
 
     if (mUcMgr < 0) {
