@@ -52,6 +52,7 @@ struct pcm {
 #define PCM_MONO       0x01000000
 #define PCM_QUAD       0x02000000
 #define PCM_5POINT1    0x04000000
+#define PCM_7POINT1    0x08000000
 
 #define PCM_44100HZ    0x00000000
 #define PCM_48000HZ    0x00100000

@@ -90,7 +90,17 @@ static int set_params(struct pcm *pcm)
      unsigned long periodSize, bufferSize, reqBuffSize;
      unsigned int periodTime, bufferTime;
      unsigned int requestedRate = pcm->rate;
-     int channels = (pcm->flags & PCM_MONO) ? 1 : ((pcm->flags & PCM_5POINT1)? 6 : 2 );
+     int channels;
+     if(pcm->flags & PCM_MONO)
+         channels = 1;
+     else if(pcm->flags & PCM_QUAD)
+         channels = 4;
+     else if(pcm->flags & PCM_5POINT1)
+         channels = 6;
+     else if(pcm->flags & PCM_7POINT1)
+         channels = 8;
+     else
+         channels = 2;
 
      params = (struct snd_pcm_hw_params*) calloc(1, sizeof(struct snd_pcm_hw_params));
      if (!params) {
@@ -185,8 +195,12 @@ static int play_file(unsigned rate, unsigned channels, int fd,
 
     if (channels == 1)
         flags |= PCM_MONO;
+    else if (channels == 4)
+	flags |= PCM_QUAD;
     else if (channels == 6)
-  flags |= PCM_5POINT1;
+	flags |= PCM_5POINT1;
+    else if (channels == 8)
+	flags |= PCM_7POINT1;
     else
         flags |= PCM_STEREO;
 
@@ -282,7 +296,7 @@ static int play_file(unsigned rate, unsigned channels, int fd,
         pfd[0].fd = pcm->timer_fd;
         pfd[0].events = POLLIN;
 
-        frames = (pcm->flags & PCM_MONO) ? (bufsize / 2) : (bufsize / 4);
+        frames = bufsize / (2*channels);
         for (;;) {
              if (!pcm->running) {
                   if (pcm_prepare(pcm)) {
@@ -342,7 +356,7 @@ static int play_file(unsigned rate, unsigned channels, int fd,
              if (data_sz && !piped) {
                  if (remainingData < bufsize) {
                      bufsize = remainingData;
-                     frames = (pcm->flags & PCM_MONO) ? (remainingData / 2) : (remainingData / 4);
+                     frames = remainingData / (2*channels);
                  }
              }
 

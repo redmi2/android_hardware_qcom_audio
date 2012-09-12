@@ -50,7 +50,7 @@ AudioBitstreamSM::AudioBitstreamSM()
     ms11InputBuffer = ms11InputBufferWritePtr = NULL;
     ms11DDEncOutputBuffer = ms11DDEncOutputBufferWritePtr = NULL;
     ms11PCM2ChOutputBuffer = ms11PCM2ChOutputBufferWritePtr = NULL;
-    ms11PCM6ChOutputBuffer = ms11PCM6ChOutputBufferWritePtr = NULL;
+    ms11PCMMChOutputBuffer = ms11PCMMChOutputBufferWritePtr = NULL;
 }
 
 /*
@@ -64,8 +64,8 @@ AudioBitstreamSM::~AudioBitstreamSM()
        free(ms11DDEncOutputBuffer);
     if(ms11PCM2ChOutputBuffer != NULL)
        free(ms11PCM2ChOutputBuffer);
-    if(ms11PCM6ChOutputBuffer != NULL)
-       free(ms11PCM6ChOutputBuffer);
+    if(ms11PCMMChOutputBuffer != NULL)
+       free(ms11PCMMChOutputBuffer);
 }
 
 /*
@@ -97,11 +97,11 @@ bool AudioBitstreamSM::initBitstreamPtr()
         ALOGE("MS11 PCM2Ch output buffer not allocated");
         return false;
     }
-    ms11PCM6ChOutputBuffer =(char *)malloc(SAMPLES_PER_CHANNEL*MAX_OUTPUT_CHANNELS_SUPPORTED*FACTOR_FOR_BUFFERING);
-    if(ms11PCM6ChOutputBuffer) {
-        ms11PCM6ChOutputBufferWritePtr=ms11PCM6ChOutputBuffer;
+    ms11PCMMChOutputBuffer =(char *)malloc(SAMPLES_PER_CHANNEL*MAX_OUTPUT_CHANNELS_SUPPORTED*FACTOR_FOR_BUFFERING);
+    if(ms11PCMMChOutputBuffer) {
+        ms11PCMMChOutputBufferWritePtr=ms11PCMMChOutputBuffer;
     } else {
-        ALOGE("MS11 PCM6Ch output buffer not allocated");
+        ALOGE("MS11 PCMMCh output buffer not allocated");
         return false;
     }
     return true;
@@ -115,7 +115,7 @@ void AudioBitstreamSM::resetBitstreamPtr()
     ms11InputBufferWritePtr = ms11InputBuffer;
     ms11DDEncOutputBufferWritePtr = ms11DDEncOutputBuffer;
     ms11PCM2ChOutputBufferWritePtr = ms11PCM2ChOutputBuffer;
-    ms11PCM6ChOutputBufferWritePtr = ms11PCM6ChOutputBuffer;
+    ms11PCMMChOutputBufferWritePtr = ms11PCMMChOutputBuffer;
 }
 
 /*
@@ -125,7 +125,7 @@ void AudioBitstreamSM::resetOutputBitstreamPtr()
 {
     ms11DDEncOutputBufferWritePtr = ms11DDEncOutputBuffer;
     ms11PCM2ChOutputBufferWritePtr = ms11PCM2ChOutputBuffer;
-    ms11PCM6ChOutputBufferWritePtr = ms11PCM6ChOutputBuffer;
+    ms11PCMMChOutputBufferWritePtr = ms11PCMMChOutputBuffer;
 }
 
 /*
@@ -190,7 +190,7 @@ Get the output buffer start pointer to start rendering the pcm sampled to driver
 char* AudioBitstreamSM::getOutputBufferPtr(int format)
 {
     if(format == PCM_MCH_OUT)
-        return ms11PCM6ChOutputBuffer;
+        return ms11PCMMChOutputBuffer;
     else if(format == PCM_2CH_OUT)
         return ms11PCM2ChOutputBuffer;
     else
@@ -203,7 +203,7 @@ Output the pointer from where the next PCM samples can be copied to buffer
 char* AudioBitstreamSM::getOutputBufferWritePtr(int format)
 {
     if(format == PCM_MCH_OUT)
-        return ms11PCM6ChOutputBufferWritePtr;
+        return ms11PCMMChOutputBufferWritePtr;
     else if(format == PCM_2CH_OUT)
         return ms11PCM2ChOutputBufferWritePtr;
     else
@@ -239,9 +239,9 @@ void AudioBitstreamSM::copyResidueOutputToStart(int format, size_t samplesRender
     size_t remainingBytes;
     if(format == PCM_MCH_OUT)
     {
-        remainingBytes = ms11PCM6ChOutputBufferWritePtr-(ms11PCM6ChOutputBuffer+samplesRendered);
-        memcpy(ms11PCM6ChOutputBuffer, ms11PCM6ChOutputBuffer+samplesRendered, remainingBytes);
-        ms11PCM6ChOutputBufferWritePtr = ms11PCM6ChOutputBuffer + remainingBytes;
+        remainingBytes = ms11PCMMChOutputBufferWritePtr-(ms11PCMMChOutputBuffer+samplesRendered);
+        memcpy(ms11PCMMChOutputBuffer, ms11PCMMChOutputBuffer+samplesRendered, remainingBytes);
+        ms11PCMMChOutputBufferWritePtr = ms11PCMMChOutputBuffer + remainingBytes;
     } else if(format == PCM_2CH_OUT) {
         remainingBytes = ms11PCM2ChOutputBufferWritePtr-(ms11PCM2ChOutputBuffer+samplesRendered);
         memcpy(ms11PCM2ChOutputBuffer, ms11PCM2ChOutputBuffer+samplesRendered, remainingBytes);
@@ -260,7 +260,7 @@ output buffer
 void AudioBitstreamSM::setOutputBufferWritePtr(int format, size_t outputPCMSample)
 {
     if(format == PCM_MCH_OUT)
-        ms11PCM6ChOutputBufferWritePtr += outputPCMSample;
+        ms11PCMMChOutputBufferWritePtr += outputPCMSample;
     else if(format == PCM_2CH_OUT)
         ms11PCM2ChOutputBufferWritePtr += outputPCMSample;
     else
@@ -276,8 +276,8 @@ bool AudioBitstreamSM::sufficientSamplesToRender(int format, int minSizeReqdToRe
     char *bufPtr, *bufWritePtr;
     if(format == PCM_MCH_OUT)
     {
-        bufPtr = ms11PCM6ChOutputBuffer;
-        bufWritePtr = ms11PCM6ChOutputBufferWritePtr;
+        bufPtr = ms11PCMMChOutputBuffer;
+        bufWritePtr = ms11PCMMChOutputBufferWritePtr;
     } else if (format == PCM_2CH_OUT) {
         bufPtr = ms11PCM2ChOutputBuffer;
         bufWritePtr = ms11PCM2ChOutputBufferWritePtr;

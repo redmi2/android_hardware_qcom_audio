@@ -453,6 +453,8 @@ long pcm_avail(struct pcm *pcm)
              buffer_size = pcm->buffer_size/8;
          else if(pcm->flags & PCM_5POINT1)
              buffer_size = pcm->buffer_size/12;
+         else if(pcm->flags & PCM_7POINT1)
+             buffer_size = pcm->buffer_size/16;
          else
              buffer_size = pcm->buffer_size/4;
 
@@ -484,7 +486,18 @@ int mmap_buffer(struct pcm *pcm)
     char *ptr;
     unsigned size;
     struct snd_pcm_channel_info ch;
-    int channels = (pcm->flags & PCM_MONO) ? 1 : 2;
+    int channels;
+
+    if(pcm->flags & PCM_MONO)
+        channels = 1;
+    else if(pcm->flags & PCM_QUAD)
+        channels = 4;
+    else if(pcm->flags & PCM_5POINT1)
+        channels = 6;
+    else if(pcm->flags & PCM_7POINT1)
+        channels = 8;
+    else
+        channels = 2;
 
     size = pcm->buffer_size;
     if (pcm->flags & DEBUG_ON)
@@ -515,11 +528,12 @@ u_int8_t *dst_address(struct pcm *pcm)
         channels = 4;
     else if(pcm->flags & PCM_5POINT1)
         channels = 6;
+    else if(pcm->flags & PCM_7POINT1)
+        channels = 8;
     else
         channels = 2;
 
     appl_ptr = sync_ptr->c.control.appl_ptr*2*channels;
-
     pcm_offset = (appl_ptr % (unsigned long)pcm->buffer_size);
     return pcm->addr + pcm_offset;
 
@@ -532,7 +546,17 @@ int mmap_transfer(struct pcm *pcm, void *data, unsigned offset,
     unsigned size;
     u_int8_t *dst_addr, *mmaped_addr;
     u_int8_t *src_addr = data;
-    int channels = (pcm->flags & PCM_MONO) ? 1 : 2;
+    int channels;
+    if(pcm->flags & PCM_MONO)
+        channels = 1;
+    else if(pcm->flags & PCM_QUAD)
+        channels = 4;
+    else if(pcm->flags & PCM_5POINT1)
+        channels = 6;
+    else if(pcm->flags & PCM_7POINT1)
+        channels = 8;
+    else
+        channels = 2;
 
     dst_addr = dst_address(pcm);
 
@@ -554,9 +578,20 @@ int mmap_transfer_capture(struct pcm *pcm, void *data, unsigned offset,
     unsigned size;
     u_int8_t *dst_addr, *mmaped_addr;
     u_int8_t *src_addr;
-    int channels = (pcm->flags & PCM_MONO) ? 1 : 2;
-    unsigned int tmp = (pcm->flags & PCM_MONO) ? sync_ptr->c.control.appl_ptr*2 : sync_ptr->c.control.appl_ptr*4;
+    int channels;
+    unsigned int tmp;
 
+    if(pcm->flags & PCM_MONO)
+        channels = 1;
+    else if(pcm->flags & PCM_QUAD)
+        channels = 4;
+    else if(pcm->flags & PCM_5POINT1)
+        channels = 6;
+    else if(pcm->flags & PCM_7POINT1)
+        channels = 8;
+    else
+        channels = 2;
+    tmp = sync_ptr->c.control.appl_ptr*2*channels;
     pcm_offset = (tmp % (unsigned long)pcm->buffer_size);
     dst_addr = data;
     src_addr = pcm->addr + pcm_offset;
@@ -585,16 +620,18 @@ static int pcm_write_mmap(struct pcm *pcm, void *data, unsigned count)
     long frames;
     int err;
     int bytes_written;
-
-    if (pcm->flags & PCM_MONO) {
-        frames = (count / 2);
-    } else if (pcm->flags & PCM_QUAD) {
-        frames = (count / 8);
-    } else if (pcm->flags & PCM_5POINT1) {
-        frames = (count / 12);
-    } else {
-        frames = (count / 4);
-    }
+    int channels;
+    if(pcm->flags & PCM_MONO)
+        channels = 1;
+    else if(pcm->flags & PCM_QUAD)
+        channels = 4;
+    else if(pcm->flags & PCM_5POINT1)
+        channels = 6;
+    else if(pcm->flags & PCM_7POINT1)
+        channels = 8;
+    else
+        channels = 2;
+    frames = count / (2*channels);
 
     pcm->sync_ptr->flags = SNDRV_PCM_SYNC_PTR_APPL | SNDRV_PCM_SYNC_PTR_AVAIL_MIN;
     err = sync_ptr(pcm);
@@ -641,7 +678,17 @@ static int pcm_write_mmap(struct pcm *pcm, void *data, unsigned count)
 static int pcm_write_nmmap(struct pcm *pcm, void *data, unsigned count)
 {
     struct snd_xferi x;
-    int channels = (pcm->flags & PCM_MONO) ? 1 : ((pcm->flags & PCM_5POINT1)? 6 : 2 );
+    int channels;
+    if(pcm->flags & PCM_MONO)
+        channels = 1;
+    else if(pcm->flags & PCM_QUAD)
+        channels = 4;
+    else if(pcm->flags & PCM_5POINT1)
+        channels = 6;
+    else if(pcm->flags & PCM_7POINT1)
+        channels = 8;
+    else
+        channels = 2;
 
     if (pcm->flags & PCM_IN)
         return -EINVAL;
@@ -691,6 +738,8 @@ int pcm_read(struct pcm *pcm, void *data, unsigned count)
         x.frames = (count / 8);
     } else if (pcm->flags & PCM_5POINT1) {
         x.frames = (count / 12);
+    } else if (pcm->flags & PCM_7POINT1) {
+        x.frames = (count / 16);
     } else {
         x.frames = (count / 4);
     }

@@ -88,7 +88,7 @@ AudioBroadcastStreamALSA::AudioBroadcastStreamALSA(AudioHardwareALSA *parent,
         devices, format, channels, sampleRate, audioSource);
 
     if(!(devices & AudioSystem::DEVICE_OUT_ALL) ||
-       (mSampleRate == 0) || ((mChannels < 1) && (mChannels > 6)) ||
+       (mSampleRate == 0) || ((mChannels < 1) && (mChannels > 8)) ||
        ((audioSource != QCOM_AUDIO_SOURCE_DIGITAL_BROADCAST_MAIN_AD) &&
         (audioSource != QCOM_AUDIO_SOURCE_DIGITAL_BROADCAST_MAIN_ONLY) &&
         (audioSource != QCOM_AUDIO_SOURCE_ANALOG_BROADCAST) &&
@@ -105,6 +105,7 @@ AudioBroadcastStreamALSA::AudioBroadcastStreamALSA(AudioHardwareALSA *parent,
             *status = BAD_VALUE;
             return;
         }
+        mChannels = mChannels%2?mChannels+1:mChannels;
     } else if(audioSource == QCOM_AUDIO_SOURCE_ANALOG_BROADCAST) {
         if((format != QCOM_BROADCAST_AUDIO_FORMAT_LPCM) &&
            (mChannels != 2)) {
@@ -540,6 +541,7 @@ void AudioBroadcastStreamALSA::initialization()
     mCapturePCMFromDSP       = false;
     mCaptureCompressedFromDSP= false;
     mRoutePCMStereoToDSP     = false;
+    mRoutePCMMChToDSP        = false;
     mUseMS11Decoder          = false;
     mUseTunnelDecoder        = false;
     mRoutePcmAudio           = false;
@@ -667,13 +669,18 @@ void AudioBroadcastStreamALSA::setRoutingFlagsBasedOnConfig()
             if(mChannels <= 2) {
                 mRoutePCMStereoToDSP = true;
             } else {
-                mUseMS11Decoder = true;
+                mRoutePCMMChToDSP = true;
+//                mUseMS11Decoder = true;
+// NOTE: enable this is compressed AC3 data is required over SPDIF/HDMI 
             }
         } else {
             if(mFormat == AudioSystem::AC3 || mFormat == AudioSystem::AC3_PLUS ||
                mFormat == AudioSystem::AAC || mFormat == AudioSystem::HE_AAC_V1 ||
                mFormat == AudioSystem::HE_AAC_V2) {
                 mUseMS11Decoder = true;
+                mRoutePCMStereoToDSP = true;
+//              mRoutePCMMchToDSP = true;
+// NOTE: enable this when required MS11 output is Multi channel
             } else {
                 mUseTunnelDecoder = true;
             }
@@ -699,7 +706,7 @@ void AudioBroadcastStreamALSA::setRoutingFlagsBasedOnConfig()
        (mSpdifFormat == COMPRESSED_FORCED_PCM_FORMAT) ||
        (mHdmiFormat == PCM_FORMAT) ||
        (mHdmiFormat == COMPRESSED_FORCED_PCM_FORMAT) ||
-       (mRoutePCMStereoToDSP) ||
+       (mRoutePCMStereoToDSP) || (mRoutePCMMChToDSP) ||
        (mDevices & ~(AudioSystem::DEVICE_OUT_SPDIF |
              AudioSystem::DEVICE_OUT_AUX_DIGITAL))) {
         mRoutePcmAudio = true;
@@ -893,10 +900,7 @@ status_t AudioBroadcastStreamALSA::openPCMCapturePath()
     char *use_case;
 
     alsa_handle.module = mParent->mALSADevice;
-    if (mChannels <= DEFAULT_CHANNEL_MODE)
-        alsa_handle.bufferSize = DEFAULT_IN_BUFFER_SIZE_BROADCAST_PCM_STEREO;
-    else
-        alsa_handle.bufferSize = DEFAULT_IN_BUFFER_SIZE_BROADCAST_PCM_MCH;
+    alsa_handle.bufferSize = DEFAULT_IN_BUFFER_SIZE_PCM_PER_CHANNEL * mChannels;
     alsa_handle.devices = AudioSystem::DEVICE_IN_AUX_DIGITAL;
 //NOTE: what is the device ID that has to be set
     alsa_handle.activeDevice = AudioSystem::DEVICE_IN_AUX_DIGITAL;
@@ -1278,6 +1282,9 @@ void AudioBroadcastStreamALSA::allocateCapturePollFd()
         } else if (flags & PCM_5POINT1) {
             mFrames   = pcm->period_size/12;
             mX.frames = pcm->period_size/12;
+        } else if (flags & PCM_7POINT1) {
+            mFrames   = pcm->period_size/16;
+            mX.frames = pcm->period_size/16;
         } else {
             mFrames   = pcm->period_size/4;
             mX.frames = pcm->period_size/4;
@@ -2196,7 +2203,7 @@ bool AudioBroadcastStreamALSA::decode(char *buffer, size_t bytes)
             }
             mChannelStatusSet = true;
         }
-    } else if(mRoutePcmAudio && mPcmRxHandle) {
+    } else if(mRoutePcmAudio && mPcmRxHandle && mRoutePCMStereoToDSP) {
         // Set the channel status after first frame decode/transcode
         if(bytes == 0)
             mBitstreamSM->appendSilenceToBitstreamInternalBuffer(
@@ -2233,6 +2240,43 @@ bool AudioBroadcastStreamALSA::decode(char *buffer, size_t bytes)
             }
             mChannelStatusSet = true;
         }
+    } else if(mRoutePcmAudio && mPcmRxHandle && mRoutePCMMChToDSP) {
+        // Set the channel status after first frame decode/transcode
+        if(bytes == 0)
+            mBitstreamSM->appendSilenceToBitstreamInternalBuffer(
+                                                    mMinBytesReqToDecode,0x0);
+        // decode
+        {
+            bytesConsumedInDecode = mBitstreamSM->getInputBufferWritePtr() -
+                                      mBitstreamSM->getInputBufferPtr();
+        }
+        // update metadata list after each decode
+        update_input_meta_data_list_post_decode(PCM_OUT, bytesConsumedInDecode);
+        // handle change in sample rate
+        {
+        }
+        // copy the output of decoder to HAL internal buffers
+        {
+            bufPtr = mBitstreamSM->getOutputBufferWritePtr(PCM_MCH_OUT);
+            copyOutputBytesSize = bytesConsumedInDecode;
+            memcpy(bufPtr, mBitstreamSM->getInputBufferPtr(), copyOutputBytesSize);
+            mBitstreamSM->copyResidueBitstreamToStart(bytesConsumedInDecode);
+            mBitstreamSM->setOutputBufferWritePtr(PCM_MCH_OUT,
+                                                  copyOutputBytesSize);
+        }
+
+        continueDecode = false;
+        // set channel status
+        if(mChannelStatusSet == false) {
+            if(mSpdifFormat == PCM_FORMAT) {
+                if (mALSADevice->get_linearpcm_channel_status(mSampleRate,
+                                      mChannelStatus)) {
+                    ALOGE("channel status set error ");
+                }
+                mALSADevice->setChannelStatus(mChannelStatus);
+            }
+            mChannelStatusSet = true;
+        }
     } else {
         continueDecode = false;
     }
@@ -2248,7 +2292,7 @@ uint32_t AudioBroadcastStreamALSA::render(bool continueDecode)
     int      period_size;
     uint32_t requiredSize;
 
-    if(mPcmRxHandle && mRoutePcmAudio) {
+    if(mPcmRxHandle && mRoutePcmAudio && mRoutePCMStereoToDSP) {
         period_size = mPcmRxHandle->periodSize;
         requiredSize = period_size - mOutputMetadataLength;
         while(mBitstreamSM->sufficientSamplesToRender(PCM_2CH_OUT,
@@ -2278,6 +2322,40 @@ uint32_t AudioBroadcastStreamALSA::render(bool continueDecode)
                     update_time_stamp_post_write_to_driver(PCM_OUT,
                         (mBitstreamSM->getOutputBufferWritePtr(PCM_2CH_OUT) -
                              mBitstreamSM->getOutputBufferPtr(PCM_2CH_OUT)),
+                         requiredSize);
+            }
+        }
+    }
+    if(mPcmRxHandle && mRoutePcmAudio && mRoutePCMMChToDSP) {
+        period_size = mPcmRxHandle->periodSize;
+        requiredSize = period_size - mOutputMetadataLength;
+        while(mBitstreamSM->sufficientSamplesToRender(PCM_MCH_OUT,
+                                 requiredSize) == true) {
+            if(mTimeStampModeSet) {
+                update_time_stamp_pre_write_to_driver(PCM_OUT);
+                ALOGV("ts- %lld", mOutputMetadataPcm.timestamp);
+                memcpy(mPcmWriteTempBuffer, &mOutputMetadataPcm,
+                           mOutputMetadataLength);
+            }
+            memcpy(mPcmWriteTempBuffer+mOutputMetadataLength,
+                       mBitstreamSM->getOutputBufferPtr(PCM_MCH_OUT),
+                       requiredSize);
+            n = pcm_write(mPcmRxHandle->handle, mPcmWriteTempBuffer,
+                          period_size);
+            ALOGE("pcm_write returned with %d", n);
+            if(n < 0) {
+                // Recovery is part of pcm_write. TODO split is later.
+                ALOGE("pcm_write returned n < 0");
+                return static_cast<ssize_t>(n);
+            } else {
+                mFrameCount++;
+                renderedPcmBytes += static_cast<ssize_t>((period_size));
+                mBitstreamSM->copyResidueOutputToStart(PCM_MCH_OUT,
+                                  requiredSize);
+                if(mTimeStampModeSet)
+                    update_time_stamp_post_write_to_driver(PCM_OUT,
+                        (mBitstreamSM->getOutputBufferWritePtr(PCM_MCH_OUT) -
+                             mBitstreamSM->getOutputBufferPtr(PCM_MCH_OUT)),
                          requiredSize);
             }
         }

@@ -255,14 +255,17 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     if ((!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI2,
                            strlen(SND_USE_CASE_VERB_HIFI2))) ||
         (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC2,
-                           strlen(SND_USE_CASE_MOD_PLAY_MUSIC2))) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI3,
-                           strlen(SND_USE_CASE_VERB_HIFI3))) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC3,
-                           strlen(SND_USE_CASE_MOD_PLAY_MUSIC3)))) {
+                           strlen(SND_USE_CASE_MOD_PLAY_MUSIC2)))) {
         int ALSAbufferSize = reqBuffSize;
         param_set_int(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, ALSAbufferSize);
         ALOGD("ALSAbufferSize = %d",ALSAbufferSize);
+        param_set_int(params, SNDRV_PCM_HW_PARAM_PERIODS, MULTI_CHANNEL_PERIOD_COUNT);
+    } else if ((!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI3,
+                           strlen(SND_USE_CASE_VERB_HIFI3))) ||
+                 (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC3,
+                           strlen(SND_USE_CASE_MOD_PLAY_MUSIC3)))) {
+        param_set_int(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, handle->bufferSize);
+        ALOGD("ALSAbufferSize = %d", handle->bufferSize);
         param_set_int(params, SNDRV_PCM_HW_PARAM_PERIODS, MULTI_CHANNEL_PERIOD_COUNT);
     }
     else {
@@ -312,6 +315,18 @@ status_t ALSADevice::setSoftwareParams(alsa_handle_t *handle)
     struct pcm* pcm = handle->handle;
 
     unsigned long periodSize = pcm->period_size;
+    int channels;
+
+    if(pcm->flags & PCM_MONO)
+        channels = 1;
+    else if(pcm->flags & PCM_QUAD)
+        channels = 4;
+    else if(pcm->flags & PCM_5POINT1)
+        channels = 6;
+    else if(pcm->flags & PCM_7POINT1)
+        channels = 8;
+    else
+        channels = 2;
 
     params = (snd_pcm_sw_params*) calloc(1, sizeof(struct snd_pcm_sw_params));
     if (!params) {
@@ -330,7 +345,7 @@ status_t ALSADevice::setSoftwareParams(alsa_handle_t *handle)
         (!strncmp(handle->useCase,SND_USE_CASE_VERB_IP_VOICECALL,
                             strlen(SND_USE_CASE_VERB_IP_VOICECALL))))){
           ALOGV("setparam:  start & stop threshold for Voip ");
-          params->avail_min = handle->channels - 1 ? periodSize/4 : periodSize/2;
+          params->avail_min = periodSize/(2*channels);
           params->start_threshold = periodSize/2;
           params->stop_threshold = INT_MAX;
      } else {
@@ -353,8 +368,7 @@ status_t ALSADevice::setSoftwareParams(alsa_handle_t *handle)
         params->period_step = 1;
         params->avail_min = handle->channels - 1 ? periodSize/2 : periodSize/4;
         params->start_threshold = handle->channels - 1 ? periodSize : periodSize/2;
-        params->xfer_align = (handle->handle->flags & PCM_MONO) ?
-                   handle->handle->period_size/2 : handle->handle->period_size/4;
+        params->xfer_align = handle->handle->period_size/(2*channels);
     }
     params->silence_threshold = 0;
     params->silence_size = 0;
@@ -547,8 +561,12 @@ status_t ALSADevice::open(alsa_handle_t *handle)
 
     if (handle->channels == 1) {
         flags |= PCM_MONO;
-    } else if (handle->channels >= 6) {
+    } else if (handle->channels == 4) {
+        flags |= PCM_QUAD;
+    } else if (handle->channels == 6) {
         flags |= PCM_5POINT1;
+    } else if (handle->channels == 8) {
+        flags |= PCM_7POINT1;
     } else {
         flags |= PCM_STEREO;
     }
@@ -1915,17 +1933,16 @@ ssize_t  ALSADevice::readFromProxy(void **captureBuffer , ssize_t *bufferSize) {
 void ALSADevice::initProxyParams() {
     if(mProxyParams.mPfdProxy[1].fd == -1) {
         ALOGV("Allocating A2Dp poll fd");
+        int channels = mProxyParams.mProxyPcmHandle->channels;
         mProxyParams.mPfdProxy[0].fd = mProxyParams.mProxyPcmHandle->fd;
         mProxyParams.mPfdProxy[0].events = (POLLIN | POLLERR | POLLNVAL);
         ALOGV("Allocated A2DP poll fd");
         mProxyParams.mPfdProxy[1].fd = eventfd(0,0);
         mProxyParams.mPfdProxy[1].events = (POLLIN | POLLERR | POLLNVAL);
-        mProxyParams.mFrames = (mProxyParams.mProxyPcmHandle->flags & PCM_MONO) ?
-            (mProxyParams.mProxyPcmHandle->period_size / 2) :
-            (mProxyParams.mProxyPcmHandle->period_size / 4);
-        mProxyParams.mX.frames = (mProxyParams.mProxyPcmHandle->flags & PCM_MONO) ?
-            (mProxyParams.mProxyPcmHandle->period_size / 2) :
-            (mProxyParams.mProxyPcmHandle->period_size / 4);
+        mProxyParams.mFrames =
+            (mProxyParams.mProxyPcmHandle->period_size / (2*channels));
+        mProxyParams.mX.frames =
+            (mProxyParams.mProxyPcmHandle->period_size / (2*channels));
     }
 }
 
@@ -1971,6 +1988,7 @@ status_t ALSADevice::openProxyDevice()
     struct snd_pcm_hw_params *params = NULL;
     struct snd_pcm_sw_params *sparams = NULL;
     int flags = (DEBUG_ON | PCM_MMAP| PCM_STEREO | PCM_IN);
+    int channels;
 
     ALOGV("openProxyDevice");
     mProxyParams.mProxyPcmHandle = pcm_open(flags, PROXY_CAPTURE_DEVICE_NAME);
@@ -1989,6 +2007,8 @@ status_t ALSADevice::openProxyDevice()
          goto bail;
     }
 
+
+    channels = mProxyParams.mProxyPcmHandle->channels;
     param_init(params);
 
     param_set_mask(params, SNDRV_PCM_HW_PARAM_ACCESS,
@@ -2003,7 +2023,7 @@ status_t ALSADevice::openProxyDevice()
             mProxyParams.mProxyPcmHandle->period_size);
     param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 16);
     param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS,
-            mProxyParams.mProxyPcmHandle->channels - 1 ? 32 : 16);
+            mProxyParams.mProxyPcmHandle->channels * 16);
     param_set_int(params, SNDRV_PCM_HW_PARAM_CHANNELS,
             mProxyParams.mProxyPcmHandle->channels);
     param_set_int(params, SNDRV_PCM_HW_PARAM_RATE,
@@ -2035,14 +2055,12 @@ status_t ALSADevice::openProxyDevice()
 
    sparams->tstamp_mode = SNDRV_PCM_TSTAMP_NONE;
    sparams->period_step = 1;
-   sparams->avail_min = (mProxyParams.mProxyPcmHandle->flags & PCM_MONO) ?
-           mProxyParams.mProxyPcmHandle->period_size/2
-           : mProxyParams.mProxyPcmHandle->period_size/4;
+   sparams->avail_min =
+           mProxyParams.mProxyPcmHandle->period_size/(2*channels);
    sparams->start_threshold = 1;
    sparams->stop_threshold = mProxyParams.mProxyPcmHandle->buffer_size;
-   sparams->xfer_align = (mProxyParams.mProxyPcmHandle->flags & PCM_MONO) ?
-           mProxyParams.mProxyPcmHandle->period_size/2
-           : mProxyParams.mProxyPcmHandle->period_size/4; /* needed for old kernels */
+   sparams->xfer_align =
+           mProxyParams.mProxyPcmHandle->period_size/(2*channels);
    sparams->silence_size = 0;
    sparams->silence_threshold = 0;
 
@@ -2175,6 +2193,8 @@ status_t ALSADevice::openCapture(alsa_handle_t *handle,
         flags |= PCM_QUAD;
     else if (handle->channels == 6)
         flags |= PCM_5POINT1;
+    else if (handle->channels == 8)
+        flags |= PCM_7POINT1;
     else
         flags |= PCM_STEREO;
 
@@ -2343,6 +2363,9 @@ status_t ALSADevice::setCaptureSoftwareParams(alsa_handle_t *handle,
     } else if (flags & PCM_5POINT1) {
         params->avail_min = pcm->period_size/12;
         params->xfer_align = pcm->period_size/12;
+    } else if (flags & PCM_7POINT1) {
+        params->avail_min = pcm->period_size/16;
+        params->xfer_align = pcm->period_size/16;
     } else {
         params->avail_min = pcm->period_size/4;
         params->xfer_align = pcm->period_size/4;
