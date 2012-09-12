@@ -3744,6 +3744,7 @@ SectionDevice
 		'RX1 MIX1 INP1':0:RX1
 		'EAR PA Gain':0:POS_2_DB
 		'DAC1 Switch':1:1
+		'RX1 Digital Volume':1:68
 	EndSequence
 
 	DisableSequence
@@ -3766,6 +3767,7 @@ SectionDevice
 		'RX1 MIX1 INP1':0:RX1
 		'EAR PA Gain':0:POS_2_DB
 		'DAC1 Switch':1:1
+		'RX1 Digital Volume':1:68
 	EndSequence
 
 	DisableSequence
@@ -3787,6 +3789,7 @@ SectionDevice
 		'RX1 MIX1 INP1':0:RX1
 		'EAR PA Gain':0:POS_2_DB
 		'DAC1 Switch':1:1
+		'RX1 Digital Volume':1:68
 	EndSequence
 
 	DisableSequence
@@ -3811,6 +3814,7 @@ SectionDevice
                 'ANC Slot':1:1
                 'ANC1 MUX':0:DMIC1
                 'MICBIAS1 CAPLESS Switch':1:1
+		'RX1 Digital Volume':1:68
 	EndSequence
 
 	DisableSequence
@@ -3841,6 +3845,10 @@ SectionDevice
                 'LINEOUT2 Volume':1:66
                 'LINEOUT3 Volume':1:66
                 'LINEOUT4 Volume':1:66
+		'RX3 Digital Volume':1:68
+		'RX4 Digital Volume':1:68
+		'RX5 Digital Volume':1:68
+		'RX6 Digital Volume':1:68
 	EndSequence
 
 	DisableSequence
@@ -3883,8 +3891,6 @@ SectionDevice
 		'HPHR DAC Switch':1:0
 		'HPHL Volume':1:0
 		'HPHR Volume':1:0
-		'RX1 Digital Volume':1:0
-		'RX2 Digital Volume':1:0
 	EndSequence
 
 	ACDBID	10:1
@@ -3916,8 +3922,6 @@ SectionDevice
 		'HPHR DAC Switch':1:0
 		'HPHL Volume':1:0
 		'HPHR Volume':1:0
-		'RX1 Digital Volume':1:0
-		'RX2 Digital Volume':1:0
 	EndSequence
 
 	ACDBID	10:1
@@ -3945,6 +3949,12 @@ SectionDevice
 		'HPHR DAC Switch':1:1
 		'HPHL Volume':1:80
 		'HPHR Volume':1:80
+		'RX1 Digital Volume':1:68
+		'RX2 Digital Volume':1:68
+		'RX3 Digital Volume':1:68
+		'RX4 Digital Volume':1:68
+		'RX5 Digital Volume':1:68
+		'RX6 Digital Volume':1:68
 	EndSequence
 
 	DisableSequence
@@ -3990,8 +4000,8 @@ SectionDevice
 		'HPHR DAC Switch':1:1
 		'HPHL Volume':1:70
 		'HPHR Volume':1:70
-		'RX1 Digital Volume':1:65
-		'RX2 Digital Volume':1:65
+		'RX1 Digital Volume':1:68
+		'RX2 Digital Volume':1:68
 		'ANC Slot':1:0
 		'ANC1 MUX':0:ADC4
 		'ANC2 MUX':0:ADC3
@@ -4000,6 +4010,10 @@ SectionDevice
 		'ADC4 Volume':1:85
 		'MICBIAS3 CAPLESS Switch':1:1
 		'MICBIAS1 CAPLESS Switch':1:1
+		'RX3 Digital Volume':1:68
+		'RX4 Digital Volume':1:68
+		'RX5 Digital Volume':1:68
+		'RX6 Digital Volume':1:68
 	EndSequence
 
 	DisableSequence
@@ -4017,8 +4031,6 @@ SectionDevice
 		'HPHR DAC Switch':1:0
 		'HPHL Volume':1:0
 		'HPHR Volume':1:0
-		'RX1 Digital Volume':1:0
-		'RX2 Digital Volume':1:0
 		'ANC1 MUX':0:ZERO
 		'ANC2 MUX':0:ZERO
 		'ADC3 Volume':1:0
@@ -4045,8 +4057,8 @@ SectionDevice
 		'HPHR DAC Switch':1:1
 		'HPHL Volume':1:70
 		'HPHR Volume':1:70
-		'RX1 Digital Volume':1:65
-		'RX2 Digital Volume':1:65
+		'RX1 Digital Volume':1:68
+		'RX2 Digital Volume':1:68
 		'ANC Slot':1:0
 		'ANC1 MUX':0:ADC4
 		'ANC2 MUX':0:ADC3
@@ -4064,8 +4076,6 @@ SectionDevice
 		'HPHR DAC Switch':1:0
 		'HPHL Volume':1:0
 		'HPHR Volume':1:0
-		'RX1 Digital Volume':1:0
-		'RX2 Digital Volume':1:0
 		'ANC1 MUX':0:ZERO
 		'ANC2 MUX':0:ZERO
 		'ADC3 Volume':1:0
@@ -4092,8 +4102,8 @@ SectionDevice
 		'HPHR DAC Switch':1:1
 		'HPHL Volume':1:70
 		'HPHR Volume':1:70
-		'RX1 Digital Volume':1:65
-		'RX2 Digital Volume':1:65
+		'RX1 Digital Volume':1:68
+		'RX2 Digital Volume':1:68
 		'ANC Slot':1:0
 		'ANC1 MUX':0:ADC4
 		'ANC2 MUX':0:ADC3
@@ -4111,8 +4121,6 @@ SectionDevice
 		'HPHR DAC Switch':1:0
 		'HPHL Volume':1:0
 		'HPHR Volume':1:0
-		'RX1 Digital Volume':1:0
-		'RX2 Digital Volume':1:0
 		'ANC1 MUX':0:ZERO
 		'ANC2 MUX':0:ZERO
 		'ADC3 Volume':1:0
@@ -4140,6 +4148,10 @@ SectionDevice
                 'LINEOUT2 Volume':1:66
                 'LINEOUT3 Volume':1:66
                 'LINEOUT4 Volume':1:66
+		'RX3 Digital Volume':1:68
+		'RX4 Digital Volume':1:68
+		'RX5 Digital Volume':1:68
+		'RX6 Digital Volume':1:68
 	EndSequence
 
 	DisableSequence
@@ -4829,8 +4841,6 @@ SectionDevice
 		'HPHR DAC Switch':1:0
 		'HPHL Volume':1:0
 		'HPHR Volume':1:0
-		'RX1 Digital Volume':1:0
-		'RX2 Digital Volume':1:0
 	EndSequence
 
 	ACDBID	10:1
@@ -4869,8 +4879,6 @@ SectionDevice
 		'HPHR DAC Switch':1:0
 		'HPHL Volume':1:0
 		'HPHR Volume':1:0
-		'RX1 Digital Volume':1:0
-		'RX2 Digital Volume':1:0
 		'ANC1 MUX':0:ZERO
 		'ANC2 MUX':0:ZERO
 		'ADC3 Volume':1:0
@@ -4975,8 +4983,6 @@ SectionDevice
 		'HPHR DAC Switch':1:0
 		'HPHL Volume':1:0
 		'HPHR Volume':1:0
-		'RX1 Digital Volume':1:0
-		'RX2 Digital Volume':1:0
 		'ANC1 MUX':0:ZERO
 		'ANC2 MUX':0:ZERO
 		'ADC3 Volume':1:0
@@ -5052,6 +5058,7 @@ SectionDevice
 		'RX1 MIX1 INP1':0:RX1
 		'EAR PA Gain':0:POS_2_DB
 		'DAC1 Switch':1:1
+		'RX1 Digital Volume':1:68
 	EndSequence
 
 	DisableSequence
@@ -5078,6 +5085,10 @@ SectionDevice
 		'LINEOUT2 Volume':1:66
 		'LINEOUT3 Volume':1:66
 		'LINEOUT4 Volume':1:66
+		'RX3 Digital Volume':1:68
+		'RX4 Digital Volume':1:68
+		'RX5 Digital Volume':1:68
+		'RX6 Digital Volume':1:68
 	EndSequence
 
 	DisableSequence
@@ -5119,8 +5130,6 @@ SectionDevice
 		'HPHR DAC Switch':1:0
 		'HPHL Volume':1:0
 		'HPHR Volume':1:0
-		'RX1 Digital Volume':1:0
-		'RX2 Digital Volume':1:0
 	EndSequence
 
 	ACDBID	10:1
@@ -5148,6 +5157,12 @@ SectionDevice
 		'HPHR DAC Switch':1:1
 		'HPHL Volume':1:80
 		'HPHR Volume':1:80
+		'RX1 Digital Volume':1:68
+		'RX2 Digital Volume':1:68
+		'RX3 Digital Volume':1:68
+		'RX4 Digital Volume':1:68
+		'RX5 Digital Volume':1:68
+		'RX6 Digital Volume':1:68
 	EndSequence
 
 	DisableSequence
@@ -5192,8 +5207,8 @@ SectionDevice
 		'HPHR DAC Switch':1:1
 		'HPHL Volume':1:70
 		'HPHR Volume':1:70
-		'RX1 Digital Volume':1:65
-		'RX2 Digital Volume':1:65
+		'RX1 Digital Volume':1:68
+		'RX2 Digital Volume':1:68
 		'ANC Slot':1:0
 		'ANC1 MUX':0:ADC4
 		'ANC2 MUX':0:ADC3
@@ -5202,6 +5217,10 @@ SectionDevice
 		'ADC4 Volume':1:85
 		'MICBIAS3 CAPLESS Switch':1:1
 		'MICBIAS1 CAPLESS Switch':1:1
+		'RX3 Digital Volume':1:68
+		'RX4 Digital Volume':1:68
+		'RX5 Digital Volume':1:68
+		'RX6 Digital Volume':1:68
 	EndSequence
 
 	DisableSequence
@@ -5219,8 +5238,6 @@ SectionDevice
 		'HPHR DAC Switch':1:0
 		'HPHL Volume':1:0
 		'HPHR Volume':1:0
-		'RX1 Digital Volume':1:0
-		'RX2 Digital Volume':1:0
 		'ANC1 MUX':0:ZERO
 		'ANC2 MUX':0:ZERO
 		'ADC3 Volume':1:0
@@ -5246,8 +5263,8 @@ SectionDevice
 		'HPHR DAC Switch':1:1
 		'HPHL Volume':1:70
 		'HPHR Volume':1:70
-		'RX1 Digital Volume':1:65
-		'RX2 Digital Volume':1:65
+		'RX1 Digital Volume':1:68
+		'RX2 Digital Volume':1:68
 		'ANC Slot':1:0
 		'ANC1 MUX':0:ADC4
 		'ANC2 MUX':0:ADC3
@@ -5265,8 +5282,6 @@ SectionDevice
 		'HPHR DAC Switch':1:0
 		'HPHL Volume':1:0
 		'HPHR Volume':1:0
-		'RX1 Digital Volume':1:0
-		'RX2 Digital Volume':1:0
 		'ANC1 MUX':0:ZERO
 		'ANC2 MUX':0:ZERO
 		'ADC3 Volume':1:0
