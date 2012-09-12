@@ -100,7 +100,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     mInputBufferSize    = type ? TUNNEL_BUFFER_SIZE : LPA_BUFFER_SIZE;
     mInputBufferCount   = BUFFER_COUNT;
     mEfd = -1;
-    mEosEventReceived   =false;
+    mEosEventReceived   = false;
     mEventThread        = NULL;
     mEventThreadAlive   = false;
     mKillEventThread    = false;
@@ -572,6 +572,7 @@ status_t AudioSessionOutALSA::drain()
 status_t AudioSessionOutALSA::flush()
 {
     Mutex::Autolock autoLock(mLock);
+    ALOGV("AudioSessionOutALSA flush");
     int err;
     {
         Mutex::Autolock autoLockEmptyQueue(mEmptyQueueMutex);
@@ -636,7 +637,7 @@ status_t AudioSessionOutALSA::stop()
         }
     }
 
-    reset();
+    ALOGV("stop -");
 
     return NO_ERROR;
 }
@@ -791,9 +792,11 @@ void AudioSessionOutALSA::reset() {
     requestAndWaitForEventThreadExit();
 
     if(mAlsaHandle) {
+        ALOGV("closeDevice mAlsaHandle");
         closeDevice(mAlsaHandle);
         mAlsaHandle = NULL;
     }
+    ALOGV("Erase device list");
     for(ALSAHandleList::iterator it = mParent->mDeviceList.begin();
             it != mParent->mDeviceList.end(); ++it) {
         if((!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
@@ -805,6 +808,7 @@ void AudioSessionOutALSA::reset() {
            (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_LPA,
                             strlen(SND_USE_CASE_MOD_PLAY_LPA)))) {
             mParent->mDeviceList.erase(it);
+            break;
         }
     }
     mParent->mLock.unlock();
