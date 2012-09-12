@@ -679,7 +679,7 @@ void AudioBroadcastStreamALSA::setRoutingFlagsBasedOnConfig()
         } else {
             if(mFormat == AudioSystem::AC3 || mFormat == AudioSystem::AC3_PLUS ||
                mFormat == AudioSystem::AAC || mFormat == AudioSystem::HE_AAC_V1 ||
-               mFormat == AudioSystem::HE_AAC_V2) {
+               mFormat == AudioSystem::HE_AAC_V2 || mFormat == AudioSystem::EAC3) {
                 mUseMS11Decoder = true;
                 mRoutePCMMChToDSP = true;
                 if(mAudioSource == QCOM_AUDIO_SOURCE_HDMI_IN)
