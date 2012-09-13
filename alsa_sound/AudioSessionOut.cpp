@@ -117,8 +117,6 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
 
     if(devices & AudioSystem::DEVICE_OUT_ALL_A2DP) {
         ALOGE("Set Capture from proxy true");
-        devices  &= ~AudioSystem::DEVICE_OUT_ALL_A2DP;
-        devices |=  AudioSystem::DEVICE_OUT_PROXY;
         mParent->mRouteAudioToA2dp = true;
     }
 
@@ -763,8 +761,6 @@ status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
         if(device) {
             ALOGV("setParameters(): keyRouting with device %d", device);
             if(device & AudioSystem::DEVICE_OUT_ALL_A2DP) {
-                device &= ~AudioSystem::DEVICE_OUT_ALL_A2DP;
-                device |=  AudioSystem::DEVICE_OUT_PROXY;
                 mParent->mRouteAudioToA2dp = true;
                 ALOGD("setParameters(): A2DP device %d", device);
             }

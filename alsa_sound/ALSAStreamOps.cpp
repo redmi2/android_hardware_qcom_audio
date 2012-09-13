@@ -198,8 +198,6 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
         if(device) {
             ALOGD("setParameters(): keyRouting with device %d", device);
             if(device & AudioSystem::DEVICE_OUT_ALL_A2DP) {
-                device &= ~AudioSystem::DEVICE_OUT_ALL_A2DP;
-                device |=  AudioSystem::DEVICE_OUT_PROXY;
                 mParent->mRouteAudioToA2dp = true;
                 ALOGD("setParameters(): A2DP device %d", device);
             }
