@@ -534,6 +534,8 @@ private:
     SoftMS11           *mMS11Decoder;
     AudioBitstreamSM   *mBitstreamSM;
     AudioEventObserver *mObserver;
+    output_metadata_handle_t mOutputMetadataTunnel;
+    uint32_t            mOutputMetadataLength;
 
     status_t            openPcmDevice(int devices);
     status_t            openDevice(char *pUseCase, bool bIsUseCase, int devices);
@@ -557,6 +559,7 @@ private:
     status_t            pause_l();
     status_t            resume_l();
     void                reset();
+    void                updateMetaData(size_t bytes);
     uint32_t            channelMapToChannels(uint32_t channelMap);
     //Structure to hold mem buffer information
     class BuffersAllocated {
