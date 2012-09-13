@@ -430,18 +430,17 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                 return 0;
             } else {
                 struct snd_compr_audio_info *header = (struct snd_compr_audio_info *) buffer;
-                uint32_t data_offset = header->reserved[0];
                 if (header->frame_size > 0) {
-                    if (sizeof(*header) + data_offset + header->frame_size > period_size) {
+                    if (sizeof(*header) + header->reserved[0] + header->frame_size > period_size) {
                         ALOGE("AMR WB read buffer overflow. Assign bigger buffer size");
-                        header->frame_size = period_size - sizeof(*header) - data_offset;
+                        header->frame_size = period_size - sizeof(*header) - header->reserved[0];
                     }
                     read += header->frame_size;
                     read_pending -= header->frame_size;
                     ALOGV("buffer: %p, data offset: %p, header size: %u, reserved[0]: %u",
-                            buffer, ((uint8_t*)buffer) + sizeof(*header) + data_offset,
-                            sizeof(*header), data_offset);
-                    memmove(buffer, ((uint8_t*)buffer) + sizeof(*header) + data_offset, header->frame_size);
+                            buffer, ((uint8_t*)buffer) + sizeof(*header) + header->reserved[0],
+                            sizeof(*header), header->reserved[0]);
+                    memmove(buffer, ((uint8_t*)buffer) + sizeof(*header) + header->reserved[0], header->frame_size);
                     buffer += header->frame_size;
                 } else {
                     ALOGW("pcm_read() with zero frame size");
