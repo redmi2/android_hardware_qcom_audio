@@ -587,7 +587,7 @@ status_t ALSADevice::open(alsa_handle_t *handle)
     }
     handle->handle = pcm_open(flags, (char*)devName);
     ALOGE("s_open: opening ALSA device '%s'", devName);
-    if (!handle->handle) {
+    if (handle->handle->fd < 0) {
         ALOGE("s_open: Failed to initialize ALSA device '%s'", devName);
         free(devName);
         return NO_INIT;
