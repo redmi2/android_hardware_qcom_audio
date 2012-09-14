@@ -238,7 +238,7 @@ String8 ALSAStreamOps::getParameters(const String8& keys)
         param.addInt(key, (int)mDevices);
     }
     else {
-#ifdef QCOM_VOIP_ENABLED
+#ifdef QCOM_QCHAT_ENABLED
         key = String8(AudioParameter::keyVoipCheck);
         if (param.get(key, value) == NO_ERROR) {
             if((!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL, strlen(SND_USE_CASE_VERB_IP_VOICECALL))) ||
