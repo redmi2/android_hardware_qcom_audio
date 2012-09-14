@@ -293,10 +293,11 @@ void AudioPolicyManager::setPhoneState(int state)
     }
 
     // check for device and output changes triggered by new phone state
-    newDevice = getNewDevice(mPrimaryOutput, false /*fromCache*/);
+    // Need to update A2DP suspend first then getNewDevice(from cache)
     checkA2dpSuspend();
     checkOutputForAllStrategies();
     updateDeviceForStrategy();
+    newDevice = getNewDevice(mPrimaryOutput, true /*fromCache*/);
 
     AudioOutputDescriptor *hwOutputDesc = mOutputs.valueFor(mPrimaryOutput);
 
