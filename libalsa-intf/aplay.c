@@ -43,6 +43,16 @@
 
 #define FORMAT_PCM 1
 #define LOG_NDEBUG 1
+
+struct output_metadata_handle_t {
+    uint32_t            metadataLength;
+    uint32_t            bufferLength;
+    uint64_t            timestamp;
+    uint32_t            reserved[12];
+};
+
+static struct output_metadata_handle_t outputMetadataTunnel;
+
 static pcm_flag = 1;
 static debug = 0;
 static uint32_t play_max_sz = 2147483648LL;
@@ -51,6 +61,8 @@ static int period = 0;
 static int compressed = 0;
 static char *compr_codec;
 static int piped = 0;
+static int outputMetadataLength = 0;
+static int eosSet = 0;
 
 static struct option long_options[] =
 {
@@ -82,6 +94,13 @@ struct wav_header {
     uint32_t data_sz;
 };
 
+
+void updateMetaData(size_t bytes) {
+   outputMetadataTunnel.metadataLength = sizeof(outputMetadataTunnel);
+   outputMetadataTunnel.timestamp = 0;
+   outputMetadataTunnel.bufferLength =  bytes;
+   fprintf(stderr, "bytes = %d\n", bytes);
+}
 static int set_params(struct pcm *pcm)
 {
      struct snd_pcm_hw_params *params;
@@ -248,6 +267,7 @@ static int play_file(unsigned rate, unsigned channels, int fd,
           pcm_close(pcm);
           return -errno;
        }
+       outputMetadataLength = sizeof(struct output_metadata_handle_t);
     }
     pcm->channels = channels;
     pcm->rate = rate;
@@ -359,13 +379,20 @@ static int play_file(unsigned rate, unsigned channels, int fd,
                      frames = remainingData / (2*channels);
                  }
              }
+             fprintf(stderr, "addr = %d, size = %d \n", (dst_addr + outputMetadataLength),(bufsize - outputMetadataLength));
+             err = read(fd, (dst_addr + outputMetadataLength) , (bufsize - outputMetadataLength));
+             if(compressed) {
+                 updateMetaData(err);
+                 memcpy(dst_addr, &outputMetadataTunnel, outputMetadataLength);
+             }
 
-             err = read(fd, dst_addr , bufsize);
              if (debug)
                  fprintf(stderr, "read %d bytes from file\n", err);
-             if (err <= 0)
+             if (err <= 0 ) {
+                 fprintf(stderr," EOS set\n ");
+                 eosSet = 1;
                  break;
-
+             }
              if (data_sz && !piped) {
                  remainingData -= bufsize;
                  if (remainingData <= 0)
@@ -425,6 +452,7 @@ static int play_file(unsigned rate, unsigned channels, int fd,
 start_done:
                 offset += frames;
         }
+
         while(1) {
             pcm->sync_ptr->flags = SNDRV_PCM_SYNC_PTR_APPL | SNDRV_PCM_SYNC_PTR_AVAIL_MIN;//SNDRV_PCM_SYNC_PTR_HWSYNC;
             sync_ptr(pcm);
@@ -436,6 +464,14 @@ start_done:
                 fprintf(stderr, "Aplay:sync_ptr->s.status.hw_ptr %ld  sync_ptr->c.control.appl_ptr %ld\n",
                            pcm->sync_ptr->s.status.hw_ptr,
                            pcm->sync_ptr->c.control.appl_ptr);
+
+                if(compressed && eosSet) {
+                    fprintf(stderr,"Audio Drain DONE ++\n");
+                    if ( ioctl(pcm->fd, SNDRV_COMPRESS_DRAIN) < 0 ) {
+                        fprintf(stderr,"Audio Drain failed\n");
+                    }
+                    fprintf(stderr,"Audio Drain DONE --\n");
+                }
                 break;
             } else
                 poll(pfd, nfds, TIMEOUT_INFINITE);
