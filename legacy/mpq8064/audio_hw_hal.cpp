@@ -382,6 +382,49 @@ static ssize_t broadcast_write(struct audio_broadcast_stream *stream, const void
         reinterpret_cast<struct qcom_broadcast_stream *>(stream);
     return out->qcom_out->write(buffer, bytes, timestamp, audiotype);
 }
+static int broadcast_set_avsync_window(struct audio_broadcast_stream *stream,
+                        int windowId, int ws_msw, int ws_lsw, int we_msw, int we_lsw)
+{
+    ALOGE("broadcast_set_avsync_window enter");
+
+    struct qcom_broadcast_stream *out =
+        reinterpret_cast<struct qcom_broadcast_stream *>(stream);
+    ALOGE("broadcast_set_avsync_window calling hal");
+    return out->qcom_out->setAvsyncWindow(windowId, ws_msw, ws_lsw, we_msw, we_lsw);
+}
+
+static int broadcast_get_avsync_session_time(struct audio_broadcast_stream *stream,
+                        int *session_msw, int *session_lsw, int *absolute_msw, int *absolute_lsw)
+{
+    ALOGE("broadcast_get_avsync_sessiontime enter");
+
+    struct qcom_broadcast_stream *out =
+        reinterpret_cast<struct qcom_broadcast_stream *>(stream);
+    ALOGE("broadcast_get_avsync_sessiontime calling hal");
+    return out->qcom_out->getAvsyncSessionTime(session_msw, session_lsw, absolute_msw, absolute_lsw);
+}
+
+static int broadcast_get_avsync_inst_statistics(struct audio_broadcast_stream *stream,
+                        audio_avsync_statistics_t *st )
+{
+    ALOGE("broadcast_get_avsync_inst_statistics enter");
+
+    struct qcom_broadcast_stream *out =
+        reinterpret_cast<struct qcom_broadcast_stream *>(stream);
+    ALOGE("broadcast_get_avsync_inst_statistics calling hal");
+    return out->qcom_out->getAvsyncInstStatistics(st);
+}
+
+static int broadcast_get_avsync_cumu_statistics(struct audio_broadcast_stream *stream,
+                        audio_avsync_statistics_t *st )
+{
+    ALOGE("broadcast_get_avsync_cumu_statistics enter");
+
+    struct qcom_broadcast_stream *out =
+        reinterpret_cast<struct qcom_broadcast_stream *>(stream);
+    ALOGE("broadcast_get_avsync_cumu_statistics calling hal");
+    return out->qcom_out->getAvsyncCumuStatistics(st);
+}
 
 /** audio_stream_in implementation **/
 static uint32_t in_get_sample_rate(const struct audio_stream *stream)
@@ -804,7 +847,10 @@ static int adev_open_broadcast_stream(struct audio_hw_device *dev,
     out->stream.write = broadcast_write;
     out->stream.start = broadcast_start;
     out->stream.mute  = broadcast_mute;
-
+    out->stream.set_avsync_window = broadcast_set_avsync_window;
+    out->stream.get_avsync_session_time = broadcast_get_avsync_session_time;
+    out->stream.get_avsync_inst_statistics = broadcast_get_avsync_inst_statistics;
+    out->stream.get_avsync_cumu_statistics = broadcast_get_avsync_cumu_statistics;
     *stream_out = &out->stream;
     return 0;
 
