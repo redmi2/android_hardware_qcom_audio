@@ -727,7 +727,11 @@ status_t AudioHardwareALSA::doRouting(int device)
                 if((!strncmp(it->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO,
                             strlen(SND_USE_CASE_VERB_DIGITAL_RADIO))) ||
                   (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_FM,
-                            strlen(SND_USE_CASE_MOD_PLAY_FM)))) {
+                            strlen(SND_USE_CASE_MOD_PLAY_FM)))||
+                  (!strncmp(it->useCase, SND_USE_CASE_VERB_FM_REC,
+                            strlen(SND_USE_CASE_VERB_FM_REC)))||
+                  (!strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_FM,
+                            strlen(SND_USE_CASE_MOD_CAPTURE_FM)))){
                     err = startA2dpPlayback_l(AudioHardwareALSA::A2DPFm);
                     if(err) {
                         ALOGW("startA2dpPlayback_l for hardware output failed err = %d", err);
@@ -763,8 +767,11 @@ status_t AudioHardwareALSA::doRouting(int device)
                 if((!strncmp(it->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO,
                             strlen(SND_USE_CASE_VERB_DIGITAL_RADIO))) ||
                   (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_FM,
-                            strlen(SND_USE_CASE_MOD_PLAY_FM)))) {
-
+                            strlen(SND_USE_CASE_MOD_PLAY_FM)))||
+                  (!strncmp(it->useCase, SND_USE_CASE_VERB_FM_REC,
+                            strlen(SND_USE_CASE_VERB_FM_REC)))||
+                  (!strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_FM,
+                            strlen(SND_USE_CASE_MOD_CAPTURE_FM)))){
                     err = stopA2dpPlayback_l(AudioHardwareALSA::A2DPFm);
                 }
                 err = stopA2dpPlayback_l(AudioHardwareALSA::A2DPHardwareOutput);
