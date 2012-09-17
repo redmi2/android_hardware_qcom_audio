@@ -1342,7 +1342,7 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
              return strdup(SND_USE_CASE_DEV_PROXY_RX_SPEAKER); /* PROXY RX */
         } else if ((devices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET) ||
                   (devices & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)) {
-             return strdup(SND_USE_CASE_DEV_PROXY_RX); /* PROXY RX */
+             return strdup(SND_USE_CASE_DEV_USB_PROXY_RX); /* PROXY RX */
         } else if( (devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
                    (devices & AudioSystem::DEVICE_OUT_PROXY) &&
                    ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
@@ -1544,10 +1544,11 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
              else
                  return strdup(SND_USE_CASE_DEV_BTSCO_NB_TX); /* BTSCO TX*/
 #ifdef QCOM_USBAUDIO_ENABLED
-        } else if ((devices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) ||
-                   (devices & AudioSystem::DEVICE_IN_PROXY)) {
-            return strdup(SND_USE_CASE_DEV_PROXY_TX); /* PROXY TX */
+        } else if (devices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) {
+            return strdup(SND_USE_CASE_DEV_USB_PROXY_TX); /* PROXY TX */
 #endif
+        } else if (devices & AudioSystem::DEVICE_IN_PROXY) {
+            return strdup(SND_USE_CASE_DEV_PROXY_TX); /* PROXY TX */
         } else if ((devices & AudioSystem::DEVICE_IN_COMMUNICATION) ||
                    (devices & AudioSystem::DEVICE_IN_VOICE_CALL)) {
             /* Nothing to be done, use current active device */
