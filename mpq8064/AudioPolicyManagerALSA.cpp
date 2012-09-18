@@ -1119,6 +1119,107 @@ void AudioPolicyManager::checkA2dpSuspend()
         }
     }
 }
+float AudioPolicyManager::computeVolume(int stream,
+                                            int index,
+                                            audio_io_handle_t output,
+                                            audio_devices_t device)
+{
+    float volume = 1.0;
+    int is_mpq;
+    AudioOutputDescriptor *outputDesc = mOutputs.valueFor(output);
+    StreamDescriptor &streamDesc = mStreams[stream];
+    if (device == 0) {
+        device = outputDesc->device();
+    }
+    IS_TARGET_MPQ(is_mpq);
+    if (stream == AudioSystem::MUSIC &&
+        index != mStreams[stream].mIndexMin &&
+        (device == AUDIO_DEVICE_OUT_DGTL_DOCK_HEADSET ||
+         device == AUDIO_DEVICE_OUT_USB_ACCESSORY ||
+         device == AUDIO_DEVICE_OUT_USB_DEVICE)) {
+        return 1.0;
+    }
+    volume = volIndexToAmpl(device, streamDesc, index);
+    // if a headset is connected, apply the following rules to ring tones and notifications
+    // to avoid sound level bursts in user's ears:
+    // - always attenuate ring tones and notifications volume by 6dB
+    // - if music is playing, always limit the volume to current music volume,
+    // with a minimum threshold at -36dB so that notification is always perceived.
+    const routing_strategy stream_strategy = getStrategy((AudioSystem::stream_type)stream);
+    if ((device & (AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP |
+            AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES |
+            AudioSystem::DEVICE_OUT_WIRED_HEADSET |
+            AudioSystem::DEVICE_OUT_WIRED_HEADPHONE)) &&
+        ((stream_strategy == STRATEGY_SONIFICATION)
+                || (stream_strategy == STRATEGY_SONIFICATION_RESPECTFUL)
+                || (stream == AudioSystem::SYSTEM)) &&
+        streamDesc.mCanBeMuted) {
+        volume *= SONIFICATION_HEADSET_VOLUME_FACTOR;
+        // when the phone is ringing we must consider that music could have been paused just before
+        // by the music application and behave as if music was active if the last music track was
+        // just stopped
+        if (isStreamActive(AudioSystem::MUSIC, SONIFICATION_HEADSET_MUSIC_DELAY) ||
+                mLimitRingtoneVolume) {
+            float musicVol = computeVolume(AudioSystem::MUSIC,
+                               mStreams[AudioSystem::MUSIC].getVolumeIndex(device),
+                               output,
+                               device);
+            float minVol = (musicVol > SONIFICATION_HEADSET_VOLUME_MIN) ?
+                                musicVol : SONIFICATION_HEADSET_VOLUME_MIN;
+            if (volume > minVol) {
+                volume = minVol;
+                ALOGV("computeVolume limiting volume to %f musicVol %f", minVol, musicVol);
+            }
+        }
+    }
+    return volume;
+}
+float AudioPolicyManager::volIndexToAmpl(audio_devices_t device, const StreamDescriptor& streamDesc,
+        int indexInUi)
+{
+    device_category deviceCategory = getDeviceCategory(device);
+    const VolumeCurvePoint *curve = streamDesc.mVolumeCurve[deviceCategory];
+
+    // the volume index in the UI is relative to the min and max volume indices for this stream type
+    int nbSteps = 1 + curve[VOLMAX].mIndex -
+            curve[VOLMIN].mIndex;
+    int volIdx = (nbSteps * (indexInUi - streamDesc.mIndexMin)) /
+            (streamDesc.mIndexMax - streamDesc.mIndexMin);
+
+    // find what part of the curve this index volume belongs to, or if it's out of bounds
+    int segment = 0;
+    if (volIdx < curve[VOLMIN].mIndex) {         // out of bounds
+        return 0.0f;
+    } else if (volIdx < curve[VOLKNEE1].mIndex) {
+        segment = 0;
+    } else if (volIdx < curve[VOLKNEE2].mIndex) {
+        segment = 1;
+    } else if (volIdx <= curve[VOLMAX].mIndex) {
+        segment = 2;
+    } else {                                                               // out of bounds
+        return 1.0f;
+    }
+
+    // linear interpolation in the attenuation table in dB
+    float decibels = curve[segment].mDBAttenuation +
+            ((float)(volIdx - curve[segment].mIndex)) *
+                ( (curve[segment+1].mDBAttenuation -
+                        curve[segment].mDBAttenuation) /
+                    ((float)(curve[segment+1].mIndex -
+                            curve[segment].mIndex)) );
+
+    float amplification = exp( decibels * 0.115129f); // exp( dB * ln(10) / 20 )
+
+    ALOGVV("VOLUME vol index=[%d %d %d], dB=[%.1f %.1f %.1f] ampl=%.5f",
+            curve[segment].mIndex, volIdx,
+            curve[segment+1].mIndex,
+            curve[segment].mDBAttenuation,
+            decibels,
+            curve[segment+1].mDBAttenuation,
+            amplification);
+
+    return amplification;
+}
 
 audio_io_handle_t AudioPolicyManager::getA2dpOutput()
 {
