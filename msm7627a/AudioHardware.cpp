@@ -3402,26 +3402,10 @@ ssize_t AudioHardware::AudioSessionOutLPA::write(const void* buffer, size_t byte
     int err;
     ALOGV("write Empty Queue size() = %d, Filled Queue size() = %d ",
          mEmptyQueue.size(),mFilledQueue.size());
-
-    // 1.) Wait till a empty buffer is available in the Empty buffer queue
-    mEmptyQueueMutex.lock();
-    if (mEmptyQueue.empty()) {
-        ALOGV("Write: waiting on mWriteCv");
-        mLock.unlock();
-        mWriteCv.wait(mEmptyQueueMutex);
-        mLock.lock();
-        if (mSkipWrite) {
-            ALOGV("Write: Flushing the previous write buffer");
-            mSkipWrite = false;
-            mEmptyQueueMutex.unlock();
-            return 0;
-        }
-        ALOGV("Write: received a signal to wake up");
-    }
-
     //2.) Dequeue the buffer from empty buffer queue. Copy the data to be
     //    written into the buffer. Then Enqueue the buffer to the filled
     //    buffer queue
+    mEmptyQueueMutex.lock();
     List<BuffersAllocated>::iterator it = mEmptyQueue.begin();
     BuffersAllocated buf = *it;
     mEmptyQueue.erase(it);
@@ -3783,6 +3767,10 @@ void  AudioHardware::AudioSessionOutLPA::eventThreadEntry()
                 int nBytesConsumed = 0;
 
                 ALOGV("AUDIO_EVENT_SUSPEND received\n");
+                if (!mPaused) {
+                    ALOGV("Not in paused, no need to honor SUSPEND event");
+                    break;
+                }
                 // 1. Get the Byte count that is consumed
                 if ( ioctl(afd, AUDIO_GET_STATS, &stats)  < 0 ) {
                     ALOGE("AUDIO_GET_STATUS failed");
@@ -3972,6 +3960,50 @@ status_t AudioHardware::AudioSessionOutLPA::getRenderPosition(uint32_t *dspFrame
 {
     //TODO: enable when supported by driver
     return INVALID_OPERATION;
+}
+
+
+status_t AudioHardware::AudioSessionOutLPA::getBufferInfo(buf_info **buf) {
+
+    buf_info *tempbuf = (buf_info *)malloc(sizeof(buf_info) + mInputBufferCount*sizeof(int *));
+    ALOGV("Get buffer info");
+    tempbuf->bufsize = LPA_BUFFER_SIZE;
+    tempbuf->nBufs = mInputBufferCount;
+    tempbuf->buffers = (int **)((char*)tempbuf + sizeof(buf_info));
+    List<BuffersAllocated>::iterator it = mEmptyQueue.begin();
+    for (int i = 0; i < mInputBufferCount; i++) {
+        tempbuf->buffers[i] = (int *)it->memBuf;
+        it++;
+    }
+    *buf = tempbuf;
+    return NO_ERROR;
+}
+
+status_t AudioHardware::AudioSessionOutLPA::isBufferAvailable(int *isAvail) {
+
+    Mutex::Autolock autoLock(mLock);
+    ALOGV("isBufferAvailable Empty Queue size() = %d, Filled Queue size() = %d ",
+          mEmptyQueue.size(),mFilledQueue.size());
+
+    // 1.) Wait till a empty buffer is available in the Empty buffer queue
+    mEmptyQueueMutex.lock();
+    if (mEmptyQueue.empty()) {
+        ALOGV("Write: waiting on mWriteCv");
+        mLock.unlock();
+        mWriteCv.wait(mEmptyQueueMutex);
+        mLock.lock();
+        if (mSkipWrite) {
+            ALOGV("Write: Flushing the previous write buffer");
+            mSkipWrite = false;
+            mEmptyQueueMutex.unlock();
+            return NO_ERROR;
+        }
+        ALOGV("isBufferAvailable: received a signal to wake up");
+    }
+    mEmptyQueueMutex.unlock();
+
+    *isAvail = true;
+    return NO_ERROR;
 }
 
 // End AudioSessionOutLPA
