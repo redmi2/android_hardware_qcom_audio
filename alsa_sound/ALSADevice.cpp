@@ -54,7 +54,7 @@ ALSADevice::ALSADevice() {
     mPflag = false;
     mCallMode = AudioSystem::MODE_NORMAL;
     mInChannels = 0;
-    char value[128];
+    char value[128], platform[128], baseband[128];
 
     property_get("persist.audio.handset.mic",value,"0");
     strlcpy(mMicType, value, sizeof(mMicType));
@@ -63,6 +63,14 @@ ALSADevice::ALSADevice() {
         mFluenceMode = FLUENCE_MODE_BROADSIDE;
     } else {
         mFluenceMode = FLUENCE_MODE_ENDFIRE;
+    }
+    property_get("ro.board.platform", platform, "");
+    property_get("ro.baseband", baseband, "");
+    if (!strcmp("msm8960", platform) && !strcmp("sglte", baseband)) {
+        mIsSglte = true;
+    }
+    else {
+        mIsSglte = false;
     }
     strlcpy(mCurRxUCMDevice, "None", sizeof(mCurRxUCMDevice));
     strlcpy(mCurTxUCMDevice, "None", sizeof(mCurTxUCMDevice));
@@ -1483,13 +1491,23 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
                         !strncmp(mCurRxUCMDevice, SND_USE_CASE_DEV_SPEAKER,
                         (strlen(SND_USE_CASE_DEV_SPEAKER)+1)))) {
                         if (mFluenceMode == FLUENCE_MODE_ENDFIRE) {
-                            return strdup(SND_USE_CASE_DEV_SPEAKER_DUAL_MIC_ENDFIRE); /* DUALMIC EF TX */
+                            if (mIsSglte == false) {
+                                return strdup(SND_USE_CASE_DEV_SPEAKER_DUAL_MIC_ENDFIRE); /* DUALMIC EF TX */
+                            }
+                            else {
+                                return strdup(SND_USE_CASE_DEV_SPEAKER_DUAL_MIC_ENDFIRE_SGLTE); /* DUALMIC EF TX */
+                            }
                         } else if (mFluenceMode == FLUENCE_MODE_BROADSIDE) {
                             return strdup(SND_USE_CASE_DEV_SPEAKER_DUAL_MIC_BROADSIDE); /* DUALMIC BS TX */
                         }
                     } else {
                         if (mFluenceMode == FLUENCE_MODE_ENDFIRE) {
-                            return strdup(SND_USE_CASE_DEV_DUAL_MIC_ENDFIRE); /* DUALMIC EF TX */
+                            if (mIsSglte == false) {
+                                return strdup(SND_USE_CASE_DEV_DUAL_MIC_ENDFIRE); /* DUALMIC EF TX */
+                            }
+                            else {
+                                return strdup(SND_USE_CASE_DEV_DUAL_MIC_ENDFIRE_SGLTE); /* DUALMIC EF TX */
+                            }
                         } else if (mFluenceMode == FLUENCE_MODE_BROADSIDE) {
                             return strdup(SND_USE_CASE_DEV_DUAL_MIC_BROADSIDE); /* DUALMIC BS TX */
                         }
@@ -1501,9 +1519,19 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
                         ((rxDevice == NULL) &&
                         !strncmp(mCurRxUCMDevice, SND_USE_CASE_DEV_SPEAKER,
                         (strlen(SND_USE_CASE_DEV_SPEAKER)+1)))) {
-                            return strdup(SND_USE_CASE_DEV_SPEAKER_DUAL_MIC_STEREO); /* DUALMIC EF TX */
+                            if (mIsSglte == false) {
+                                return strdup(SND_USE_CASE_DEV_SPEAKER_DUAL_MIC_STEREO); /* DUALMIC EF TX */
+                            }
+                            else {
+                                return strdup(SND_USE_CASE_DEV_SPEAKER_DUAL_MIC_STEREO_SGLTE); /* DUALMIC EF TX */
+                            }
                     } else {
-                            return strdup(SND_USE_CASE_DEV_DUAL_MIC_HANDSET_STEREO); /* DUALMIC EF TX */
+                            if (mIsSglte == false) {
+                                return strdup(SND_USE_CASE_DEV_DUAL_MIC_HANDSET_STEREO); /* DUALMIC EF TX */
+                            }
+                            else {
+                                return strdup(SND_USE_CASE_DEV_DUAL_MIC_HANDSET_STEREO_SGLTE); /* DUALMIC EF TX */
+                            }
                     }
                 } else if ((mDevSettingsFlag & QMIC_FLAG) && (mInChannels == 1)) {
                     return strdup(SND_USE_CASE_DEV_QUAD_MIC);

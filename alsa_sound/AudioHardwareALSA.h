@@ -283,6 +283,7 @@ private:
     int mCallMode;
     struct mixer*  mMixer;
     int mInChannels;
+    bool mIsSglte;
 //   ALSAHandleList  *mDeviceList;
 
     struct proxy_params {
