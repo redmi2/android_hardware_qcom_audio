@@ -1222,6 +1222,10 @@ status_t AudioHardwareALSA::openA2dpOutput()
     uint32_t sampleRate = AFE_PROXY_SAMPLE_RATE;
     status_t status;
     ALOGV("openA2dpOutput");
+    struct audio_config config;
+    config.sample_rate = AFE_PROXY_SAMPLE_RATE;
+    config.channel_mask = AUDIO_CHANNEL_OUT_STEREO;
+    config.format = AUDIO_FORMAT_PCM_16_BIT;
 
     int rc = hw_get_module_by_class(AUDIO_HARDWARE_MODULE_ID, (const char*)"a2dp",
                                     (const hw_module_t**)&mod);
@@ -1235,9 +1239,8 @@ status_t AudioHardwareALSA::openA2dpOutput()
         ALOGE("couldn't open a2dp audio hw device");
         return NO_INIT;
     }
-    //TODO: Aviral
-    //status = mA2dpDevice->open_output_stream(mA2dpDevice, AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP,
-    //                                &format, &channels, &sampleRate, &mA2dpStream);
+    status = mA2dpDevice->open_output_stream(mA2dpDevice, 0, (audio_devices_t)AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP,
+                                    (audio_output_flags_t)AUDIO_OUTPUT_FLAG_NONE, &config, &mA2dpStream);
     if(status != NO_ERROR) {
         ALOGE("Failed to open output stream for a2dp: status %d", status);
     }
