@@ -583,7 +583,7 @@ private:
     Mutex mInputMemRequestMutex;
     Mutex mInputMemResponseMutex;
     Mutex mEventMutex;
-
+    Mutex mFrameCountMutex;
     Condition mWriteCv;
     Condition mEventCv;
     bool mKillEventThread;
