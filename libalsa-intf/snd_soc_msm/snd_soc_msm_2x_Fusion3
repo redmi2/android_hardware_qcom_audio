@@ -139,6 +139,38 @@ SectionVerb
 EndSection
 
 SectionVerb
+	Name "HiFiUSB PROXY Rx"
+
+	EnableSequence
+		'AFE_PCM_RX Audio Mixer MultiMedia1':1:1
+	EndSequence
+
+	DisableSequence
+		'AFE_PCM_RX Audio Mixer MultiMedia1':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 0
+	PlaybackPCM 0
+
+EndSection
+
+SectionVerb
+        Name "HiFiUSB PROXY Tx"
+
+        EnableSequence
+        EndSequence
+
+        DisableSequence
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 0
+        PlaybackPCM 0
+
+EndSection
+
+SectionVerb
         Name "HiFiPROXY Rx Speaker"
 
         EnableSequence
@@ -385,6 +417,38 @@ SectionVerb
 EndSection
 
 SectionVerb
+	Name "HiFi Low PowerUSB PROXY Rx"
+
+	EnableSequence
+		'AFE_PCM_RX Audio Mixer MultiMedia3':1:1
+	EndSequence
+
+	DisableSequence
+		'AFE_PCM_RX Audio Mixer MultiMedia3':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 0
+	PlaybackPCM 4
+
+EndSection
+
+SectionVerb
+        Name "HiFi Low PowerUSB PROXY Tx"
+
+        EnableSequence
+        EndSequence
+
+        DisableSequence
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 0
+        PlaybackPCM 4
+
+EndSection
+
+SectionVerb
         Name "HiFi Low PowerPROXY Rx Speaker"
 
         EnableSequence
@@ -548,6 +612,23 @@ SectionVerb
 	# ALSA PCMs
 	CapturePCM 0
 	PlaybackPCM 0
+
+EndSection
+
+SectionVerb
+        Name "HiFi RecUSB PROXY Tx"
+
+        EnableSequence
+                'MultiMedia1 Mixer AFE_PCM_TX':1:1
+        EndSequence
+
+        DisableSequence
+                'MultiMedia1 Mixer AFE_PCM_TX':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 0
+        PlaybackPCM 0
 
 EndSection
 
@@ -726,6 +807,53 @@ SectionVerb
 	CapturePCM 12
 
 EndSection
+
+SectionVerb
+	Name "Voice CallUSB PROXY Rx"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+                'Voice Stub Tx Mixer AFE_PCM_TX':1:0
+                'SLIMBUS_1_RX Mixer Voice Stub':1:0
+                'Voice Stub Tx Mixer SLIM_1_TX':1:0
+                'AFE_PCM_RX_Voice Mixer Voice Stub':1:0
+                'SLIMBUS_1_RX Port Mixer AFE_PCM_TX':1:0
+                'AFE_PCM_RX Port Mixer SLIM_1_TX':1:0
+                'SLIMBUS_3_RX_Voice Mixer Voice Stub':1:0
+                'SLIMBUS_3_RX Port Mixer AFE_PCM_RX':1:0
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 12
+	CapturePCM 12
+
+EndSection
+
+SectionVerb
+	Name "Voice CallUSB PROXY Tx"
+
+	EnableSequence
+                'Voice Stub Tx Mixer AFE_PCM_TX':1:1
+                'SLIMBUS_1_RX Mixer Voice Stub':1:1
+                'Voice Stub Tx Mixer SLIM_1_TX':1:1
+                'AFE_PCM_RX_Voice Mixer Voice Stub':1:1
+                'SLIMBUS_1_RX Port Mixer AFE_PCM_TX':1:1
+                'AFE_PCM_RX Port Mixer SLIM_1_TX':1:1
+                'SLIMBUS_3_RX_Voice Mixer Voice Stub':1:1
+                'SLIMBUS_3_RX Port Mixer AFE_PCM_RX':1:1
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 12
+	CapturePCM 12
+
+EndSection
+
 }
 SectionUseCase."Voice Call IP" {
 Comment "VOIP Call use case"
@@ -1087,6 +1215,22 @@ EndSection
 
 SectionVerb
         Name "HiFi TunnelPROXY Rx"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia4':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia4':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 9
+
+EndSection
+
+SectionVerb
+        Name "HiFi TunnelUSB PROXY Rx"
 
         EnableSequence
                 'AFE_PCM_RX Audio Mixer MultiMedia4':1:1
@@ -2881,6 +3025,36 @@ SectionDevice
 EndSection
 
 SectionDevice
+	Name "USB PROXY Rx"
+	Comment "USB PROXY Rx device"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	ACDBID	22:1
+	EffectsMixerCTL "SRS TruMedia"
+
+EndSection
+
+SectionDevice
+	Name "USB PROXY Tx"
+	Comment "PROXY Tx device"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	ACDBID	21:2
+	EffectsMixerCTL "SRS TruMedia"
+
+EndSection
+
+SectionDevice
 	Name "SSR QMIC"
 	Comment "Quad mic device for Surround Sound Recording"
 
@@ -3356,6 +3530,23 @@ SectionModifier
 EndSection
 
 SectionModifier
+	Name "Play MusicUSB PROXY Rx"
+
+	EnableSequence
+		'AFE_PCM_RX Audio Mixer MultiMedia1':1:1
+	EndSequence
+
+	DisableSequence
+		'AFE_PCM_RX Audio Mixer MultiMedia1':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 0
+	PlaybackPCM 0
+
+EndSection
+
+SectionModifier
 	Name "Play FM"
 
 	EnableSequence
@@ -3753,6 +3944,52 @@ SectionModifier
 EndSection
 
 SectionModifier
+	Name "Play VoiceUSB PROXY Rx"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+                'Voice Stub Tx Mixer AFE_PCM_TX':1:0
+                'SLIMBUS_1_RX Mixer Voice Stub':1:0
+                'Voice Stub Tx Mixer SLIM_1_TX':1:0
+                'AFE_PCM_RX_Voice Mixer Voice Stub':1:0
+                'SLIMBUS_1_RX Port Mixer AFE_PCM_TX':1:0
+                'AFE_PCM_RX Port Mixer SLIM_1_TX':1:0
+                'SLIMBUS_3_RX_Voice Mixer Voice Stub':1:0
+                'SLIMBUS_3_RX Port Mixer AFE_PCM_RX':1:0
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 12
+	CapturePCM 12
+
+EndSection
+
+SectionModifier
+	Name "Play VoiceUSB PROXY Tx"
+
+	EnableSequence
+		'Voice Stub Tx Mixer AFE_PCM_TX':1:1
+                'SLIMBUS_1_RX Mixer Voice Stub':1:1
+                'Voice Stub Tx Mixer SLIM_1_TX':1:1
+                'AFE_PCM_RX_Voice Mixer Voice Stub':1:1
+                'SLIMBUS_1_RX Port Mixer AFE_PCM_TX':1:1
+                'AFE_PCM_RX Port Mixer SLIM_1_TX':1:1
+                'SLIMBUS_3_RX_Voice Mixer Voice Stub':1:1
+                'SLIMBUS_3_RX Port Mixer AFE_PCM_RX':1:1
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 12
+	CapturePCM 12
+
+EndSection
+
+SectionModifier
 	Name "Capture Voice"
 
 	EnableSequence
@@ -3908,6 +4145,23 @@ SectionModifier
 	# ALSA PCMs
 	PlaybackPCM 3
 	CapturePCM 3
+
+EndSection
+
+SectionModifier
+        Name "Capture MusicUSB PROXY Tx"
+
+        EnableSequence
+                'MultiMedia1 Mixer AFE_PCM_TX':1:1
+        EndSequence
+
+        DisableSequence
+                'MultiMedia1 Mixer AFE_PCM_TX':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 0
+        PlaybackPCM 0
 
 EndSection
 
