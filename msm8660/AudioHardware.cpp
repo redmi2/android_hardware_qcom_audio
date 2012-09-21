@@ -931,6 +931,7 @@ AudioStreamOut* AudioHardware::openOutputStream(
             return mOutput;
         }
     }
+    return NULL;
 }
 
 
@@ -2736,7 +2737,7 @@ AudioHardware::AudioSessionOutLPA::~AudioSessionOutLPA()
     mWriteCv.signal();
 
     //TODO: This might need to be Locked using Parent lock
-//    reset();
+    reset();
     //standby();//TODO Do we really need standby?
 
 }
@@ -3121,7 +3122,7 @@ void  AudioHardware::AudioSessionOutLPA::eventThreadEntry()
         rc = ioctl(afd, AUDIO_GET_EVENT, &cur_pcmdec_event);
         ALOGE("pcm dec Event Thread rc = %d and errno is %d",rc, errno);
 
-        if ( (rc < 0) && (errno == ENODEV ) ) {
+        if ( (rc < 0) && ((errno == ENODEV) || (errno == EBADF)) ) {
             ALOGV("AUDIO__GET_EVENT called. Exit the thread");
             break;
         }
@@ -3157,8 +3158,6 @@ void  AudioHardware::AudioSessionOutLPA::eventThreadEntry()
                                 mObserver->postEOS(0);
                             }
                         }
-                        if (mPaused)
-                            continue;
                         break;
                     }
                 }
@@ -3225,15 +3224,18 @@ status_t AudioHardware::AudioSessionOutLPA::start( )
 
     ALOGV("LPA playback start");
     if (mPaused) {
+
+        if (ioctl(afd, AUDIO_PAUSE, 0) < 0) {
+            ALOGE("Resume:: LPA driver resume failed");
+            return UNKNOWN_ERROR;
+        }
+
         if (mSeeking) {
             mSeeking = false;
-	} else {
-            if (ioctl(afd, AUDIO_PAUSE, 0) < 0) {
-                ALOGE("Resume:: LPA driver resume failed");
-                return UNKNOWN_ERROR;
-            }
+        } else {
             mPaused = false;
         }
+
     } else {
 	 //get config, set config and AUDIO_START LPA driver
 	int sessionId = 0;
@@ -3343,32 +3345,37 @@ status_t AudioHardware::AudioSessionOutLPA::drain()
 status_t AudioHardware::AudioSessionOutLPA::flush()
 {
     ALOGV("LPA playback flush ");
-    Mutex::Autolock autoLock(mLock);
     int err;
 
     // 2.) Add all the available buffers to Empty Queue (Maintain order)
     mFilledQueueMutex.lock();
     mEmptyQueueMutex.lock();
-    List<BuffersAllocated>::iterator it = mBufPool.begin();
-    for (; it!=mBufPool.end(); ++it) {
-        memset(it->memBuf, 0x0, (*it).memBufsize);
-        mEmptyQueue.push_back(*it);
+    while (!mFilledQueue.empty()) {
+        List<BuffersAllocated>::iterator it = mFilledQueue.begin();
+        BuffersAllocated buf = *it;
+        buf.bytesToWrite = 0;
+        mEmptyQueue.push_back(buf);
         mFilledQueue.erase(it);
     }
     mEmptyQueueMutex.unlock();
     mFilledQueueMutex.unlock();
     ALOGV("Transferred all the buffers from Filled queue to "
           "Empty queue to handle seek");
-
+    mReachedEOS = false;
     if (!mPaused && !mEosEventReceived) {
+
+        if (ioctl(afd, AUDIO_PAUSE, 1) < 0) {
+            ALOGE("Audio Pause failed");
+            return UNKNOWN_ERROR;
+        }
         if (ioctl(afd, AUDIO_FLUSH, 0) < 0) {
             ALOGE("Audio Flush failed");
 	    return UNKNOWN_ERROR;
         }
-	mReachedEOS = false;
+
     } else {
          mSeeking = true;
-         timeStarted = 0; // needed
+         timeStarted = 0;
     }
     //4.) Skip the current write from the decoder and signal to the Write get
     //   the next set of data from the decoder
@@ -3407,9 +3414,10 @@ status_t  AudioHardware::AudioSessionOutLPA::getNextWriteTimestamp(int64_t *time
 void AudioHardware::AudioSessionOutLPA::reset()
 {
 	Routing_table* temp = NULL;
-    ALOGD("AudioSessionOutMSM8x60::reset()");
+    ALOGD("AudioSessionOutLPA::reset()");
 	requestAndWaitForEventThreadExit();
     status_t status = NO_ERROR;
+    bufferDeAlloc();
     temp = getNodeByStreamType(LPA_DECODE);
 
     if (temp == NULL) {
@@ -3443,6 +3451,7 @@ void AudioHardware::AudioSessionOutLPA::reset()
     //Close the LPA driver
     ioctl(afd,AUDIO_STOP,0);
     ::close(afd);
+    ALOGD("AudioSessionOutLPA::reset() complete");
 }
 
 status_t AudioHardware::AudioSessionOutLPA::getRenderPosition(uint32_t *dspFrames)

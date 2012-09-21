@@ -61,8 +61,8 @@ using android::Condition;
 #define EQ_DISABLE      0x0000
 #define RX_IIR_ENABLE   0x0004
 #define RX_IIR_DISABLE  0x0000
-#define LPA_BUFFER_SIZE 256*1024
-#define BUFFER_COUNT 4
+#define LPA_BUFFER_SIZE 512*1024
+#define BUFFER_COUNT 2
 #define MONO_CHANNEL_MODE 1
 
 struct eq_filter_type {
