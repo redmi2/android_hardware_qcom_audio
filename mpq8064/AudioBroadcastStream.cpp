@@ -911,7 +911,7 @@ status_t AudioBroadcastStreamALSA::openPCMCapturePath()
     char *use_case;
 
     alsa_handle.module = mParent->mALSADevice;
-    alsa_handle.bufferSize = DEFAULT_IN_BUFFER_SIZE_PCM_PER_CHANNEL * mChannels;
+    alsa_handle.bufferSize = DEFAULT_IN_BUFFER_SIZE_BROADCAST_COMPRESSED;
     alsa_handle.devices = AudioSystem::DEVICE_IN_AUX_DIGITAL;
 //NOTE: what is the device ID that has to be set
     alsa_handle.activeDevice = AudioSystem::DEVICE_IN_AUX_DIGITAL;
@@ -929,11 +929,11 @@ status_t AudioBroadcastStreamALSA::openPCMCapturePath()
     if ((use_case == NULL) ||
         (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
              strlen(SND_USE_CASE_VERB_INACTIVE)))) {
-        strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_HIFI_REC2,
+        strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED,
                     sizeof(alsa_handle.useCase));
         bIsUseCaseSet = true;
     } else {
-        strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC2,
+        strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED,
                     sizeof(alsa_handle.useCase));
     }
     if(use_case)
@@ -1429,8 +1429,10 @@ void AudioBroadcastStreamALSA::captureThreadEntry()
                         write_l(bufPtr, frameSize);
                     }
                 } else {
-                    frameSize = size;
-                    mReadMetaData.frameSize = frameSize;
+                    updatePCMCaptureMetaData(tempBuffer);
+                    bufPtr = tempBuffer + COMPRE_CAPTURE_HEADER_SIZE +
+                                 mReadMetaData.dataOffset;
+                    frameSize = mReadMetaData.frameSize;
                     ALOGV("frameSize: %d", frameSize);
                     write_l(bufPtr, frameSize);
                 }
@@ -1826,6 +1828,27 @@ void AudioBroadcastStreamALSA::updateCaptureMetaData(char *buf)
    mReadMetaData.timestampLsw      = read4BytesFromBuffer(buf+32);
    mReadMetaData.flags             = read4BytesFromBuffer(buf+36);
    ALOGV("streamId: %d, formatId: %d, dataOffset: %d, frameSize: %d",
+           mReadMetaData.streamId, mReadMetaData.formatId,
+           mReadMetaData.dataOffset, mReadMetaData.frameSize);
+
+    ALOGV("timestampMsw: %d timestampLsw: %d", mReadMetaData.timestampMsw,
+            mReadMetaData.timestampLsw);
+    return;
+}
+
+void AudioBroadcastStreamALSA::updatePCMCaptureMetaData(char *buf)
+{
+    mReadMetaData.streamId          = 0;
+    mReadMetaData.formatId          = 0;
+    mReadMetaData.frameSize         = read4BytesFromBuffer(buf+0);
+    mReadMetaData.dataOffset        = read4BytesFromBuffer(buf+4);
+    mReadMetaData.commandOffset     = 0;
+    mReadMetaData.commandSize       = 0;
+    mReadMetaData.encodedPcmSamples = mReadMetaData.frameSize;
+    mReadMetaData.timestampMsw      = read4BytesFromBuffer(buf+8);
+    mReadMetaData.timestampLsw      = read4BytesFromBuffer(buf+12);
+    mReadMetaData.flags             = read4BytesFromBuffer(buf+16);
+    ALOGV("streamId: %d, formatId: %d, dataOffset: %d, frameSize: %d",
            mReadMetaData.streamId, mReadMetaData.formatId,
            mReadMetaData.dataOffset, mReadMetaData.frameSize);
 

@@ -782,6 +782,7 @@ private:
     void                exitFromCaptureThread();
     uint32_t            read4BytesFromBuffer(char *buf);
     void                updateCaptureMetaData(char *buf);
+    void                updatePCMCaptureMetaData(char *buf);
     // Playback
     void                setRoutingFlagsBasedOnConfig();
     void                setSpdifHdmiRoutingFlags(int devices);
