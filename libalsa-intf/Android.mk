@@ -19,6 +19,14 @@ LOCAL_SRC_FILES    := snd_soc_msm/snd_soc_msm_2x
 include $(BUILD_PREBUILT)
 
 include $(CLEAR_VARS)
+LOCAL_MODULE       := snd_soc_msm_2x_mpq
+LOCAL_MODULE_TAGS  := optional
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_PATH  := $(TARGET_OUT_ETC)/snd_soc_msm
+LOCAL_SRC_FILES    := snd_soc_msm/snd_soc_msm_2x_mpq
+include $(BUILD_PREBUILT)
+
+include $(CLEAR_VARS)
 LOCAL_MODULE       := snd_soc_msm_2x_Fusion3
 LOCAL_MODULE_TAGS  := optional
 LOCAL_MODULE_CLASS := ETC
@@ -56,6 +64,14 @@ LOCAL_MODULE_TAGS  := optional
 LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH  := $(TARGET_OUT_ETC)/snd_soc_msm
 LOCAL_SRC_FILES    := snd_soc_msm/snd_soc_msm_2x_auxpcm
+include $(BUILD_PREBUILT)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE       := snd_soc_msm_2x_mpq_auxpcm
+LOCAL_MODULE_TAGS  := optional
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_PATH  := $(TARGET_OUT_ETC)/snd_soc_msm
+LOCAL_SRC_FILES    := snd_soc_msm/snd_soc_msm_2x_mpq_auxpcm
 include $(BUILD_PREBUILT)
 
 include $(CLEAR_VARS)
