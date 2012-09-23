@@ -581,12 +581,16 @@ const char *use_case)
 
     if ((!strncmp(use_case, SND_USE_CASE_VERB_VOICECALL,
         strlen(SND_USE_CASE_VERB_VOICECALL))) ||
+        (!strncmp(use_case, SND_USE_CASE_VERB_SGLTECALL,
+        strlen(SND_USE_CASE_VERB_SGLTECALL))) ||
         (!strncmp(use_case, SND_USE_CASE_VERB_VOLTE,
         strlen(SND_USE_CASE_VERB_VOLTE))) ||
         (!strncmp(use_case, SND_USE_CASE_VERB_IP_VOICECALL,
         strlen(SND_USE_CASE_VERB_IP_VOICECALL))) ||
         (!strncmp(use_case, SND_USE_CASE_MOD_PLAY_VOICE,
         strlen(SND_USE_CASE_MOD_PLAY_VOICE))) ||
+        (!strncmp(use_case, SND_USE_CASE_MOD_PLAY_SGLTE,
+        strlen(SND_USE_CASE_MOD_PLAY_SGLTE))) ||
         (!strncmp(use_case, SND_USE_CASE_MOD_PLAY_VOLTE,
         strlen(SND_USE_CASE_MOD_PLAY_VOLTE))) ||
         (!strncmp(use_case, SND_USE_CASE_MOD_PLAY_VOIP,
