@@ -6893,6 +6893,146 @@ SectionModifier
 EndSection
 
 SectionModifier
+        Name "Play SGLTEHDMI"
+
+        EnableSequence
+        EndSequence
+
+        DisableSequence
+                'HDMI_RX_Voice Mixer SGLTE':1:0
+                'SGLTE_Tx Mixer SLIM_0_TX_SGLTE':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 13
+        capturePCM 13
+
+EndSection
+
+SectionModifier
+        Name "Play SGLTEHDMI Tx"
+
+        EnableSequence
+                'HDMI_RX_Voice Mixer SGLTE':1:1
+                'SGLTE_Tx Mixer SLIM_0_TX_SGLTE':1:1
+        EndSequence
+
+        DisableSequence
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 13
+        capturePCM 13
+
+EndSection
+
+SectionModifier
+        Name "Play SGLTEBT SCO Rx"
+
+        EnableSequence
+        EndSequence
+
+        DisableSequence
+                'Internal BTSCO SampleRate':0:8000
+                'INTERNAL_BT_SCO_RX_Voice Mixer SGLTE':1:0
+                'SGLTE_Tx Mixer INTERNAL_BT_SCO_TX_SGLTE':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 13
+        CapturePCM 13
+
+EndSection
+
+SectionModifier
+        Name "Play SGLTEBT SCO Tx"
+
+        EnableSequence
+                'Internal BTSCO SampleRate':0:8000
+                'INTERNAL_BT_SCO_RX_Voice Mixer SGLTE':1:1
+                'SGLTE_Tx Mixer INTERNAL_BT_SCO_TX_SGLTE':1:1
+        EndSequence
+
+        DisableSequence
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 13
+        CapturePCM 13
+
+EndSection
+
+SectionModifier
+        Name "Play SGLTEBT SCO WB Rx"
+
+        EnableSequence
+        EndSequence
+
+        DisableSequence
+                'Internal BTSCO SampleRate':0:16000
+                'INTERNAL_BT_SCO_RX_Voice Mixer SGLTE':1:0
+                'SGLTE_Tx Mixer INTERNAL_BT_SCO_TX_SGLTE':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 13
+        CapturePCM 13
+
+EndSection
+
+SectionModifier
+        Name "Play SGLTEBT SCO WB Tx"
+
+        EnableSequence
+                'Internal BTSCO SampleRate':0:16000
+                'INTERNAL_BT_SCO_RX_Voice Mixer SGLTE':1:1
+                'SGLTE_Tx Mixer INTERNAL_BT_SCO_TX_SGLTE':1:1
+        EndSequence
+
+        DisableSequence
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 13
+        CapturePCM 13
+
+EndSection
+
+SectionModifier
+        Name "Play SGLTEPROXY Rx"
+
+        EnableSequence
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX_Voice Mixer SGLTE':1:0
+                'SGLTE_Tx Mixer AFE_PCM_TX_SGLTE':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 13
+        CapturePCM 13
+
+EndSection
+
+SectionModifier
+        Name "Play SGLTEPROXY Tx"
+
+        EnableSequence
+                'AFE_PCM_RX_Voice Mixer SGLTE':1:1
+                'SGLTE_Tx Mixer AFE_PCM_TX_SGLTE':1:1
+        EndSequence
+
+        DisableSequence
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 13
+        CapturePCM 13
+
+EndSection
+
+SectionModifier
 	Name "Play VoicePROXY Rx"
 
 	EnableSequence
