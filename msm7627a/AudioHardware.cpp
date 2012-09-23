@@ -3445,21 +3445,22 @@ ssize_t AudioHardware::AudioSessionOutLPA::write(const void* buffer, size_t byte
         }
         if (timeStarted == 0)
             timeStarted = nanoseconds_to_microseconds(systemTime(SYSTEM_TIME_MONOTONIC));
-        } else {
-            /* Put the buffer back into requestQ */
-            ALOGV("mEmptyQueueMutex locking: %d", __LINE__);
-            mEmptyQueueMutex.lock();
-            ALOGV("mEmptyQueueMutex locked: %d", __LINE__);
-            mEmptyQueue.push_back(buf);
-            ALOGV("mEmptyQueueMutex unlocking: %d", __LINE__);
-            mEmptyQueueMutex.unlock();
-            ALOGV("mEmptyQueueMutex unlocked: %d", __LINE__);
-            //Post EOS in case the filled queue is empty and EOS is reached.
-            if (mFilledQueue.empty() && mReachedEOS) {
-                ALOGV("mEosEventReceived made true");
-                mEosEventReceived = true;
-            }
+    } else {
+        /* Put the buffer back into requestQ */
+        ALOGV("mEmptyQueueMutex locking: %d", __LINE__);
+        mEmptyQueueMutex.lock();
+        ALOGV("mEmptyQueueMutex locked: %d", __LINE__);
+        mEmptyQueue.push_back(buf);
+        ALOGV("mEmptyQueueMutex unlocking: %d", __LINE__);
+        mEmptyQueueMutex.unlock();
+        ALOGV("mEmptyQueueMutex unlocked: %d", __LINE__);
+        //Post EOS in case the filled queue is empty and EOS is reached.
+        if (mFilledQueue.empty() && mReachedEOS) {
+            ALOGV("mEosEventReceived made true");
+            mEosEventReceived = true;
         }
+        return NO_ERROR;
+    }
     mFilledQueueMutex.lock();
     mFilledQueue.push_back(buf);
     mFilledQueueMutex.unlock();
@@ -3637,6 +3638,7 @@ void AudioHardware::AudioSessionOutLPA::bufferDeAlloc()
     // De-Allocate ION buffers
     int rc = 0;
     //Remove all the buffers from empty queue
+    mEmptyQueueMutex.lock();
     while (!mEmptyQueue.empty())  {
         List<BuffersAllocated>::iterator it = mEmptyQueue.begin();
         BuffersAllocated &ionBuffer = *it;
@@ -3659,8 +3661,10 @@ void AudioHardware::AudioSessionOutLPA::bufferDeAlloc()
         ALOGE("Removing from empty Q");
         mEmptyQueue.erase(it);
     }
+    mEmptyQueueMutex.unlock();
 
     //Remove all the buffers from Filled queue
+    mFilledQueueMutex.lock();
     while(!mFilledQueue.empty()){
         List<BuffersAllocated>::iterator it = mFilledQueue.begin();
         BuffersAllocated &ionBuffer = *it;
@@ -3683,6 +3687,7 @@ void AudioHardware::AudioSessionOutLPA::bufferDeAlloc()
         ALOGV("Removing from Filled Q");
         mFilledQueue.erase(it);
     }
+    mFilledQueueMutex.unlock();
     if (ionfd >= 0) {
         close(ionfd);
         ionfd = -1;
@@ -3900,7 +3905,6 @@ status_t AudioHardware::AudioSessionOutLPA::drain()
 status_t AudioHardware::AudioSessionOutLPA::flush()
 {
     ALOGV("LPA playback flush ");
-    Mutex::Autolock autoLock(mLock);
     int err;
 
     // 2.) Add all the available buffers to Empty Queue (Maintain order)
@@ -3946,9 +3950,6 @@ status_t AudioHardware::AudioSessionOutLPA::stop()
     // close all the existing PCM devices
     mSkipWrite = true;
     mWriteCv.signal();
-
-    reset();
-
     return NO_ERROR;
 }
 
@@ -3970,11 +3971,11 @@ status_t  AudioHardware::AudioSessionOutLPA::getNextWriteTimestamp(int64_t *time
 void AudioHardware::AudioSessionOutLPA::reset()
 {
     ALOGD("AudioSessionOutLPA::reset()");
+    //Close the LPA driver
+    ioctl(afd,AUDIO_STOP,0);
     requestAndWaitForEventThreadExit();
     status_t status = NO_ERROR;
     bufferDeAlloc();
-    //Close the LPA driver
-    ioctl(afd,AUDIO_STOP,0);
     ::close(afd);
     ALOGD("AudioSessionOutLPA::reset() complete");
 }
