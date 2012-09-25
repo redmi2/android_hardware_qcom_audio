@@ -765,7 +765,7 @@ int32_t AudioSessionOutALSA::writeToCompressedDriver(char *buffer, int bytes)
         pcm * local_handle = (struct pcm *)mCompreRxHandle->handle;
         // Set the channel status after first frame decode/transcode and for change
         // in sample rate or channel mode as we close and open the device again
-        if (bytes && bytes < (local_handle->period_size - mOutputMetadataLength )) {
+        if (bytes < (local_handle->period_size - mOutputMetadataLength )) {
             ALOGD("Last buffer case");
             mReachedExtractorEOS = true;
         }
