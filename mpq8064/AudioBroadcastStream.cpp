@@ -2399,7 +2399,7 @@ uint32_t AudioBroadcastStreamALSA::render(bool continueDecode)
             requiredSize = mBitstreamSM->getOutputBufferWritePtr(SPDIF_OUT) -
                           mBitstreamSM->getOutputBufferPtr(SPDIF_OUT);
         else
-            requiredSize = period_size;
+            requiredSize = period_size - sizeof(mOutputMetadataCompre);
 
         ALOGV("requiredSize- %d", requiredSize);
         while(mBitstreamSM->sufficientSamplesToRender(SPDIF_OUT,
@@ -2409,10 +2409,20 @@ uint32_t AudioBroadcastStreamALSA::render(bool continueDecode)
                 ALOGV("ts- %lld", mOutputMetadataCompre.timestamp);
                 memcpy(mCompreWriteTempBuffer, &mOutputMetadataCompre,
                            mOutputMetadataLength);
+                memcpy(mCompreWriteTempBuffer+mOutputMetadataLength,
+                           mBitstreamSM->getOutputBufferPtr(COMPRESSED_OUT),
+                           requiredSize);
             }
-            memcpy(mCompreWriteTempBuffer+mOutputMetadataLength,
-                       mBitstreamSM->getOutputBufferPtr(COMPRESSED_OUT),
-                       requiredSize);
+            else {
+                mOutputMetadataCompre.metadataLength = sizeof(mOutputMetadataCompre);
+                mOutputMetadataCompre.bufferLength = requiredSize;
+                mOutputMetadataCompre.timestamp = 0;
+                memcpy(mCompreWriteTempBuffer, &mOutputMetadataCompre,
+                           mOutputMetadataCompre.metadataLength);
+                memcpy(mCompreWriteTempBuffer+mOutputMetadataCompre.metadataLength,
+                           mBitstreamSM->getOutputBufferPtr(COMPRESSED_OUT),
+                           requiredSize);
+            }
             n = writeToCompressedDriver(mCompreWriteTempBuffer, period_size);
             ALOGV("pcm_write returned with %d", n);
             if (n < 0) {
