@@ -209,16 +209,16 @@ status_t AudioUsbALSA::getCap(char * type, int &channels, int &sampleRate)
     }
 
     ratesSupported[0] = atoi(nextSRString);
+    ALOGV("ratesSupported[0] for playback: %d", ratesSupported[0]);
     for (i = 1; i<size; i++) {
         nextSRString = strtok_r(NULL, " ,.-", &temp_ptr);
         ratesSupported[i] = atoi(nextSRString);
         ALOGV("ratesSupported[%d] for playback: %d",i, ratesSupported[i]);
     }
 
-    for (i = 0; i<=size; i++) {
-        if (ratesSupported[i] <= 48000) {
+    for (i = 0; i<size; i++) {
+        if ((ratesSupported[i] > sampleRate) && (ratesSupported[i] <= 48000)) {
             sampleRate = ratesSupported[i];
-            break;
         }
     }
     ALOGD("sampleRate: %d", sampleRate);
