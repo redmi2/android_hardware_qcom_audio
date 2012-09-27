@@ -424,6 +424,7 @@ private:
     uint32_t            mStreamVol;
 
     bool                mPaused;
+    bool                mIsDriverStarted;
     bool                mSeeking;
     bool                mReachedEOS;
     bool                mSkipWrite;
