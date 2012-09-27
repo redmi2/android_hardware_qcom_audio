@@ -120,6 +120,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     bool dtsPassThrough = false;
     char spdifFormat[20];
     char hdmiFormat[20];
+    char dtsModelId[128];
     int hdmiChannels = 8;
     property_get("mpq.audio.spdif.format",spdifFormat,"0");
     property_get("mpq.audio.hdmi.format",hdmiFormat,"0");
@@ -200,12 +201,28 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
             hdmiChannels = 2;
         } else if(format == AUDIO_FORMAT_DTS_LBR) {
              ALOGV("DTS LBR CODEC");
+             property_get("ro.build.modelid", dtsModelId, "0");
+             ALOGV("from property modelId=%s,length=%d\n",
+                 dtsModelId, strlen(dtsModelId));
+             compr_params.codec.options.dts.modelIdLength = strlen(dtsModelId);
+             compr_params.codec.options.dts.modelId = (__u8 *)dtsModelId;
+             ALOGV("passing to driver modelId=%s,length=%d\n",
+                compr_params.codec.options.dts.modelId,
+                compr_params.codec.options.dts.modelIdLength);
              compr_params.codec.id = compr_cap.codecs[6];
         } else if(format == AUDIO_FORMAT_MP3) {
              ALOGV("MP3 CODEC");
              compr_params.codec.id = compr_cap.codecs[0];
         } else if(format == AUDIO_FORMAT_DTS && dtsPassThrough == false) {
              ALOGV("DTS CODEC");
+             property_get("ro.build.modelid",dtsModelId,"0");
+             ALOGV("from property modelId=%s,length=%d\n",
+                dtsModelId, strlen(dtsModelId));
+             compr_params.codec.options.dts.modelIdLength = strlen(dtsModelId);
+             compr_params.codec.options.dts.modelId = (__u8 *)dtsModelId;
+             ALOGV("passing to driver modelId=%s,length=%d\n",
+                compr_params.codec.options.dts.modelId,
+                compr_params.codec.options.dts.modelIdLength);
              compr_params.codec.id = compr_cap.codecs[5];
         } else if(format == AUDIO_FORMAT_DTS) {
              ALOGV("DTS PASSTHROUGH CODEC");
