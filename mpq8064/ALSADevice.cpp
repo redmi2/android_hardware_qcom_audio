@@ -2279,10 +2279,29 @@ status_t ALSADevice::setCaptureHardwareParams(alsa_handle_t *handle, bool isComp
 
         minPeroid = compr_cap.min_fragment_size;
         maxPeroid = compr_cap.max_fragment_size;
+        compr_params.codec.id = compr_cap.codecs[10];
         handle->channels = 2;
 //NOTE:
 // channels = 2 would set 1 MI2S line, greater than 2 will set more than
 // 1 MI2S lines
+        ALOGV("Min peroid size = %d , Maximum Peroid size = %d",\
+            minPeroid, maxPeroid);
+        if (ioctl(handle->handle->fd, SNDRV_COMPRESS_SET_PARAMS,
+                  &compr_params)) {
+            ALOGE("SNDRV_COMPRESS_SET_PARAMS,failed Error no %d \n", errno);
+            err = -errno;
+            return err;
+        }
+    } else {
+        if (ioctl(handle->handle->fd, SNDRV_COMPRESS_GET_CAPS, &compr_cap)) {
+            ALOGE("SNDRV_COMPRESS_GET_CAPS, failed Error no %d \n", errno);
+            err = -errno;
+            return err;
+        }
+
+        minPeroid = compr_cap.min_fragment_size;
+        maxPeroid = compr_cap.max_fragment_size;
+        compr_params.codec.id = compr_cap.codecs[11];
         ALOGV("Min peroid size = %d , Maximum Peroid size = %d",\
             minPeroid, maxPeroid);
         if (ioctl(handle->handle->fd, SNDRV_COMPRESS_SET_PARAMS,
