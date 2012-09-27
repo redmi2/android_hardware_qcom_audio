@@ -78,8 +78,10 @@ protected:
         virtual status_t checkAndSetVolume(int stream, int index, audio_io_handle_t output, audio_devices_t device, int delayMs = 0, bool force = false);
         // Mute or unmute the stream on the specified output
         virtual void setStreamMute(int stream, bool on, audio_io_handle_t output, int delayMs = 0, audio_devices_t device = (audio_devices_t)0);
+        virtual float computeVolume(int stream, int index, audio_io_handle_t output, audio_devices_t device);
 
 private:
         void handleNotificationRoutingForStream(AudioSystem::stream_type stream);
+        static float volIndexToAmpl(audio_devices_t device, const StreamDescriptor& streamDesc, int indexInUi);
 };
 };
