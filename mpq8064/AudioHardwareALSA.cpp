@@ -646,7 +646,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
          devices, *channels, *sampleRate);
 
     status_t err = BAD_VALUE;
-    if (flags & AUDIO_OUTPUT_FLAG_LPA) {
+    if (flags & AUDIO_OUTPUT_FLAG_TUNNEL) {
         int sessionId = 3;
         AudioSessionOutALSA *out = new AudioSessionOutALSA(this, devices, *format, *channels,
                                                        *sampleRate, sessionId, &err);

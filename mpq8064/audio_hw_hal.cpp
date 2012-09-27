@@ -194,6 +194,14 @@ static int out_set_observer(const struct audio_stream_out *stream,
     return out->qcom_out->setObserver(observer);
 }
 
+static int out_is_buffer_available(const struct audio_stream_out *stream,
+                                   int *isAvail)
+{
+    const struct qcom_stream_out *out =
+        reinterpret_cast<const struct qcom_stream_out *>(stream);
+    return out->qcom_out->isBufferAvailable(isAvail);
+}
+
 static status_t out_start(struct audio_stream_out *stream)
 {
     struct qcom_stream_out *out =
@@ -595,6 +603,7 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
     out->stream.stop = out_stop;
     out->stream.set_observer = out_set_observer;
     out->stream.get_next_write_timestamp = out_get_time_stamp;
+    out->stream.is_buffer_available = out_is_buffer_available;
 
     *stream_out = &out->stream;
     return 0;
