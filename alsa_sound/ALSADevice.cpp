@@ -401,6 +401,9 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
             devices = devices | (AudioSystem::DEVICE_OUT_PROXY |
                       AudioSystem::DEVICE_IN_PROXY);
 #endif
+        } else if (devices & AudioSystem::DEVICE_OUT_ALL_A2DP) {
+            devices = devices | (AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET |
+                      AudioSystem::DEVICE_OUT_BLUETOOTH_SCO);
         }
     }
 #ifdef QCOM_SSR_ENABLED
