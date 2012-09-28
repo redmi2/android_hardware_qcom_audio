@@ -35,7 +35,8 @@ dist_libalsa_intf_DATA    = snd_soc_msm/snd_soc_msm \
                             snd_soc_msm/snd_soc_msm_2x_auxpcm \
                             snd_soc_msm/snd_soc_msm_2x_mpq_auxpcm \
                             snd_soc_msm/snd_soc_msm_2x_Fusion3_auxpcm \
-                            snd_soc_msm/snd_soc_msm_Sitar_auxpcm
+                            snd_soc_msm/snd_soc_msm_Sitar_auxpcm \
+                            snd_soc_msm/snd_soc_msm_I2SFusion
 libalsa_intf_la_CFLAGS = $(AM_CFLAGS) -DUSE_GLIB @GLIB_CFLAGS@ -DCONFIG_DIR=\"/etc/snd_soc_msm/\"
 libalsa_intf_la_CPPFLAGS = $(AM_CPPFLAGS) -DUSE_GLIB @GLIB_CFLAGS@
 libalsa_intf_la_LDFLAGS = $(ACDBLOADER_LIBS) -lm -lpthread @GLIB_LIBS@ -shared -version-info 1:0:0

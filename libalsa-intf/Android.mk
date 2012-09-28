@@ -88,6 +88,12 @@ LOCAL_MODULE_TAGS  := optional
 LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH  := $(TARGET_OUT_ETC)/snd_soc_msm
 LOCAL_SRC_FILES    := snd_soc_msm/snd_soc_msm_Sitar_auxpcm
+
+LOCAL_MODULE       := snd_soc_msm_I2SFusion
+LOCAL_MODULE_TAGS  := optional
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_PATH  := $(TARGET_OUT_ETC)/snd_soc_msm
+LOCAL_SRC_FILES    := snd_soc_msm/snd_soc_msm_I2SFusion
 include $(BUILD_PREBUILT)
 
 include $(CLEAR_VARS)
