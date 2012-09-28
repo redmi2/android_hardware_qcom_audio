@@ -59,6 +59,8 @@ static uint32_t play_max_sz = 2147483648LL;
 static int format = SNDRV_PCM_FORMAT_S16_LE;
 static int period = 0;
 static int compressed = 0;
+static int set_channel_map = 0;
+static char channel_map[8];
 static char *compr_codec;
 static int piped = 0;
 static int outputMetadataLength = 0;
@@ -75,6 +77,7 @@ static struct option long_options[] =
     {"format", 1, 0, 'F'},
     {"period", 1, 0, 'B'},
     {"compressed", 0, 0, 'T'},
+    {"channelMap", 0, 0, 'X'},
     {0, 0, 0, 0}
 };
 
@@ -192,6 +195,47 @@ static int set_params(struct pcm *pcm)
     return 0;
 }
 
+void send_channel_map_driver(struct pcm *pcm)
+{
+    char **set_values;
+    int i, ret;
+    struct mixer *mixer;
+    struct mixer_ctl *ctl;
+    const char* device = "/dev/snd/controlC0";
+
+    set_values = (char**)malloc(8*sizeof(char*));
+    if(set_values) {
+        for(i=0; i< 8; i++) {
+            set_values[i] = (char*)malloc(4*sizeof(char));
+            if(set_values[i])
+                sprintf(set_values[i],"%d",channel_map[i]);
+            else
+                return;
+        }
+        mixer = mixer_open(device);
+        if (!mixer) {
+            fprintf(stderr,"oops: %s: %d\n", strerror(errno), __LINE__);
+            return;
+        }
+        ctl = mixer_get_control(mixer, "Playback Channel Map", 0);
+        if(ctl == NULL) {
+            fprintf(stderr, "Could not get the mixer control\n");
+            return;
+        }
+        ret = mixer_ctl_set_value(ctl, 8, set_values);
+        if (ret < 0)
+            fprintf(stderr, "could not set channel mask\n");
+        mixer_close(mixer);
+
+        for(i=0; i< 8; i++)
+            if(set_values[i])
+                free(set_values[i]);
+        if(set_values)
+            free(set_values);
+    }
+    return;
+}
+
 static int play_file(unsigned rate, unsigned channels, int fd,
               unsigned flags, const char *device, unsigned data_sz)
 {
@@ -268,6 +312,10 @@ static int play_file(unsigned rate, unsigned channels, int fd,
           return -errno;
        }
        outputMetadataLength = sizeof(struct output_metadata_handle_t);
+    } else if (channels > 2) {
+        if(set_channel_map) {
+            send_channel_map_driver(pcm);
+        }
     }
     pcm->channels = channels;
     pcm->rate = rate;
@@ -608,6 +656,45 @@ ignore_header:
     return play_file(hdr.sample_rate, hdr.num_channels, fd, flag, device, hdr.data_sz);
 }
 
+char get_channel_map_val(char *string)
+{
+    char retval = 0;
+    if( !strncmp(string, "RRC", sizeof(string)) )
+        retval = 16;
+    else if( !strncmp(string, "RLC", sizeof(string)) )
+        retval = 15;
+    else if( !strncmp(string, "FRC", sizeof(string)) )
+        retval = 14;
+    else if( !strncmp(string, "FLC", sizeof(string)) )
+        retval = 13;
+    else if( !strncmp(string, "MS", sizeof(string)) )
+        retval = 12;
+    else if( !strncmp(string, "CVH", sizeof(string)) )
+        retval = 11;
+    else if( !strncmp(string, "TS", sizeof(string)) )
+        retval = 10;
+    else if( !strncmp(string, "RB", sizeof(string)) )
+        retval = 9;
+    else if( !strncmp(string, "LB", sizeof(string)) )
+        retval = 8;
+    else if( !strncmp(string, "CS", sizeof(string)) )
+        retval = 7;
+    else if( !strncmp(string, "LFE", sizeof(string)) )
+        retval = 6;
+    else if( !strncmp(string, "RS", sizeof(string)) )
+        retval = 5;
+    else if( !strncmp(string, "LS", sizeof(string)) )
+        retval = 4;
+    else if( !strncmp(string, "FC", sizeof(string)) )
+        retval = 3;
+    else if( !strncmp(string, "FR", sizeof(string)) )
+        retval = 2;
+    else if( !strncmp(string, "FL", sizeof(string)) )
+        retval = 1;
+
+    return retval;
+}
+
 int main(int argc, char **argv)
 {
     int option_index = 0;
@@ -617,6 +704,7 @@ int main(int argc, char **argv)
     char *mmap = "N";
     char *device = "hw:0,0";
     char *filename;
+    char *ptr;
     int rc = 0;
 
     if (argc <2) {
@@ -631,6 +719,10 @@ int main(int argc, char **argv)
     "-F             -- Format\n"
                 "-B             -- Period\n"
                 "-T <MP3, AAC, AC3_PASS_THROUGH>  -- Compressed\n"
+                "-X <\"FL,FR,FC,Ls,Rs,LFE\" for 5.1 configuration\n"
+                "     supported channels: \n"
+                "     FL, FR, FC, LS, RS, LFE, CS, TS \n"
+                "     LB, RB, FLC, FRC, RLC, RRC, CVH, MS\n"
                 "<file> \n");
            fprintf(stderr, "Formats Supported:\n");
            for (i = 0; i <= SNDRV_PCM_FORMAT_LAST; ++i)
@@ -639,7 +731,7 @@ int main(int argc, char **argv)
            fprintf(stderr, "\nSome of these may not be available on selected hardware\n");
            return 0;
      }
-     while ((c = getopt_long(argc, argv, "PVMD:R:C:F:B:T:", long_options, &option_index)) != -1) {
+     while ((c = getopt_long(argc, argv, "PVMD:R:C:F:B:T:X:", long_options, &option_index)) != -1) {
        switch (c) {
        case 'P':
           pcm_flag = 0;
@@ -671,6 +763,19 @@ int main(int argc, char **argv)
           printf("compressed codec type requested = %s\n", optarg);
           compr_codec = optarg;
           break;
+       case 'X':
+          set_channel_map = 1; i = 0;
+          memset(channel_map, 0, sizeof(channel_map));
+          ptr = strtok(optarg, ",");
+          while((ptr != NULL) && (i < sizeof(channel_map))) {
+              channel_map[i] = get_channel_map_val(ptr);
+              if (channel_map[i] < 0 || channel_map[i] > 16) {
+                  set_channel_map = 0;
+                  break;
+              }
+              ptr = strtok(NULL,","); i++;
+          }
+          break;
        default:
           printf("\nUsage: aplay [options] <file>\n"
                 "options:\n"
@@ -683,6 +788,10 @@ int main(int argc, char **argv)
     "-F             -- Format\n"
                 "-B             -- Period\n"
                 "-T             -- Compressed\n"
+                "-X <\"FL,FR,FC,Ls,Rs,LFE\" for 5.1 configuration\n"
+                "     supported channels: \n"
+                "     FL, FR, FC, LS, RS, LFE, CS, TS \n"
+                "     LB, RB, FLC, FRC, RLC, RRC, CVH, MS\n"
                 "<file> \n");
            fprintf(stderr, "Formats Supported:\n");
            for (i = 0; i < SNDRV_PCM_FORMAT_LAST; ++i)
