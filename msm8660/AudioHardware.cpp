@@ -2704,6 +2704,7 @@ AudioHardware::AudioSessionOutLPA::AudioSessionOutLPA( AudioHardware *hw,
 
     mPaused             = false;
     mIsDriverStarted    = false;
+    mGenerateEOS        = true;
     mSeeking            = false;
     mReachedEOS         = false;
     mSkipWrite          = false;
@@ -2760,11 +2761,12 @@ ssize_t AudioHardware::AudioSessionOutLPA::write(const void* buffer, size_t byte
         if (mSkipWrite) {
             ALOGV("Write: Flushing the previous write buffer");
             mSkipWrite = false;
-            mEmptyQueueMutex.unlock();
-            if (bytes < LPA_BUFFER_SIZE)
+            if (bytes < LPA_BUFFER_SIZE) {
                 bytes = 0;
-            else
+            } else {
+                mEmptyQueueMutex.unlock();
                 return 0;
+            }
         }
         ALOGV("Write: received a signal to wake up");
     }
@@ -3170,7 +3172,7 @@ void  AudioHardware::AudioSessionOutLPA::eventThreadEntry()
                         ALOGV("mEmptyQueueMutex unlocking: %d", __LINE__);
                         mEmptyQueueMutex.unlock();
                         ALOGV("mEmptyQueueMutex unlocked: %d", __LINE__);
-                        if (mFilledQueue.empty() && mReachedEOS) {
+                        if (mFilledQueue.empty() && mReachedEOS && mGenerateEOS) {
                             ALOGV("Posting the EOS to the observer player %p", mObserver);
                             mEosEventReceived = true;
                             if (mObserver != NULL) {
@@ -3376,6 +3378,7 @@ status_t AudioHardware::AudioSessionOutLPA::flush()
     mFilledQueueMutex.unlock();
     ALOGV("Transferred all the buffers from Filled queue to "
           "Empty queue to handle seek");
+    ALOGV("mPaused %d mEosEventReceived %d", mPaused, mEosEventReceived);
     mReachedEOS = false;
     if (!mPaused) {
         if (!mEosEventReceived) {
@@ -3383,6 +3386,7 @@ status_t AudioHardware::AudioSessionOutLPA::flush()
                 ALOGE("Audio Pause failed");
                 return UNKNOWN_ERROR;
             }
+            mSkipWrite = true;
             if (ioctl(afd, AUDIO_FLUSH, 0) < 0) {
                 ALOGE("Audio Flush failed");
                 return UNKNOWN_ERROR;
@@ -3390,6 +3394,7 @@ status_t AudioHardware::AudioSessionOutLPA::flush()
         }
     } else {
         timeStarted = 0;
+        mSkipWrite = true;
         if (ioctl(afd, AUDIO_FLUSH, 0) < 0) {
             ALOGE("Audio Flush failed");
             return UNKNOWN_ERROR;
@@ -3402,7 +3407,6 @@ status_t AudioHardware::AudioSessionOutLPA::flush()
     mEosEventReceived = false;
     //4.) Skip the current write from the decoder and signal to the Write get
     //   the next set of data from the decoder
-    mSkipWrite = true;
     mWriteCv.signal();
     return NO_ERROR;
 }
@@ -3435,6 +3439,7 @@ void AudioHardware::AudioSessionOutLPA::reset()
 {
 	Routing_table* temp = NULL;
     ALOGD("AudioSessionOutLPA::reset()");
+    mGenerateEOS = false;
     ioctl(afd,AUDIO_STOP,0);
     mIsDriverStarted = false;
 	requestAndWaitForEventThreadExit();

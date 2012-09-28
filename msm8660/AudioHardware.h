@@ -338,6 +338,7 @@ private:
 
     bool                mPaused;
     bool                mIsDriverStarted;
+    bool                mGenerateEOS;
     bool                mSeeking;
     bool                mReachedEOS;
     bool                mSkipWrite;
