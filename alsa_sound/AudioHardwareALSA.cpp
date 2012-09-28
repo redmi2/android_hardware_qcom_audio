@@ -85,8 +85,8 @@ AudioHardwareALSA::AudioHardwareALSA() :
 {
     FILE *fp;
     char soundCardInfo[200];
-    char platform[128], baseband[128], audio_init[128];
-    int codec_rev = 2;
+    char platform[128], baseband[128], audio_init[128], platformVer[128];
+    int codec_rev = 2, verNum = 0;
     mALSADevice = new ALSADevice();
     mDeviceList.clear();
     mCSCallActive = 0;
@@ -160,7 +160,25 @@ AudioHardwareALSA::AudioHardwareALSA() :
         if (!strcmp("msm8960", platform) && !strcmp("mdm", baseband)) {
             ALOGV("Detected Fusion tabla 2.x");
             mFusion3Platform = true;
-            snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm_2x_Fusion3");
+            if((fp = fopen("/sys/devices/system/soc/soc0/platform_version","r")) == NULL) {
+                ALOGE("Cannot open /sys/devices/system/soc/soc0/platform_version file");
+
+                snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm_2x_Fusion3");
+            } else {
+                while((fgets(platformVer, sizeof(platformVer), fp) != NULL)) {
+                    ALOGV("platformVer %s", platformVer);
+
+                    verNum = atoi(platformVer);
+                    if (verNum == 0x10001) {
+                        snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm_I2SFusion");
+                        break;
+                    } else {
+                        snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm_2x_Fusion3");
+                        break;
+                    }
+                }
+            }
+            fclose(fp);
         } else {
             ALOGV("Detected tabla 2.x sound card");
             snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm_2x");

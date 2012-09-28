@@ -31,6 +31,7 @@ extern "C" {
 }
 #endif
 
+#define SAMPLE_RATE_8KHZ 8000
 #define BTSCO_RATE_16KHZ 16000
 #define USECASE_TYPE_RX 1
 #define USECASE_TYPE_TX 2
@@ -108,6 +109,34 @@ bool ALSADevice::platform_is_Fusion3()
         return true;
     else
         return false;
+}
+
+bool platform_is_I2SModem()
+{
+    char platform[128], baseband[128], platformVer[128];
+    bool isI2SModem = false;
+    int verNum = 0;
+    FILE *fp;
+
+    property_get("ro.board.platform", platform, "");
+    property_get("ro.baseband", baseband, "");
+    if (!strcmp("msm8960", platform) && !strcmp("mdm", baseband)) {
+        if((fp = fopen("/sys/devices/system/soc/soc0/platform_version","r")) == NULL) {
+            ALOGE("Cannot open /sys/devices/system/soc/soc0/platform_version file");
+        } else {
+             while((fgets(platformVer, sizeof(platformVer), fp) != NULL)) {
+                 ALOGV("platformVer %s", platformVer);
+
+                 verNum = atoi(platformVer);
+                 if (verNum == 0x10001) {
+                     isI2SModem = true;
+                     break;
+                 }
+             }
+             fclose(fp);
+        }
+    }
+    return isI2SModem;
 }
 
 int ALSADevice::deviceName(alsa_handle_t *handle, unsigned flags, char **value)
@@ -831,6 +860,7 @@ status_t ALSADevice::startVoiceCall(alsa_handle_t *handle)
     char* devName = NULL;
     unsigned flags = 0;
     int err = NO_ERROR;
+    int sampleRate = SAMPLE_RATE_8KHZ;
 
     ALOGD("startVoiceCall: handle %p", handle);
     // ASoC multicomponent requires a valid path (frontend/backend) for
@@ -858,6 +888,17 @@ status_t ALSADevice::startVoiceCall(alsa_handle_t *handle)
     if(err != NO_ERROR) {
         ALOGE("startVoiceCall: setHardwareParams failed");
         goto Error;
+    }
+
+    /* if I2S based external modem, get the vocoder sample rate */
+    if (platform_is_I2SModem()) {
+        err = csd_client_get_sample_rate(&sampleRate);
+        if (err < 0) {
+            ALOGE("csd_client_get_sample_rate error %d\n", err);
+        } else {
+            handle->sampleRate = sampleRate;
+        }
+        ALOGD("sampleRate %d\n", handle->sampleRate);
     }
 
     err = setSoftwareParams(handle);
