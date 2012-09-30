@@ -2946,6 +2946,7 @@ status_t AudioHardware::AudioSessionOutLPA::openAudioSessionDevice( )
     }
 
     start();
+    ALOGE("Calling bufferAlloc ");
         bufferAlloc();
 
     return status;
@@ -2956,6 +2957,7 @@ void AudioHardware::AudioSessionOutLPA::bufferAlloc( )
     // Allocate ION buffers
     void *ion_buf; int32_t ion_fd;
     struct msm_audio_ion_info ion_info;
+    ALOGE("Allocate ION buffers");
     //1. Open the ion_audio
     ionfd = open("/dev/ion", O_RDONLY | O_SYNC);
     if (ionfd < 0) {
@@ -2973,6 +2975,7 @@ void AudioHardware::AudioSessionOutLPA::bufferAlloc( )
                  ion_info.fd, (unsigned int)ion_info.vaddr);
         }
     }
+    ALOGE("Allocating ION buffers complete");
 }
 
 
@@ -3245,7 +3248,7 @@ void AudioHardware::AudioSessionOutLPA::createEventThread()
 status_t AudioHardware::AudioSessionOutLPA::start( )
 {
 
-    ALOGV("LPA playback start");
+    ALOGE("LPA playback start");
     if (mPaused && mIsDriverStarted) {
         mPaused = false;
         if (ioctl(afd, AUDIO_PAUSE, 0) < 0) {
@@ -3268,7 +3271,7 @@ status_t AudioHardware::AudioSessionOutLPA::start( )
 
         config.sample_rate = mSampleRate;
         config.channel_count = mChannels;
-        ALOGV("sample_rate=%d and channel count=%d \n", mSampleRate, mChannels);
+        ALOGE("sample_rate=%d and channel count=%d \n", mSampleRate, mChannels);
         if ( ioctl(afd, AUDIO_SET_CONFIG, &config) < 0 ) {
             ALOGE("could not set config");
             close(afd);
@@ -3336,6 +3339,7 @@ status_t AudioHardware::AudioSessionOutLPA::start( )
         return BAD_VALUE;
     }
     mIsDriverStarted = true;
+    ALOGE("LPA Playback started");
     if (timeStarted == 0)
         timeStarted = nanoseconds_to_microseconds(systemTime(SYSTEM_TIME_MONOTONIC));// Needed
 	}
@@ -3437,14 +3441,15 @@ status_t  AudioHardware::AudioSessionOutLPA::getNextWriteTimestamp(int64_t *time
 
 void AudioHardware::AudioSessionOutLPA::reset()
 {
-	Routing_table* temp = NULL;
-    ALOGD("AudioSessionOutLPA::reset()");
+    Routing_table* temp = NULL;
+    ALOGE("AudioSessionOutLPA::reset()");
     mGenerateEOS = false;
     ioctl(afd,AUDIO_STOP,0);
     mIsDriverStarted = false;
 	requestAndWaitForEventThreadExit();
     status_t status = NO_ERROR;
     bufferDeAlloc();
+    ::close(afd);
     temp = getNodeByStreamType(LPA_DECODE);
 
     if (temp == NULL) {
@@ -3475,9 +3480,7 @@ void AudioHardware::AudioSessionOutLPA::reset()
         }
 #endif
     }
-    //Close the LPA driver
-    ::close(afd);
-    ALOGD("AudioSessionOutLPA::reset() complete");
+    ALOGE("AudioSessionOutLPA::reset() complete");
 }
 
 status_t AudioHardware::AudioSessionOutLPA::getRenderPosition(uint32_t *dspFrames)
