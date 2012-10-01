@@ -713,13 +713,15 @@ void AudioBroadcastStreamALSA::setRoutingFlagsBasedOnConfig()
     }
     setSpdifHdmiRoutingFlags(mDevices);
 
-    if((mSpdifFormat == PCM_FORMAT) ||
-       (mSpdifFormat == COMPRESSED_FORCED_PCM_FORMAT) ||
-       (mHdmiFormat == PCM_FORMAT) ||
-       (mHdmiFormat == COMPRESSED_FORCED_PCM_FORMAT) ||
-       (mRoutePCMStereoToDSP) || (mRoutePCMMChToDSP) ||
+    if((((mSpdifFormat == PCM_FORMAT) ||
+       (mSpdifFormat == COMPRESSED_FORCED_PCM_FORMAT)) &&
+       (mDevices & (AudioSystem::DEVICE_OUT_SPDIF))) ||
+       (((mHdmiFormat == PCM_FORMAT) ||
+       (mHdmiFormat == COMPRESSED_FORCED_PCM_FORMAT)) &&
+       (mDevices & (AudioSystem::DEVICE_OUT_AUX_DIGITAL))) ||
+       (((mRoutePCMStereoToDSP) || (mRoutePCMMChToDSP)) &&
        (mDevices & ~(AudioSystem::DEVICE_OUT_SPDIF |
-             AudioSystem::DEVICE_OUT_AUX_DIGITAL))) {
+             AudioSystem::DEVICE_OUT_AUX_DIGITAL)))) {
         mRoutePcmAudio = true;
     }
     if(mUseTunnelDecoder)
@@ -1127,19 +1129,19 @@ status_t AudioBroadcastStreamALSA::setPlaybackFormat()
 {
     status_t status = NO_ERROR;
 
-    if(mSpdifFormat == PCM_FORMAT) {
+    if((mSpdifFormat == PCM_FORMAT) ||
+              (mSpdifFormat == COMPRESSED_FORCED_PCM_FORMAT)) {
         status = mALSADevice->setPlaybackFormat("LPCM",
                                   AudioSystem::DEVICE_OUT_SPDIF);
-    } else if((mSpdifFormat == COMPRESSED_FORMAT) ||
-              (mSpdifFormat == COMPRESSED_FORCED_PCM_FORMAT)) {
+    } else if(mSpdifFormat == COMPRESSED_FORMAT) {
         status = mALSADevice->setPlaybackFormat("Compr",
                                   AudioSystem::DEVICE_OUT_SPDIF);
     }
-    if(mHdmiFormat == PCM_FORMAT) {
+    if((mHdmiFormat == PCM_FORMAT) ||
+               (mHdmiFormat == COMPRESSED_FORCED_PCM_FORMAT)) {
         status = mALSADevice->setPlaybackFormat("LPCM",
                                   AudioSystem::DEVICE_OUT_AUX_DIGITAL);
-    } else if ((mHdmiFormat == COMPRESSED_FORMAT) ||
-               (mHdmiFormat == COMPRESSED_FORCED_PCM_FORMAT)) {
+    } else if (mHdmiFormat == COMPRESSED_FORMAT) {
         status = mALSADevice->setPlaybackFormat("Compr",
                                   AudioSystem::DEVICE_OUT_AUX_DIGITAL);
     }
