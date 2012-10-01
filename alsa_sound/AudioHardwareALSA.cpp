@@ -1582,12 +1582,12 @@ int newMode = mode();
             musbPlaybackState |= USBPLAYBACKBIT_FM;
         }
 #endif
-    if (device & AudioSystem::DEVICE_OUT_PROXY &&
-                    mRouteAudioToA2dp == true )  {
+    if(device & AudioSystem::DEVICE_OUT_ALL_A2DP) {
             status_t err = NO_ERROR;
+            mRouteAudioToA2dp = true;
             err = startA2dpPlayback_l(AudioHardwareALSA::A2DPFm);
             if(err) {
-                ALOGW("startA2dpPlayback_l for hardware output failed err = %d", err);
+                ALOGE("startA2dpPlayback_l for hardware output failed err = %d", err);
                 stopA2dpPlayback_l(AudioHardwareALSA::A2DPFm);
             }
         }
@@ -1613,11 +1613,11 @@ int newMode = mode();
             closeUsbPlaybackIfNothingActive();
         }
 #endif
-        if (device & AudioSystem::DEVICE_OUT_PROXY &&
-                    mRouteAudioToA2dp == true )  {
+        if(mRouteAudioToA2dp == true) {
             status_t err = NO_ERROR;
             err = stopA2dpPlayback_l(AudioHardwareALSA::A2DPFm);
-            ALOGW("stopA2dpPlayback_l for hardware output failed err = %d", err);
+            if(err)
+                ALOGE("stopA2dpPlayback_l for hardware output failed err = %d", err);
         }
 
     }
