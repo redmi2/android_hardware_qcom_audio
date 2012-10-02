@@ -1791,7 +1791,7 @@ int32_t AudioBroadcastStreamALSA::writeToCompressedDriver(char *buffer, int byte
     ALOGV("PCM write start");
     n = pcm_write(local_handle, buf.memBuf, local_handle->period_size);
     ALOGV("PCM write complete");
-    if (bytes && bytes < local_handle->period_size) {
+    if (bytes < local_handle->period_size) {
         ALOGD("Last buffer case");
         uint64_t writeValue = SIGNAL_PLAYBACK_THREAD;
         sys_broadcast::lib_write(mPlaybackfd, &writeValue, sizeof(uint64_t));
