@@ -1220,7 +1220,7 @@ SectionVerb
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 3
+	PlaybackPCM 4
 
 EndSection
 
@@ -1238,7 +1238,7 @@ SectionVerb
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 3
+	PlaybackPCM 4
 
 EndSection
 
@@ -1254,7 +1254,7 @@ SectionVerb
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 3
+	PlaybackPCM 4
 
 EndSection
 
@@ -1270,7 +1270,7 @@ SectionVerb
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 3
+	PlaybackPCM 4
 
 EndSection
 
@@ -1286,7 +1286,7 @@ SectionVerb
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 3
+	PlaybackPCM 4
 
 EndSection
 
@@ -1302,7 +1302,7 @@ SectionVerb
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 3
+	PlaybackPCM 4
 
 EndSection
 
@@ -1319,7 +1319,7 @@ SectionVerb
 
         # ALSA PCMs
         CapturePCM 0
-        PlaybackPCM 3
+        PlaybackPCM 4
 
 EndSection
 
@@ -1334,7 +1334,7 @@ SectionVerb
 
         # ALSA PCMs
         CapturePCM 0
-        PlaybackPCM 3
+        PlaybackPCM 4
 
 EndSection
 }
@@ -3132,8 +3132,8 @@ SectionVerb
         EndSequence
 
         # ALSA PCMs
-        PlaybackPCM 4
-        CapturePCM 4
+        PlaybackPCM 5
+        CapturePCM 5
 
 EndSection
 }
@@ -5025,7 +5025,7 @@ SectionModifier
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 3
+	PlaybackPCM 4
 
 EndSection
 
@@ -5043,7 +5043,7 @@ SectionModifier
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 3
+	PlaybackPCM 4
 
 EndSection
 
@@ -5059,7 +5059,7 @@ SectionModifier
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 3
+	PlaybackPCM 4
 
 EndSection
 
@@ -5075,7 +5075,7 @@ SectionModifier
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 3
+	PlaybackPCM 4
 
 EndSection
 
@@ -5091,7 +5091,7 @@ SectionModifier
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 3
+	PlaybackPCM 4
 
 EndSection
 
@@ -5107,7 +5107,7 @@ SectionModifier
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 3
+	PlaybackPCM 4
 
 EndSection
 
@@ -5123,7 +5123,7 @@ SectionModifier
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 3
+	PlaybackPCM 4
 
 EndSection
 
