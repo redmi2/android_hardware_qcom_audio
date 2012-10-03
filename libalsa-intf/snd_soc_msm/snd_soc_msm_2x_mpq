@@ -5647,7 +5647,7 @@ SectionModifier
 EndSection
 
 SectionModifier
-	Name "Play Tunnel"
+	Name "Play Tunnel1"
 
 	EnableSequence
 		'SLIMBUS_0_RX Audio Mixer MultiMedia4':1:1
@@ -5663,7 +5663,7 @@ SectionModifier
 EndSection
 
 SectionModifier
-	Name "Play TunnelSpeaker FM Tx"
+	Name "Play Tunnel1Speaker FM Tx"
 
 	EnableSequence
 		'SLIMBUS_0_RX Audio Mixer MultiMedia4':1:1
@@ -5681,7 +5681,7 @@ SectionModifier
 EndSection
 
 SectionModifier
-	Name "Play TunnelFM Tx"
+	Name "Play Tunnel1FM Tx"
 
 	EnableSequence
 		'INTERNAL_FM_RX Audio Mixer MultiMedia4':1:1
@@ -5697,7 +5697,7 @@ SectionModifier
 EndSection
 
 SectionModifier
-	Name "Play TunnelHDMI"
+	Name "Play Tunnel1HDMI"
 
 	EnableSequence
 		'HDMI Mixer MultiMedia4':1:1
@@ -5713,7 +5713,7 @@ SectionModifier
 EndSection
 
 SectionModifier
-        Name "Play TunnelHDMI SPDIF"
+        Name "Play Tunnel1HDMI SPDIF"
 
         EnableSequence
                 'HDMI Mixer MultiMedia4':1:1
@@ -5731,7 +5731,7 @@ SectionModifier
 EndSection
 
 SectionModifier
-	Name "Play TunnelBT SCO Rx"
+	Name "Play Tunnel1BT SCO Rx"
 
 	EnableSequence
 		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia4':1:1
@@ -5747,7 +5747,7 @@ SectionModifier
 EndSection
 
 SectionModifier
-	Name "Play TunnelBT SCO WB Rx"
+	Name "Play Tunnel1BT SCO WB Rx"
 
 	EnableSequence
 		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia4':1:1
@@ -5763,7 +5763,7 @@ SectionModifier
 EndSection
 
 SectionModifier
-        Name "Play TunnelPROXY Rx"
+        Name "Play Tunnel1PROXY Rx"
 
         EnableSequence
 		'AFE_PCM_RX Audio Mixer MultiMedia4':1:1
@@ -6041,7 +6041,7 @@ SectionModifier
 EndSection
 
 SectionModifier
-	Name "Play TunnelSPDIF"
+	Name "Play Tunnel1SPDIF"
 
 	EnableSequence
 		'SEC_RX Audio Mixer MultiMedia4':1:1
@@ -6057,25 +6057,7 @@ SectionModifier
 EndSection
 
 SectionModifier
-	Name "Play TunnelSPDIF Speaker"
-
-	EnableSequence
-		'SEC_RX Audio Mixer MultiMedia4':1:1
-		'SLIMBUS_0_RX Audio Mixer MultiMedia4':1:1
-	EndSequence
-
-	DisableSequence
-		'SEC_RX Audio Mixer MultiMedia4':1:0
-		'SLIMBUS_0_RX Audio Mixer MultiMedia4':1:0
-	EndSequence
-
-	# ALSA PCMs
-	PlaybackPCM 9
-
-EndSection
-
-SectionModifier
-	Name "Play TunnelSPDIF Earpiece"
+	Name "Play Tunnel1SPDIF Speaker"
 
 	EnableSequence
 		'SEC_RX Audio Mixer MultiMedia4':1:1
@@ -6093,7 +6075,7 @@ SectionModifier
 EndSection
 
 SectionModifier
-	Name "Play TunnelSPDIF Headphones"
+	Name "Play Tunnel1SPDIF Earpiece"
 
 	EnableSequence
 		'SEC_RX Audio Mixer MultiMedia4':1:1
@@ -6111,7 +6093,7 @@ SectionModifier
 EndSection
 
 SectionModifier
-	Name "Play TunnelSPDIF ANC Headset"
+	Name "Play Tunnel1SPDIF Headphones"
 
 	EnableSequence
 		'SEC_RX Audio Mixer MultiMedia4':1:1
@@ -6129,7 +6111,7 @@ SectionModifier
 EndSection
 
 SectionModifier
-	Name "Play TunnelSPDIF Speaker Headset"
+	Name "Play Tunnel1SPDIF ANC Headset"
 
 	EnableSequence
 		'SEC_RX Audio Mixer MultiMedia4':1:1
@@ -6147,7 +6129,25 @@ SectionModifier
 EndSection
 
 SectionModifier
-	Name "Play TunnelSPDIF Speaker ANC Headset"
+	Name "Play Tunnel1SPDIF Speaker Headset"
+
+	EnableSequence
+		'SEC_RX Audio Mixer MultiMedia4':1:1
+		'SLIMBUS_0_RX Audio Mixer MultiMedia4':1:1
+	EndSequence
+
+	DisableSequence
+		'SEC_RX Audio Mixer MultiMedia4':1:0
+		'SLIMBUS_0_RX Audio Mixer MultiMedia4':1:0
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 9
+
+EndSection
+
+SectionModifier
+	Name "Play Tunnel1SPDIF Speaker ANC Headset"
 
 	EnableSequence
 		'SEC_RX Audio Mixer MultiMedia4':1:1
@@ -6817,7 +6817,7 @@ EndSection
 
 SectionModifier
 
-        Name "Play TunnelPROXY Rx Speaker"
+        Name "Play Tunnel1PROXY Rx Speaker"
 
         EnableSequence
                 'AFE_PCM_RX Audio Mixer MultiMedia4':1:1
@@ -6835,7 +6835,7 @@ SectionModifier
 EndSection
 
 SectionModifier
-        Name "Play TunnelPROXY Rx Earpiece"
+        Name "Play Tunnel1PROXY Rx Earpiece"
 
         EnableSequence
                 'AFE_PCM_RX Audio Mixer MultiMedia4':1:1
@@ -6853,7 +6853,7 @@ SectionModifier
 EndSection
 
 SectionModifier
-        Name "Play Tunnel TunnelPROXY Rx Headphones"
+        Name "Play Tunnel1 TunnelPROXY Rx Headphones"
 
         EnableSequence
                 'AFE_PCM_RX Audio Mixer MultiMedia4':1:1
@@ -6871,7 +6871,7 @@ SectionModifier
 EndSection
 
 SectionModifier
-        Name "Play TunnelPROXY Rx ANC Headset"
+        Name "Play Tunnel1PROXY Rx ANC Headset"
 
         EnableSequence
                 'AFE_PCM_RX Audio Mixer MultiMedia4':1:1
@@ -6889,7 +6889,7 @@ SectionModifier
 EndSection
 
 SectionModifier
-        Name "Play TunnelPROXY Rx Speaker Headset"
+        Name "Play Tunnel1PROXY Rx Speaker Headset"
 
         EnableSequence
                 'AFE_PCM_RX Audio Mixer MultiMedia4':1:1
@@ -6907,7 +6907,7 @@ SectionModifier
 EndSection
 
 SectionModifier
-        Name "Play TunnelPROXY Rx Speaker ANC Headset"
+        Name "Play Tunnel1PROXY Rx Speaker ANC Headset"
 
         EnableSequence
                 'AFE_PCM_RX Audio Mixer MultiMedia4':1:1

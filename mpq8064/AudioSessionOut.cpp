@@ -63,9 +63,6 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
                                          status_t   *status)
 {
     devices |= AudioSystem::DEVICE_OUT_SPDIF;
-    alsa_handle_t alsa_handle;
-    char *use_case;
-    bool bIsUseCaseSet = false;
     Mutex::Autolock autoLock(mLock);
     // Default initilization
     mParent         = parent;
@@ -96,6 +93,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     hw_ptr[1]       = 0;
 
     mUseTunnelDecoder   = false;
+    mUseDualTunnel      = false;
     mCaptureFromProxy   = false;
     mRoutePcmAudio      = false;
     mSpdifFormat        = INVALID_FORMAT;
@@ -121,7 +119,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     mBitstreamSM        = NULL;
 
     mInputBufferSize    = MULTI_CHANNEL_MAX_PERIOD_SIZE;
-    mInputBufferCount   = TUNNEL_DECODER_BUFFER_COUNT;
+    mInputBufferCount   = MULTI_CHANNEL_PERIOD_COUNT;
     mEfd = -1;
     mBuffPoolInitDone   = 0;
 
@@ -342,7 +340,6 @@ status_t AudioSessionOutALSA::setVolume(float left, float right)
    mStreamVol = lrint((volume * 0x2000)+0.5);
 
     ALOGD("Setting stream volume to %d (available range is 0 to 0x2000)\n", mStreamVol);
-    ALOGE("ToDo: Implement volume setting for broadcast stream");
     if(mPcmRxHandle) {
         if(!strncmp(mPcmRxHandle->useCase, SND_USE_CASE_VERB_HIFI2,
                                      strlen(SND_USE_CASE_VERB_HIFI2)) ||
@@ -356,13 +353,8 @@ status_t AudioSessionOutALSA::setVolume(float left, float right)
         return status;
     }
     else if(mCompreRxHandle) {
-        if((!strncmp(mCompreRxHandle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
-                                     strlen(SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
-                !strncmp(mCompreRxHandle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL,
-                                     strlen(SND_USE_CASE_MOD_PLAY_TUNNEL))) &&
-           ((mSpdifFormat != COMPRESSED_FORMAT) &&
-            (mHdmiFormat != COMPRESSED_FORMAT))) {
-            ALOGD("set compressed Volume(%f)\n", volume);
+        if (mSpdifFormat != COMPRESSED_FORMAT && mHdmiFormat != COMPRESSED_FORMAT) {
+            ALOGD("set compressed Volume(%f) handle->type %d\n", volume, mCompreRxHandle->type);
             ALOGD("Setting Compressed volume to %d (available range is 0 to 0x2000)\n", mStreamVol);
             status = mCompreRxHandle->module->setPlaybackVolume(mStreamVol,
                                                  mCompreRxHandle->useCase);
@@ -400,7 +392,7 @@ status_t AudioSessionOutALSA::openTunnelDevice(int devices)
                                  strlen(SND_USE_CASE_VERB_INACTIVE)))) {
         status = openDevice(SND_USE_CASE_VERB_HIFI_TUNNEL, true, devices & ~mSecDevices);
     } else {
-        status = openDevice(SND_USE_CASE_MOD_PLAY_TUNNEL, false, devices & ~mSecDevices);
+        status = openDevice(SND_USE_CASE_MOD_PLAY_TUNNEL1, false, devices & ~mSecDevices);
     }
     if(use_case) {
         free(use_case);
@@ -1405,7 +1397,8 @@ status_t AudioSessionOutALSA::openDevice(char *useCase, bool bIsUseCase, int dev
     status_t status = NO_ERROR;
     ALOGD("openDevice: E");
     alsa_handle.module      = mALSADevice;
-    alsa_handle.bufferSize  = mInputBufferSize;
+    alsa_handle.bufferSize  = mInputBufferSize * mInputBufferCount;
+    alsa_handle.periodSize  = mInputBufferSize;
     alsa_handle.devices     = devices;
     alsa_handle.activeDevice= devices;
     alsa_handle.handle      = 0;
@@ -1417,9 +1410,33 @@ status_t AudioSessionOutALSA::openDevice(char *useCase, bool bIsUseCase, int dev
     alsa_handle.rxHandle    = 0;
     alsa_handle.ucMgr       = mUcMgr;
     alsa_handle.timeStampMode = SNDRV_PCM_TSTAMP_NONE;
+
+    if ((!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
+                          strlen(SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
+        (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL1,
+                          strlen(SND_USE_CASE_MOD_PLAY_TUNNEL1)))) ||
+        (!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
+                          strlen(SND_USE_CASE_VERB_HIFI_TUNNEL2)) ||
+        (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
+                          strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2))))) {
+        if (mUseMS11Decoder == true)
+            alsa_handle.type = COMPRESSED_PASSTHROUGH_FORMAT;
+        else if (mFormat == AUDIO_FORMAT_DTS || mFormat == AUDIO_FORMAT_DTS_LBR) {
+            if ((mSpdifFormat == COMPRESSED_FORMAT && mHdmiFormat == COMPRESSED_FORMAT)
+                || (mUseDualTunnel == true && devices == mSecDevices))
+                alsa_handle.type = COMPRESSED_PASSTHROUGH_FORMAT;
+            else
+                alsa_handle.type = COMPRESSED_FORMAT;
+        }
+        else
+            alsa_handle.type = COMPRESSED_FORMAT;
+    }
+    else
+       alsa_handle.type = PCM_FORMAT;
     strlcpy(alsa_handle.useCase, useCase, sizeof(alsa_handle.useCase));
 
-    mALSADevice->setUseCase(&alsa_handle, bIsUseCase);
+    if (mALSADevice->setUseCase(&alsa_handle, bIsUseCase))
+        return NO_INIT;
     status = mALSADevice->open(&alsa_handle);
     if(status != NO_ERROR) {
         ALOGE("Could not open the ALSA device for use case %s", alsa_handle.useCase);
