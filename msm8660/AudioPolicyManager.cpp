@@ -109,8 +109,6 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
             if (device) break;
             device = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET;
             if (device) break;
-            device = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL;
-            if (device) break;
             device = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET;
             if (device) break;
             device = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_EARPIECE;
@@ -135,8 +133,6 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
             device = mAvailableOutputDevices & AUDIO_DEVICE_OUT_USB_DEVICE;
             if (device) break;
             device = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET;
-            if (device) break;
-            device = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL;
             if (device) break;
             device = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET;
             if (device) break;
@@ -391,8 +387,11 @@ status_t AudioPolicyManager::setDeviceConnectionState(AudioSystem::audio_devices
                 // close unused outputs after device disconnection or direct outputs that have been
                 // opened by checkOutputsForDevice() to query dynamic parameters
                 if ((state == AudioSystem::DEVICE_STATE_UNAVAILABLE) ||
-                        (mOutputs.valueFor(outputs[i])->mFlags & AUDIO_OUTPUT_FLAG_DIRECT)) {
-                    closeOutput(outputs[i]);
+                    ((mOutputs.valueFor(outputs[i])->mFlags & AUDIO_OUTPUT_FLAG_DIRECT) &&
+                    !((mOutputs.valueFor(outputs[i])->mFlags & AUDIO_OUTPUT_FLAG_LPA)||
+                     (mOutputs.valueFor(outputs[i])->mFlags & AUDIO_OUTPUT_FLAG_TUNNEL) ||
+                     (mOutputs.valueFor(outputs[i])->mFlags & AUDIO_OUTPUT_FLAG_VOIP_RX)))) {
+                          closeOutput(outputs[i]);
                 }
             }
         }
@@ -590,6 +589,36 @@ status_t AudioPolicyManager::stopOutput(audio_io_handle_t output, AudioSystem::s
         return INVALID_OPERATION;
     }
 }
+
+status_t AudioPolicyManager::stopInput(audio_io_handle_t input)
+{
+    ALOGV("stopInput() input %d", input);
+    uint32_t newDevice = NULL;
+    ssize_t index = mInputs.indexOfKey(input);
+    if (index < 0) {
+        ALOGW("stopInput() unknow input %d", input);
+        return BAD_VALUE;
+    }
+    AudioInputDescriptor *inputDesc = mInputs.valueAt(index);
+
+    if (inputDesc->mRefCount == 0) {
+        ALOGW("stopInput() input %d already stopped", input);
+        return INVALID_OPERATION;
+    } else {
+        AudioParameter param = AudioParameter();
+        param.addInt(String8(AudioParameter::keyRouting), 0);
+        ALOGV("stopInput string to setParam %s\n",  param.toString().string());
+        mpClientInterface->setParameters(input, param.toString());
+        inputDesc->mRefCount = 0;
+
+        newDevice = AudioPolicyManagerBase::getNewDevice(mPrimaryOutput, false);
+        param.addInt(String8(AudioParameter::keyRouting), (int)newDevice);
+        mpClientInterface->setParameters(mPrimaryOutput, param.toString());
+        return NO_ERROR;
+    }
+    return NO_ERROR;
+}
+
 
 // ----------------------------------------------------------------------------
 // AudioPolicyManager
