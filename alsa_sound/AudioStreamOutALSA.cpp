@@ -367,7 +367,6 @@ status_t AudioStreamOutALSA::standby()
         ALOGD("Standby - stopA2dpPlayback_l - A2DPHardwareOutput");
         status_t err = mParent->stopA2dpPlayback_l(AudioHardwareALSA::A2DPHardwareOutput);
         ALOGV("stopA2dpPlayback return err  %d", err);
-        mParent->mRouteAudioToA2dp = false;
         return err;
     }
     mHandle->module->standby(mHandle);
