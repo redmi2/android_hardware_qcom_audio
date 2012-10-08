@@ -3717,7 +3717,7 @@ void  AudioHardware::AudioSessionOutLPA::eventThreadEntry()
         rc = ioctl(afd, AUDIO_GET_EVENT, &cur_pcmdec_event);
         ALOGE("pcm dec Event Thread rc = %d and errno is %d",rc, errno);
 
-        if ( (rc < 0) && (errno == ENODEV ) ) {
+        if ( (rc < 0) && (errno == ENODEV && (errno == EBADF)) ) {
             ALOGV("AUDIO__GET_EVENT called. Exit the thread");
             break;
         }
