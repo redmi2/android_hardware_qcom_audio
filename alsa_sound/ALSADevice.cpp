@@ -52,7 +52,6 @@ namespace android_audio_legacy
 ALSADevice::ALSADevice() {
     mDevSettingsFlag = TTY_OFF;
     mBtscoSamplerate = 8000;
-    mPflag = false;
     mCallMode = AudioSystem::MODE_NORMAL;
     mInChannels = 0;
     char value[128], platform[128], baseband[128];
@@ -450,22 +449,6 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
     rxDevice = getUCMDevice(devices & AudioSystem::DEVICE_OUT_ALL, 0, NULL);
     txDevice = getUCMDevice(devices & AudioSystem::DEVICE_IN_ALL, 1, rxDevice);
 
-    if (rxDevice != NULL) {
-        if ((handle->handle) && (((!strncmp(rxDevice, DEVICE_SPEAKER_HEADSET, strlen(DEVICE_SPEAKER_HEADSET))) &&
-            ((!strncmp(mCurRxUCMDevice, DEVICE_HEADPHONES, strlen(DEVICE_HEADPHONES))) ||
-            (!strncmp(mCurRxUCMDevice, DEVICE_HEADSET, strlen(DEVICE_HEADSET))))) ||
-            (((!strncmp(mCurRxUCMDevice, DEVICE_SPEAKER_HEADSET, strlen(DEVICE_SPEAKER_HEADSET))) &&
-            ((!strncmp(rxDevice, DEVICE_HEADPHONES, strlen(DEVICE_HEADPHONES))) ||
-            (!strncmp(rxDevice, DEVICE_HEADSET, strlen(DEVICE_HEADSET))))))) &&
-            ((!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI, strlen(SND_USE_CASE_VERB_HIFI))) ||
-            (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC, strlen(SND_USE_CASE_MOD_PLAY_MUSIC))))) {
-            pcm_close(handle->handle);
-            handle->handle=NULL;
-            handle->rxHandle=NULL;
-            mPflag = true;
-        }
-    }
-
     if ((rxDevice != NULL) && (txDevice != NULL)) {
         if (((strncmp(rxDevice, mCurRxUCMDevice, MAX_STR_LEN)) ||
              (strncmp(txDevice, mCurTxUCMDevice, MAX_STR_LEN))) &&
@@ -624,10 +607,6 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
 #endif
     }
 
-    if (mPflag == true) {
-        open(handle);
-        mPflag = false;
-    }
     if (rxDevice != NULL) {
         free(rxDevice);
         rxDevice = NULL;
