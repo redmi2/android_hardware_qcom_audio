@@ -415,6 +415,7 @@ public:
 
 private:
     uint32_t            mFrameCount;
+    uint32_t            mUseCase;
 
 protected:
     AudioHardwareALSA *     mParent;
@@ -510,7 +511,7 @@ private:
     AudioEventObserver *mObserver;
     output_metadata_handle_t mOutputMetadataTunnel;
     uint32_t            mOutputMetadataLength;
-
+    uint32_t            mUseCase;
     status_t            openDevice(char *pUseCase, bool bIsUseCase, int devices);
 
     status_t            closeDevice(alsa_handle_t *pDevice);
@@ -764,6 +765,7 @@ private:
     void        setA2DPActiveUseCases_l(uint32_t activeUsecase);
     uint32_t    getA2DPActiveUseCases_l();
     void        clearA2DPActiveUseCases_l(uint32_t activeUsecase);
+    uint32_t    useCaseStringToEnum(const char *usecase);
 
 protected:
     virtual status_t    dump(int fd, const Vector<String16>& args);
@@ -838,13 +840,12 @@ protected:
     volatile bool       mIsA2DPEnabled;
 
     enum {
-      A2DPNone = 0x0,
-      A2DPHardwareOutput = 0x1,
-      A2DPDirectOutput = 0x2,
-      A2DPBroadcast = 0x4,
-      A2DPVoip = 0x8,
-      A2DPFm = 0x10,
-      A2DPAllOutputs = 0x20,
+      USECASE_NONE = 0x0,
+      USECASE_HIFI = 0x1,
+      USECASE_HIFI_LOWLATENCY = 0x2,
+      USECASE_HIFI_LOW_POWER = 0x4,
+      USECASE_HIFI_TUNNEL = 0x8,
+      USECASE_FM = 0x10,
     };
     uint32_t mA2DPActiveUseCases;
 

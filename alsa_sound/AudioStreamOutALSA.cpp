@@ -53,16 +53,18 @@ static const int DEFAULT_SAMPLE_RATE = ALSA_DEFAULT_SAMPLE_RATE;
 AudioStreamOutALSA::AudioStreamOutALSA(AudioHardwareALSA *parent, alsa_handle_t *handle) :
     ALSAStreamOps(parent, handle),
     mParent(parent),
-    mFrameCount(0)
+    mFrameCount(0),
+    mUseCase(AudioHardwareALSA::USECASE_NONE)
 {
 }
 
 AudioStreamOutALSA::~AudioStreamOutALSA()
 {
     if (mParent->mRouteAudioToA2dp) {
-         status_t err = mParent->stopA2dpPlayback(AudioHardwareALSA::A2DPHardwareOutput);
-         ALOGW("stopA2dpPlayback return err  %d", err);
-         mParent->mRouteAudioToA2dp = false;
+         status_t err = mParent->stopA2dpPlayback(mUseCase);
+         if (err) {
+             ALOGE("stopA2dpPlayback return err  %d", err);
+         }
     }
     close();
 }
@@ -195,9 +197,11 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
 #endif
         }
         if (mParent->mRouteAudioToA2dp) {
-            if (! (mParent->getA2DPActiveUseCases_l() & AudioHardwareALSA::A2DPHardwareOutput)) {
+            mUseCase = mParent->useCaseStringToEnum(mHandle->useCase);
+            if (! (mParent->getA2DPActiveUseCases_l() & mUseCase )){
+                ALOGD("startA2dpPlayback_l from write :: useCase = %s", mHandle->useCase);
                 status_t err = NO_ERROR;
-                err = mParent->startA2dpPlayback_l(AudioHardwareALSA::A2DPHardwareOutput);
+                err = mParent->startA2dpPlayback_l(mUseCase);
                 if(err) {
                     ALOGE("startA2dpPlayback_l from write return err = %d", err);
                     mParent->mLock.unlock();
@@ -325,8 +329,8 @@ status_t AudioStreamOutALSA::close()
 #endif
 
     if (mParent->mRouteAudioToA2dp) {
-         ALOGD("close-suspendA2dpPlayback_l-A2DPHardwareOutput");
-         status_t err = mParent->suspendA2dpPlayback_l(AudioHardwareALSA::A2DPHardwareOutput);
+         ALOGD("close-suspendA2dpPlayback_l::mUseCase = %d",mUseCase);
+         status_t err = mParent->suspendA2dpPlayback_l(mUseCase);
          if(err) {
              ALOGE("suspendA2dpPlayback from hardware output close return err = %d", err);
              return err;
@@ -364,9 +368,11 @@ status_t AudioStreamOutALSA::standby()
 #endif
 
     if (mParent->mRouteAudioToA2dp) {
-        ALOGD("Standby - stopA2dpPlayback_l - A2DPHardwareOutput");
-        status_t err = mParent->stopA2dpPlayback_l(AudioHardwareALSA::A2DPHardwareOutput);
-        ALOGV("stopA2dpPlayback return err  %d", err);
+        status_t err = mParent->stopA2dpPlayback_l(mUseCase);
+        if(err) {
+            ALOGE("stopA2dpPlayback return err  %d", err);
+        }
+        ALOGD("A2DP Case, Bypassing standby");
         return err;
     }
     mHandle->module->standby(mHandle);
