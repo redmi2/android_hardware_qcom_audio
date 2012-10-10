@@ -3334,6 +3334,63 @@ SectionVerb
 
 EndSection
 }
+
+SectionUseCase."HiFi Pseudo Tunnel" {
+Comment "HIFI transcode use case"
+SectionModifier
+        Name "HiFi Pseudo Tunnel"
+
+        EnableSequence
+                'PSEUDO Mixer MultiMedia4':1:1
+                'SEC_RX Audio Mixer Pseudo':1:1
+        EndSequence
+
+        DisableSequence
+                'PSEUDO Mixer MultiMedia4':1:0
+                'SEC_RX Audio Mixer Pseudo':1:1
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 19
+
+EndSection
+
+SectionModifier
+        Name "HiFi Pseudo TunnelSPDIF"
+
+        EnableSequence
+                'PSEUDO Mixer MultiMedia4':1:1
+                'SEC_RX Audio Mixer Pseudo':1:1
+        EndSequence
+
+        DisableSequence
+                'PSEUDO Mixer MultiMedia4':1:0
+                'SEC_RX Audio Mixer Pseudo':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 19
+
+EndSection
+
+SectionModifier
+        Name "HiFi Pseudo TunnelHDMI"
+
+        EnableSequence
+                'PSEUDO Mixer MultiMedia4':1:1
+                'HDMI Mixer Pseudo':1:1
+        EndSequence
+
+        DisableSequence
+                'PSEUDO Mixer MultiMedia4':1:0
+                'HDMI Mixer Pseudo':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 19
+
+EndSection
+}
 SectionUseCase."VoLTE" {
 Comment "VoLTE use case"
 SectionVerb
@@ -6270,13 +6327,13 @@ SectionModifier
         Name "Play Tunnel1HDMI SPDIF"
 
         EnableSequence
-                'HDMI Mixer MultiMedia4':1:1
-		'SEC_RX Audio Mixer MultiMedia4':1:1
+            'HDMI Mixer MultiMedia4':1:1
+            'SEC_RX Audio Mixer MultiMedia4':1:1
         EndSequence
 
         DisableSequence
-                'HDMI Mixer MultiMedia4':1:0
-		'SEC_RX Audio Mixer MultiMedia4':1:0
+            'HDMI Mixer MultiMedia4':1:0
+            'SEC_RX Audio Mixer MultiMedia4':1:0
         EndSequence
 
         # ALSA PCMs
@@ -8447,6 +8504,60 @@ SectionModifier
 
         # ALSA PCMs
         PlaybackPCM 16
+
+EndSection
+
+SectionModifier
+        Name "Pseudo Tunnel"
+
+        EnableSequence
+            'PSEUDO Mixer MultiMedia4':1:1
+            'SEC_RX Audio Mixer Pseudo':1:1
+        EndSequence
+
+        DisableSequence
+            'PSEUDO Mixer MultiMedia4':1:0
+            'SEC_RX Audio Mixer Pseudo':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 19
+
+EndSection
+
+SectionModifier
+        Name "Pseudo TunnelSPDIF"
+
+        EnableSequence
+                'PSEUDO Mixer MultiMedia4':1:1
+                'SEC_RX Audio Mixer Pseudo':1:1
+        EndSequence
+
+        DisableSequence
+                'PSEUDO Mixer MultiMedia4':1:0
+                'SEC_RX Audio Mixer Pseudo':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 19
+
+EndSection
+
+SectionModifier
+        Name "Pseudo TunnelHDMI"
+
+        EnableSequence
+                'PSEUDO Mixer MultiMedia4':1:1
+                'HDMI Mixer Pseudo':1:1
+        EndSequence
+
+        DisableSequence
+                'PSEUDO Mixer MultiMedia4':1:0
+                'HDMI Mixer Pseudo':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 19
 
 EndSection
 
