@@ -194,7 +194,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
 
     } else if(format == AUDIO_FORMAT_WMA || format == AUDIO_FORMAT_WMA_PRO ||
               format == AUDIO_FORMAT_DTS || format == AUDIO_FORMAT_MP3 ||
-              format == AUDIO_FORMAT_DTS_LBR){
+              format == AUDIO_FORMAT_DTS_LBR || format == AUDIO_FORMAT_MP2){
         // In this case, DSP will decode and route the PCM data to output devices
         mUseTunnelDecoder = true;
         mWMAConfigDataSet = false;
