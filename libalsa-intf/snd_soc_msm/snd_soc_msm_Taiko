@@ -3136,6 +3136,57 @@ SectionVerb
         CapturePCM 5
 
 EndSection
+
+SectionVerb
+        Name "ADSP testfwk1"
+
+        EnableSequence
+		'SLIMBUS1_DL_HL Switch':1:1
+        EndSequence
+
+        DisableSequence
+		'SLIMBUS1_DL_HL Switch':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 11
+        CapturePCM 11
+
+EndSection
+
+SectionVerb
+        Name "ADSP testfwk3"
+
+        EnableSequence
+		'SLIMBUS3_DL_HL Switch':1:1
+        EndSequence
+
+        DisableSequence
+		'SLIMBUS3_DL_HL Switch':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 12
+        CapturePCM 12
+
+EndSection
+
+SectionVerb
+        Name "ADSP testfwk4"
+
+        EnableSequence
+		'SLIMBUS4_DL_HL Switch':1:1
+        EndSequence
+
+        DisableSequence
+		'SLIMBUS4_DL_HL Switch':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 13
+        CapturePCM 13
+
+EndSection
 }
 SectionDevice
 	Name "Earpiece"
