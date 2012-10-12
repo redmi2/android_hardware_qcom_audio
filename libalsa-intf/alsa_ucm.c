@@ -985,6 +985,10 @@ int getUseCaseType(const char *useCase)
             MAX_LEN(useCase,SND_USE_CASE_VERB_DL_REC)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_UL_DL_REC,
             MAX_LEN(useCase,SND_USE_CASE_VERB_UL_DL_REC)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_CAPTURE_COMPRESSED_VOICE_DL,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_CAPTURE_COMPRESSED_VOICE_DL)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_CAPTURE_COMPRESSED_VOICE_UL_DL,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_CAPTURE_COMPRESSED_VOICE_UL_DL)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_INCALL_REC,
             MAX_LEN(useCase,SND_USE_CASE_VERB_INCALL_REC)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_VOICE,
@@ -997,6 +1001,10 @@ int getUseCaseType(const char *useCase)
             MAX_LEN(useCase,SND_USE_CASE_MOD_CAPTURE_VOICE_DL)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL,
             MAX_LEN(useCase,SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_COMPRESSED_VOICE_DL,
+            MAX_LEN(useCase,SND_USE_CASE_MOD_CAPTURE_COMPRESSED_VOICE_DL)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_COMPRESSED_VOICE_UL_DL,
+            MAX_LEN(useCase,SND_USE_CASE_MOD_CAPTURE_COMPRESSED_VOICE_UL_DL)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_VOLTE,
             MAX_LEN(useCase,SND_USE_CASE_VERB_VOLTE)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_VOLTE,
