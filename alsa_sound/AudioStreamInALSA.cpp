@@ -155,8 +155,13 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                     } else 
 #endif
                     {
-                        strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL,
-                                sizeof(mHandle->useCase));
+                        if (mHandle->format == AUDIO_FORMAT_AMR_WB) {
+                            strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_COMPRESSED_VOICE_UL_DL,
+                                    sizeof(mHandle->useCase));
+                        } else {
+                            strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL,
+                                    sizeof(mHandle->useCase));
+                        }
                     }
                 } else if (mParent->mIncallMode & AudioSystem::CHANNEL_IN_VOICE_DNLINK) {
 #ifdef QCOM_CSDCLIENT_ENABLED
@@ -168,8 +173,13 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                     } else 
 #endif
                     {
-                        strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_DL,
-                                sizeof(mHandle->useCase));
+                        if (mHandle->format == AUDIO_FORMAT_AMR_WB) {
+                            strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_COMPRESSED_VOICE_DL,
+                                    sizeof(mHandle->useCase));
+                        } else {
+                            strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_DL,
+                                    sizeof(mHandle->useCase));
+                        }
                     }
                 }
 #ifdef QCOM_FM_ENABLED
@@ -206,8 +216,13 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                     } else 
 #endif
                     {
-                        strlcpy(mHandle->useCase, SND_USE_CASE_VERB_UL_DL_REC,
-                                sizeof(mHandle->useCase));
+                        if (mHandle->format == AUDIO_FORMAT_AMR_WB) {
+                            strlcpy(mHandle->useCase, SND_USE_CASE_VERB_CAPTURE_COMPRESSED_VOICE_UL_DL,
+                                    sizeof(mHandle->useCase));
+                        } else {
+                            strlcpy(mHandle->useCase, SND_USE_CASE_VERB_UL_DL_REC,
+                                    sizeof(mHandle->useCase));
+                        }
                     }
                 } else if (mParent->mIncallMode & AudioSystem::CHANNEL_IN_VOICE_DNLINK) {
 #ifdef QCOM_CSDCLIENT_ENABLED
@@ -219,8 +234,14 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                    } else
 #endif            
                    {
-                       strlcpy(mHandle->useCase, SND_USE_CASE_VERB_DL_REC,
-                               sizeof(mHandle->useCase));
+                        if (mHandle->format == AUDIO_FORMAT_AMR_WB) {
+                            strlcpy(mHandle->useCase, SND_USE_CASE_VERB_CAPTURE_COMPRESSED_VOICE_DL,
+                                    sizeof(mHandle->useCase));
+                        }
+                        else {
+                            strlcpy(mHandle->useCase, SND_USE_CASE_VERB_DL_REC,
+                                    sizeof(mHandle->useCase));
+                        }
                    }
                 }
 #ifdef QCOM_FM_ENABLED

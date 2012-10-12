@@ -1331,8 +1331,13 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                         strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE,
                                 sizeof(alsa_handle.useCase));
                     } else {
-                        strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL,
-                                sizeof(alsa_handle.useCase));
+                        if (*format == AudioSystem::AMR_WB) {
+                            strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_COMPRESSED_VOICE_UL_DL,
+                                    sizeof(alsa_handle.useCase));
+                        } else {
+                            strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL,
+                                    sizeof(alsa_handle.useCase));
+                        }
                     }
                 } else if (*channels & AudioSystem::CHANNEL_IN_VOICE_DNLINK) {
                     if (mFusion3Platform) {
@@ -1340,8 +1345,13 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                         strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE,
                                 sizeof(alsa_handle.useCase));
                     } else {
-                        strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_DL,
-                                sizeof(alsa_handle.useCase));
+                        if (*format == AudioSystem::AMR_WB) {
+                            strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_COMPRESSED_VOICE_DL,
+                                    sizeof(alsa_handle.useCase));
+                        } else {
+                            strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_DL,
+                                    sizeof(alsa_handle.useCase));
+                        }
                     }
                 }
 #ifdef QCOM_FM_ENABLED
@@ -1374,8 +1384,13 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                         strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_INCALL_REC,
                                 sizeof(alsa_handle.useCase));
                     } else {
-                        strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_UL_DL_REC,
-                                sizeof(alsa_handle.useCase));
+                        if (*format == AudioSystem::AMR_WB) {
+                            strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_CAPTURE_COMPRESSED_VOICE_UL_DL,
+                                    sizeof(alsa_handle.useCase));
+                        } else {
+                            strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_UL_DL_REC,
+                                    sizeof(alsa_handle.useCase));
+                        }
                     }
                 } else if (*channels & AudioSystem::CHANNEL_IN_VOICE_DNLINK) {
                     if (mFusion3Platform) {
@@ -1383,8 +1398,13 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                         strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_INCALL_REC,
                                 sizeof(alsa_handle.useCase));
                     } else {
-                       strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_DL_REC,
-                               sizeof(alsa_handle.useCase));
+                        if (*format == AudioSystem::AMR_WB) {
+                            strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_CAPTURE_COMPRESSED_VOICE_DL,
+                                    sizeof(alsa_handle.useCase));
+                        } else {
+                            strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_DL_REC,
+                                    sizeof(alsa_handle.useCase));
+                        }
                     }
                 }
 #ifdef QCOM_FM_ENABLED
@@ -1457,6 +1477,8 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
 #endif
            !strcmp(it->useCase, SND_USE_CASE_VERB_DL_REC) ||
            !strcmp(it->useCase, SND_USE_CASE_VERB_UL_DL_REC) ||
+           !strcmp(it->useCase, SND_USE_CASE_VERB_CAPTURE_COMPRESSED_VOICE_DL) ||
+           !strcmp(it->useCase, SND_USE_CASE_VERB_CAPTURE_COMPRESSED_VOICE_UL_DL) ||
            !strcmp(it->useCase, SND_USE_CASE_VERB_INCALL_REC)) {
             snd_use_case_set(mUcMgr, "_verb", it->useCase);
         } else {
