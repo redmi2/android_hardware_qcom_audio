@@ -39,7 +39,9 @@
 #include <sys/prctl.h>
 
 #include "AudioHardwareALSA.h"
-
+extern "C"{
+#include "acdb-loader.h"
+}
 //#define OUTPUT_BUFFER_LOG
 #ifdef OUTPUT_BUFFER_LOG
     FILE *outputBufferFile1;
@@ -81,6 +83,10 @@ AudioHardwareALSA::AudioHardwareALSA() :
     mDevSettingsFlag = 0;
     mDevSettingsFlag |= TTY_OFF;
     mBluetoothVGS = false;
+
+    if ((acdb_loader_init_ACDB()) < 0) {
+      ALOGE("Failed to initialize ACDB");
+      }
 
     if((fp = fopen("/proc/asound/cards","r")) == NULL) {
         ALOGE("Cannot open /proc/asound/cards file to get sound card info");
@@ -136,6 +142,7 @@ AudioHardwareALSA::~AudioHardwareALSA()
         it->useCase[0] = 0;
         mDeviceList.erase(it);
     }
+    acdb_loader_deallocate_ACDB();
 }
 
 status_t AudioHardwareALSA::initCheck()
