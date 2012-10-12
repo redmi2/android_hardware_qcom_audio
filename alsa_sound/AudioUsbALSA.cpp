@@ -1014,7 +1014,7 @@ void AudioUsbALSA::PlaybackThreadEntry() {
                 err = syncPtr(mproxyPlaybackHandle, &mkillPlayBackThread);
                 if (err == EPIPE) {
                     continue;
-                } else if (err != NO_ERROR) {
+                } else if (err != NO_ERROR && err != ENODEV) {
                     break;
                 }
             }
@@ -1086,7 +1086,7 @@ void AudioUsbALSA::PlaybackThreadEntry() {
                 err = syncPtr(musbPlaybackHandle, &mkillPlayBackThread);
                 if (err == EPIPE) {
                     continue;
-                } else if (err != NO_ERROR) {
+                } else if (err != NO_ERROR && err != ENODEV ) {
                     break;
                 }
             }
