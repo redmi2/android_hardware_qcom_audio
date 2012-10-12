@@ -61,8 +61,6 @@ namespace android_audio_legacy
 #define BUFFER_COUNT 4
 #define LPA_BUFFER_SIZE 256*1024
 #define TUNNEL_BUFFER_SIZE 600*1024
-#define AMR_TUNNEL_BUEER_COUNT 1024
-#define AMR_TUNNEL_BUFFER_SIZE 2400
 #define MONO_CHANNEL_MODE 1
 // ----------------------------------------------------------------------------
 
@@ -100,15 +98,8 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     mAlsaHandle         = NULL;
     mUseCase            = AudioHardwareALSA::USECASE_NONE;
 
-    if(((AUDIO_FORMAT_AMR_WB     == format) ||
-       (AUDIO_FORMAT_AMR_WB_PLUS == format)) && type) {
-        mInputBufferSize    = AMR_TUNNEL_BUFFER_SIZE;
-        mInputBufferCount   = AMR_TUNNEL_BUEER_COUNT;
-        ALOGW("updating buffer count/size for AMR WB/WB+");
-    } else {
-        mInputBufferSize    = type ? TUNNEL_BUFFER_SIZE : LPA_BUFFER_SIZE;
-        mInputBufferCount   = BUFFER_COUNT;
-    }
+    mInputBufferSize    = type ? TUNNEL_BUFFER_SIZE : LPA_BUFFER_SIZE;
+    mInputBufferCount   = BUFFER_COUNT;
     mEfd = -1;
     mEosEventReceived   = false;
     mEventThread        = NULL;
@@ -313,6 +304,10 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
         }
         mReachedEOS = true;
     }
+
+    mFilledQueueMutex.lock();
+    mFilledQueue.push_back(buf);
+    mFilledQueueMutex.unlock();
     return err;
 }
 
