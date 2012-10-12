@@ -931,6 +931,7 @@ AudioStreamOut* AudioHardware::openOutputStream(
             return mOutput;
         }
     }
+    return NULL;
 }
 
 
@@ -2749,24 +2750,14 @@ ssize_t AudioHardware::AudioSessionOutLPA::write(const void* buffer, size_t byte
     ALOGV("write Empty Queue size() = %d, Filled Queue size() = %d ",
          mEmptyQueue.size(),mFilledQueue.size());
 
-    // 1.) Wait till a empty buffer is available in the Empty buffer queue
-    mEmptyQueueMutex.lock();
-    if (mEmptyQueue.empty()) {
-        ALOGV("Write: waiting on mWriteCv");
-        mLock.unlock();
-        mWriteCv.wait(mEmptyQueueMutex);
-        mLock.lock();
-        if (mSkipWrite) {
-            ALOGV("Write: Flushing the previous write buffer");
-            mSkipWrite = false;
-            mEmptyQueueMutex.unlock();
-            if (bytes < LPA_BUFFER_SIZE)
-                bytes = 0;
-            else
-                return 0;
-        }
-        ALOGV("Write: received a signal to wake up");
+    if (mSkipWrite) {
+        mSkipWrite = false;
+        if (bytes < LPA_BUFFER_SIZE)
+            bytes = 0;
+        else
+            return 0;
     }
+
     if (mSkipWrite)
         mSkipWrite = false;
 
@@ -2943,6 +2934,7 @@ status_t AudioHardware::AudioSessionOutLPA::openAudioSessionDevice( )
     }
 
     start();
+    ALOGE("Calling bufferAlloc ");
         bufferAlloc();
 
     return status;
@@ -2953,6 +2945,7 @@ void AudioHardware::AudioSessionOutLPA::bufferAlloc( )
     // Allocate ION buffers
     void *ion_buf; int32_t ion_fd;
     struct msm_audio_ion_info ion_info;
+    ALOGE("Allocate ION buffers");
     //1. Open the ion_audio
     ionfd = open("/dev/ion", O_RDONLY | O_SYNC);
     if (ionfd < 0) {
@@ -2970,6 +2963,7 @@ void AudioHardware::AudioSessionOutLPA::bufferAlloc( )
                  ion_info.fd, (unsigned int)ion_info.vaddr);
         }
     }
+    ALOGE("Allocating ION buffers complete");
 }
 
 
@@ -3242,13 +3236,14 @@ void AudioHardware::AudioSessionOutLPA::createEventThread()
 status_t AudioHardware::AudioSessionOutLPA::start( )
 {
 
-    ALOGV("LPA playback start");
+    ALOGE("LPA playback start");
     if (mPaused && mIsDriverStarted) {
         mPaused = false;
         if (ioctl(afd, AUDIO_PAUSE, 0) < 0) {
             ALOGE("Resume:: LPA driver resume failed");
             return UNKNOWN_ERROR;
         }
+
     } else {
 	 //get config, set config and AUDIO_START LPA driver
 	 int sessionId = 0;
@@ -3264,7 +3259,7 @@ status_t AudioHardware::AudioSessionOutLPA::start( )
 
         config.sample_rate = mSampleRate;
         config.channel_count = mChannels;
-        ALOGV("sample_rate=%d and channel count=%d \n", mSampleRate, mChannels);
+        ALOGE("sample_rate=%d and channel count=%d \n", mSampleRate, mChannels);
         if ( ioctl(afd, AUDIO_SET_CONFIG, &config) < 0 ) {
             ALOGE("could not set config");
             close(afd);
@@ -3332,6 +3327,7 @@ status_t AudioHardware::AudioSessionOutLPA::start( )
         return BAD_VALUE;
     }
     mIsDriverStarted = true;
+    ALOGE("LPA Playback started");
     if (timeStarted == 0)
         timeStarted = nanoseconds_to_microseconds(systemTime(SYSTEM_TIME_MONOTONIC));// Needed
 	}
@@ -3438,6 +3434,7 @@ void AudioHardware::AudioSessionOutLPA::reset()
 	requestAndWaitForEventThreadExit();
     status_t status = NO_ERROR;
     bufferDeAlloc();
+    ::close(afd);
     temp = getNodeByStreamType(LPA_DECODE);
 
     if (temp == NULL) {
@@ -3468,15 +3465,57 @@ void AudioHardware::AudioSessionOutLPA::reset()
         }
 #endif
     }
-    //Close the LPA driver
-    ::close(afd);
-    ALOGD("AudioSessionOutLPA::reset() complete");
+    ALOGE("AudioSessionOutLPA::reset() complete");
 }
 
 status_t AudioHardware::AudioSessionOutLPA::getRenderPosition(uint32_t *dspFrames)
 {
     //TODO: enable when supported by driver
     return INVALID_OPERATION;
+}
+
+
+status_t AudioHardware::AudioSessionOutLPA::getBufferInfo(buf_info **buf) {
+
+    buf_info *tempbuf = (buf_info *)malloc(sizeof(buf_info) + mInputBufferCount*sizeof(int *));
+    ALOGV("Get buffer info");
+    tempbuf->bufsize = LPA_BUFFER_SIZE;
+    tempbuf->nBufs = mInputBufferCount;
+    tempbuf->buffers = (int **)((char*)tempbuf + sizeof(buf_info));
+    List<BuffersAllocated>::iterator it = mEmptyQueue.begin();
+    for (int i = 0; i < mInputBufferCount; i++) {
+        tempbuf->buffers[i] = (int *)it->memBuf;
+        it++;
+    }
+    *buf = tempbuf;
+    return NO_ERROR;
+}
+
+status_t AudioHardware::AudioSessionOutLPA::isBufferAvailable(int *isAvail) {
+
+    Mutex::Autolock autoLock(mLock);
+    ALOGV("isBufferAvailable Empty Queue size() = %d, Filled Queue size() = %d ",
+          mEmptyQueue.size(),mFilledQueue.size());
+    *isAvail = false;
+    // 1.) Wait till a empty buffer is available in the Empty buffer queue
+    mEmptyQueueMutex.lock();
+    if (mEmptyQueue.empty()) {
+        ALOGV("Write: waiting on mWriteCv");
+        mLock.unlock();
+        mWriteCv.wait(mEmptyQueueMutex);
+        mLock.lock();
+        if (mSkipWrite) {
+            ALOGV("Write: Flushing the previous write buffer");
+            mSkipWrite = false;
+            mEmptyQueueMutex.unlock();
+            return NO_ERROR;
+        }
+        ALOGV("Write: received a signal to wake up");
+    }
+    mEmptyQueueMutex.unlock();
+
+    *isAvail = true;
+    return NO_ERROR;
 }
 
 // End AudioSessionOutLPA
