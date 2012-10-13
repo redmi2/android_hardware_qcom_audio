@@ -633,17 +633,15 @@ status_t AudioSessionOutALSA::stop()
 
 status_t AudioSessionOutALSA::standby()
 {
-    //ToDO
-
+    Mutex::Autolock autoLock(mParent->mLock);
+    status_t err = NO_ERROR;
     if (mParent->mRouteAudioToA2dp) {
-         ALOGD("standby - suspendA2dpPlayback - A2DPDirectOutput");
-         status_t err = mParent->suspendA2dpPlayback(AudioHardwareALSA::A2DPDirectOutput);
-         if(err) {
-             ALOGE("standby-suspendA2dpPlayback-A2DPDirectOutput return er = %d", err);
-         }
+         ALOGD("Standby - stopA2dpPlayback_l - A2DPDirectOutput");
+         err = mParent->stopA2dpPlayback_l(AudioHardwareALSA::A2DPDirectOutput);
+         ALOGV("stopA2dpPlayback return err  %d", err);
+         mParent->mRouteAudioToA2dp = false;
     }
-
-    return NO_ERROR;
+    return err;
 }
 
 #define USEC_TO_MSEC(x) ((x + 999) / 1000)
