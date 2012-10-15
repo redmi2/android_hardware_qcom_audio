@@ -157,7 +157,8 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
         } else {
             mHandle->mode = mParent->mode();
         }
-        mHandle->module->setUseCase(&(*mHandle), bIsUseCaseSet);
+        if (mHandle->module->setUseCase(&(*mHandle), bIsUseCaseSet))
+            return NO_INIT;
 
         if((!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,
                                  strlen(SND_USE_CASE_VERB_IP_VOICECALL))) ||
@@ -167,7 +168,7 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
         }
         else
              mHandle->module->open(mHandle);
-        if(mHandle->handle == NULL) {
+        if(mHandle->handle->fd < 0) {
             ALOGE("write:: device open failed");
             mParent->mLock.unlock();
             return 0;

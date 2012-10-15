@@ -432,10 +432,11 @@ status_t AudioHardwareALSA::doRouting(int device)
         for (size_t b = 1; (bufferSize & ~b) != 0; b <<= 1)
         bufferSize &= ~b;
         alsa_handle.module = mALSADevice;
-        alsa_handle.bufferSize = bufferSize;
+        alsa_handle.periodSize  = bufferSize;
         alsa_handle.devices = device;
         alsa_handle.activeDevice = device;
         alsa_handle.handle = 0;
+        alsa_handle.type = PCM_FORMAT;
         alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
         alsa_handle.channels = VOICE_CHANNEL_MODE;
         alsa_handle.sampleRate = VOICE_SAMPLING_RATE;
@@ -449,7 +450,8 @@ status_t AudioHardwareALSA::doRouting(int device)
         ALSAHandleList::iterator it = mDeviceList.end();
         it--;
         ALOGV("Enabling voice call");
-        mALSADevice->setUseCase(&(*it), bIsUseCaseSet);
+        if (mALSADevice->setUseCase(&(*it), bIsUseCaseSet))
+           return NO_INIT;
         mALSADevice->startVoiceCall(&(*it));
     } else if(newMode == AudioSystem::MODE_NORMAL && mIsVoiceCallActive == 1) {
         // End voice call
@@ -496,10 +498,11 @@ status_t AudioHardwareALSA::doRouting(int device)
         for (size_t b = 1; (bufferSize & ~b) != 0; b <<= 1)
         bufferSize &= ~b;
         alsa_handle.module = mALSADevice;
-        alsa_handle.bufferSize = bufferSize;
+        alsa_handle.periodSize  = bufferSize;
         alsa_handle.devices = device;
         alsa_handle.activeDevice= device;
         alsa_handle.handle = 0;
+        alsa_handle.type = PCM_FORMAT;
         alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
         alsa_handle.channels = DEFAULT_CHANNEL_MODE;
         alsa_handle.sampleRate = DEFAULT_SAMPLING_RATE;
@@ -513,7 +516,8 @@ status_t AudioHardwareALSA::doRouting(int device)
         ALSAHandleList::iterator it = mDeviceList.end();
         it--;
 
-        mALSADevice->setUseCase(&(*it), bIsUseCaseSet);
+        if (mALSADevice->setUseCase(&(*it), bIsUseCaseSet))
+            return NO_INIT;
         if((device & AudioSystem::DEVICE_OUT_PROXY) && mRouteAudioToA2dp) {
             ALOGD("FM A2DP writer needs to be disabled in frameworks");
             ALOGD("doRouting-startA2dpPlayback_l-FM");
@@ -704,10 +708,11 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
                  return out;
           }
           alsa_handle.module = mALSADevice;
-          alsa_handle.bufferSize = bufferSize;
+          alsa_handle.periodSize  = bufferSize;
           alsa_handle.devices = mCurDevice;
           alsa_handle.activeDevice = devices;
           alsa_handle.handle = 0;
+          alsa_handle.type = PCM_FORMAT;
           alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
           alsa_handle.channels = VOIP_DEFAULT_CHANNEL_MODE;
           alsa_handle.sampleRate = *sampleRate;
@@ -733,7 +738,8 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
           it = mDeviceList.end();
           it--;
           ALOGV("openoutput: mALSADevice->route useCase %s mCurDevice %d mVoipStreamCount %d mode %d", it->useCase,mCurDevice,mVoipStreamCount, mode());
-          mALSADevice->setUseCase(&(*it), bIsUseCaseSet);
+          if (mALSADevice->setUseCase(&(*it), bIsUseCaseSet))
+              return NULL;
           err = mALSADevice->startVoipCall(&(*it));
           if (err) {
               ALOGE("Device open failed");
@@ -756,10 +762,11 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
           bufferSize &= ~b;
 
       alsa_handle.module = mALSADevice;
-      alsa_handle.bufferSize = bufferSize;
+      alsa_handle.periodSize  = bufferSize;
       alsa_handle.devices = devices;
       alsa_handle.activeDevice = devices;
       alsa_handle.handle = 0;
+      alsa_handle.type = PCM_FORMAT;
       alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
       alsa_handle.channels = DEFAULT_CHANNEL_MODE;
       alsa_handle.sampleRate = DEFAULT_SAMPLING_RATE;
@@ -786,7 +793,8 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
       ALSAHandleList::iterator it = mDeviceList.end();
       it--;
       ALOGD("useCase %s", it->useCase);
-      mALSADevice->setUseCase(&(*it),bIsUseCaseSet);
+      if (mALSADevice->setUseCase(&(*it),bIsUseCaseSet))
+          return NULL;
       err = mALSADevice->open(&(*it));
       if (err) {
           ALOGE("Device open failed");
@@ -887,10 +895,11 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                return in;
            }
            alsa_handle.module = mALSADevice;
-           alsa_handle.bufferSize = bufferSize;
+           alsa_handle.periodSize = bufferSize;
            alsa_handle.devices = mCurDevice;
            alsa_handle.activeDevice = devices;
            alsa_handle.handle = 0;
+           alsa_handle.type = PCM_FORMAT;
            alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
            alsa_handle.channels = VOIP_DEFAULT_CHANNEL_MODE;
            alsa_handle.sampleRate = *sampleRate;
@@ -914,7 +923,8 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
            mDeviceList.push_back(alsa_handle);
            it = mDeviceList.end();
            it--;
-           mALSADevice->setUseCase(&(*it), bIsUseCaseSet);
+           if (mALSADevice->setUseCase(&(*it), bIsUseCaseSet))
+               return NULL;
            if(sampleRate) {
                it->sampleRate = *sampleRate;
            }
@@ -953,10 +963,11 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         unsigned long bufferSize = DEFAULT_IN_BUFFER_SIZE;
 
         alsa_handle.module = mALSADevice;
-        alsa_handle.bufferSize = bufferSize;
+        alsa_handle.periodSize = bufferSize;
         alsa_handle.devices = devices;
         alsa_handle.activeDevice = devices;
         alsa_handle.handle = 0;
+        alsa_handle.type = PCM_FORMAT;
         alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
         alsa_handle.channels = VOICE_CHANNEL_MODE;
         alsa_handle.sampleRate = android::AudioRecord::DEFAULT_SAMPLE_RATE;
@@ -1022,7 +1033,8 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         }
         it->devices = route_devices;
         // NOTE: NEED CLARIFICATION to update route_device in the handle ???
-        mALSADevice->setUseCase(&(*it),bIsUseCaseSet);
+        if (mALSADevice->setUseCase(&(*it),bIsUseCaseSet))
+            return NULL;
         if(sampleRate) {
             it->sampleRate = *sampleRate;
         }

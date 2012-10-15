@@ -117,7 +117,6 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     int format = handle->format;
 
     bool dtsTranscode = false;
-    bool dtsPassThrough = false;
     char spdifFormat[20];
     char hdmiFormat[20];
     char dtsModelId[128];
@@ -127,20 +126,6 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     if (!strncmp(spdifFormat,"dts",sizeof(spdifFormat)) ||
         !strncmp(hdmiFormat,"dts",sizeof(hdmiFormat)))
         dtsTranscode = true;
-    if (!strncmp(spdifFormat,"dts",sizeof(spdifFormat)) &&
-        !strncmp(hdmiFormat,"dts",sizeof(hdmiFormat)))
-        dtsPassThrough = true;
-    if ((dtsTranscode)
-        && (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
-                          strlen(SND_USE_CASE_VERB_HIFI_TUNNEL2)) ||
-        !strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
-                          strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2)))) { /*||
-        !strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL3,
-                          strlen(SND_USE_CASE_VERB_HIFI_TUNNEL3)) ||
-        !strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL3,
-                          strlen(SND_USE_CASE_MOD_PLAY_TUNNEL3)))) {*/
-        dtsPassThrough = true;
-    }
     params = (snd_pcm_hw_params*) calloc(1, sizeof(struct snd_pcm_hw_params));
     if (!params) {
         return NO_INIT;
@@ -148,21 +133,16 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     param_init(params);
 
     reqBuffSize = handle->bufferSize;
-    if ((!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
-                          strlen(SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL,
-                          strlen(SND_USE_CASE_MOD_PLAY_TUNNEL)))) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
-                          strlen(SND_USE_CASE_VERB_HIFI_TUNNEL2)) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
-                          strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2))))) {
+    ALOGD("Handle type %d", (int)handle->type);
+    if (handle->type == COMPRESSED_FORMAT || handle->type == COMPRESSED_PASSTHROUGH_FORMAT) {
         if (ioctl(handle->handle->fd, SNDRV_COMPRESS_GET_CAPS, &compr_cap)) {
             ALOGE("SNDRV_COMPRESS_GET_CAPS, failed Error no %d \n", errno);
             err = -errno;
             return err;
         }
 
-        param_set_int(params, SNDRV_PCM_HW_PARAM_PERIODS, TUNNEL_DECODER_BUFFER_COUNT);
+        param_set_int(params, SNDRV_PCM_HW_PARAM_PERIODS,
+                      (handle->bufferSize/handle->periodSize));
         minPeroid = compr_cap.min_fragment_size;
         maxPeroid = compr_cap.max_fragment_size;
         ALOGV("Min peroid size = %d , Maximum Peroid size = %d",\
@@ -213,7 +193,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
         } else if(format == AUDIO_FORMAT_MP3) {
              ALOGV("MP3 CODEC");
              compr_params.codec.id = compr_cap.codecs[0];
-        } else if(format == AUDIO_FORMAT_DTS && dtsPassThrough == false) {
+        } else if(format == AUDIO_FORMAT_DTS && handle->type == COMPRESSED_FORMAT) {
              ALOGV("DTS CODEC");
              property_get("ro.build.modelid",dtsModelId,"0");
              ALOGV("from property modelId=%s,length=%d\n",
@@ -224,7 +204,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
                 compr_params.codec.options.dts.modelId,
                 compr_params.codec.options.dts.modelIdLength);
              compr_params.codec.id = compr_cap.codecs[5];
-        } else if(format == AUDIO_FORMAT_DTS) {
+        } else if(format == AUDIO_FORMAT_DTS && handle->type == COMPRESSED_PASSTHROUGH_FORMAT) {
              ALOGV("DTS PASSTHROUGH CODEC");
              compr_params.codec.id = compr_cap.codecs[7];
              hdmiChannels = 2;
@@ -257,8 +237,8 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
         }
     }
 
-    ALOGD("setHardwareParams: reqBuffSize %d channels %d sampleRate %d",
-         (int) reqBuffSize, handle->channels, handle->sampleRate);
+    ALOGD("setHardwareParams: reqBuffSize %d, periodSize %d, channels %d, sampleRate %d.",
+         (int) reqBuffSize, handle->periodSize, handle->channels, handle->sampleRate);
 
     param_set_mask(params, SNDRV_PCM_HW_PARAM_ACCESS,
         (handle->handle->flags & PCM_MMAP) ? SNDRV_PCM_ACCESS_MMAP_INTERLEAVED
@@ -267,27 +247,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
                    SNDRV_PCM_FORMAT_S16_LE);
     param_set_mask(params, SNDRV_PCM_HW_PARAM_SUBFORMAT,
                    SNDRV_PCM_SUBFORMAT_STD);
-    ALOGV("hw params -  before hifi2 condition %s", handle->useCase);
-
-    if ((!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI2,
-                           strlen(SND_USE_CASE_VERB_HIFI2))) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC2,
-                           strlen(SND_USE_CASE_MOD_PLAY_MUSIC2)))) {
-        int ALSAbufferSize = reqBuffSize;
-        param_set_int(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, ALSAbufferSize);
-        ALOGD("ALSAbufferSize = %d",ALSAbufferSize);
-        param_set_int(params, SNDRV_PCM_HW_PARAM_PERIODS, MULTI_CHANNEL_PERIOD_COUNT);
-    } else if ((!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI3,
-                           strlen(SND_USE_CASE_VERB_HIFI3))) ||
-                 (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC3,
-                           strlen(SND_USE_CASE_MOD_PLAY_MUSIC3)))) {
-        param_set_int(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, handle->bufferSize);
-        ALOGD("ALSAbufferSize = %d", handle->bufferSize);
-        param_set_int(params, SNDRV_PCM_HW_PARAM_PERIODS, MULTI_CHANNEL_PERIOD_COUNT);
-    }
-    else {
-        param_set_min(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, reqBuffSize);
-    }
+    param_set_int(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, handle->periodSize);
 
     param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 16);
     param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS,
@@ -313,16 +273,9 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     handle->handle->channels = handle->channels;
     handle->periodSize = handle->handle->period_size;
     handle->bufferSize = handle->handle->period_size;
-    if ((!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI2,
-                           strlen(SND_USE_CASE_VERB_HIFI2))) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC2,
-                           strlen(SND_USE_CASE_MOD_PLAY_MUSIC2))) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI3,
-                           strlen(SND_USE_CASE_VERB_HIFI3))) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC3,
-                           strlen(SND_USE_CASE_MOD_PLAY_MUSIC3)))) {
+    if (handle->type == PCM_FORMAT)
         handle->latency += (handle->handle->period_cnt * PCM_BUFFER_DURATION);
-    }
+
     return NO_ERROR;
 }
 
@@ -374,14 +327,8 @@ status_t ALSADevice::setSoftwareParams(alsa_handle_t *handle)
              params->start_threshold = params->start_threshold * 2;
          params->stop_threshold = INT_MAX;
      }
-    if ((!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
-                           strlen(SND_USE_CASE_VERB_HIFI_TUNNEL))) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL,
-                           strlen(SND_USE_CASE_MOD_PLAY_TUNNEL))) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
-                           strlen(SND_USE_CASE_VERB_HIFI_TUNNEL2))) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
-                           strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2)))) {
+    if (handle->type == COMPRESSED_FORMAT ||
+            handle->type == COMPRESSED_PASSTHROUGH_FORMAT) {
         params->period_step = 1;
         params->avail_min = handle->channels - 1 ? periodSize/2 : periodSize/4;
         params->start_threshold = handle->channels - 1 ? periodSize : periodSize/2;
@@ -403,8 +350,8 @@ void ALSADevice::switchDevice(uint32_t devices, uint32_t mode)
     for(ALSAHandleList::iterator it = mDeviceList->begin(); it != mDeviceList->end(); ++it) {
         if((strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
                           strlen(SND_USE_CASE_VERB_HIFI_TUNNEL))) &&
-           (strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL,
-                          strlen(SND_USE_CASE_MOD_PLAY_TUNNEL))) &&
+           (strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL1,
+                          strlen(SND_USE_CASE_MOD_PLAY_TUNNEL1))) &&
            (strncmp(it->useCase, SND_USE_CASE_VERB_HIFI2,
                           strlen(SND_USE_CASE_VERB_HIFI2))) &&
            (strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_MUSIC2,
@@ -561,8 +508,8 @@ status_t ALSADevice::open(alsa_handle_t *handle)
                             strlen(SND_USE_CASE_MOD_PLAY_MUSIC2))) ||
         (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
                             strlen(SND_USE_CASE_VERB_HIFI_TUNNEL))) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL,
-                            strlen(SND_USE_CASE_MOD_PLAY_TUNNEL))) ||
+        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL1,
+                            strlen(SND_USE_CASE_MOD_PLAY_TUNNEL1))) ||
         (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI3,
                             strlen(SND_USE_CASE_VERB_HIFI3))) ||
         (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC3,
@@ -594,8 +541,8 @@ status_t ALSADevice::open(alsa_handle_t *handle)
     }
     if (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
                            strlen(SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL,
-                            strlen(SND_USE_CASE_MOD_PLAY_TUNNEL))) ||
+        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL1,
+                            strlen(SND_USE_CASE_MOD_PLAY_TUNNEL1))) ||
         (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
                             strlen(SND_USE_CASE_VERB_HIFI_TUNNEL2))) ||
         (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
@@ -1113,8 +1060,8 @@ int  ALSADevice::getUseCaseType(const char *useCase)
            strlen(SND_USE_CASE_MOD_PLAY_MUSIC)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_LPA,
            strlen(SND_USE_CASE_MOD_PLAY_LPA)) ||
-        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL,
-           strlen(SND_USE_CASE_MOD_PLAY_TUNNEL)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL1,
+           strlen(SND_USE_CASE_MOD_PLAY_TUNNEL1)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC2,
            strlen(SND_USE_CASE_MOD_PLAY_MUSIC2)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
@@ -1644,8 +1591,8 @@ status_t ALSADevice::setPlaybackVolume(int value, char *useCase)
         strlcpy(volMixerCtrlStr, "HIFI3 RX Volume", sizeof(volMixerCtrlStr));
     else if((!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
                 strlen(SND_USE_CASE_VERB_HIFI_TUNNEL))) ||
-            (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL,
-                strlen(SND_USE_CASE_MOD_PLAY_TUNNEL))))
+            (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL1,
+                strlen(SND_USE_CASE_MOD_PLAY_TUNNEL1))))
         strlcpy(volMixerCtrlStr, "COMPRESSED RX Volume", sizeof(volMixerCtrlStr));
     else if((!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
                 strlen(SND_USE_CASE_VERB_HIFI_TUNNEL2))) ||
@@ -1810,9 +1757,125 @@ void ALSADevice::getDevices(uint32_t devices, uint32_t mode, char **rxDevice, ch
     return;
 }
 
-void ALSADevice::setUseCase(alsa_handle_t *handle, bool bIsUseCaseSet)
+/**
+ * Compares two usecase to check if they are same or can be replaced
+ * with each other
+ * Returns true if replaceable, false otherwise.
+ *
+ * Two usecases can be replaced by each other if
+ * 1. They are same
+ * 2. They differ only by a number(not more than two digit) at the end
+ * 3. Both usecases should have number as suffix at the end.
+ *
+ * E.g. "Play Music1" and "Play Music2" are replaceable
+ *      "Play Music11" and "Play Music9" are replaceable
+ *    but "Play Music" and "Play Music2" are NOT REPLACEABLE
+ *
+ *    The last case is included to distinguise standard Usecases from
+ *    Our Usecase definitions.
+ */
+bool ALSADevice::isUsecaseMatching(const char *usecase, const char *requsecase)
+{
+    int len1 = 0, len2 = 0, lc = 0;
+
+    while (usecase[lc] != '\0' && requsecase[lc] != '\0'
+           && usecase[lc] == requsecase[lc])
+        lc++;
+
+    len1 = strlen(usecase);
+    len2 = strlen(requsecase);
+
+    if (len1 == lc && len2 == lc)
+        return true; /* Both Usecases are same */
+    if (lc+2 < len1 || lc+2 < len2 || len1 == lc || len2 == lc)
+        return false; /* Usecases differ by more than two characters*/
+
+    while (len1-- > lc) {
+        if (usecase[len1] < '0' || usecase[len1] > '9')
+            return false; /* Characters at end the end are not numerals */
+    }
+    while (len2-- > lc) {
+        if (requsecase[len2] < '0' || requsecase[len2] > '9')
+            return false; /* Characters at end the end are not numerals */
+    }
+
+    return true; /* Replaceable Usecases */
+}
+
+/*
+ * Checks whether the requested Usecase is already opened or conflicts otherwise
+ * Returns int:
+ *     0, if no conflicts detected
+ *     1, if conflicts but alternative usecase is available
+ *     NEGATIVE, Error values if usecase invalid or cannot be used
+ */
+int ALSADevice::checkAndGetAvailableUseCase(alsa_handle_t *handle, char altUsecase[])
+{
+    char const **list = NULL;
+    int ret = 0, index = 0, listCount = 0;
+    bool usecaseConflicts = false;
+    ALSAHandleList::iterator it;
+
+    ALOGD("checkAndGetAvailableUseCase usecase req: %s", handle->useCase);
+    for (it = handle->module->mDeviceList->begin();
+         it != handle->module->mDeviceList->end(); ++it) {
+         if (handle != &(*it) && strncmp(it->useCase, handle->useCase, sizeof(handle->useCase))
+             == 0 && it->handle && it->handle->fd > 0) {
+             ALOGV("requsecase in conflict");
+             usecaseConflicts = true;
+             break;
+         }
+    }
+    if (usecaseConflicts == false) {
+       strlcpy(altUsecase, handle->useCase, sizeof(handle->useCase));
+       return ret;
+    }
+
+    listCount = snd_use_case_get_list(handle->ucMgr, "_modifiers", &list);
+    while(index < listCount) {
+        if (isUsecaseMatching(list[index], handle->useCase) == true) {
+            usecaseConflicts = false;
+            for (it = handle->module->mDeviceList->begin();
+                it != handle->module->mDeviceList->end(); ++it) {
+                if (handle != &(*it) && strncmp(it->useCase, list[index], sizeof(handle->useCase))
+                    == 0 && it->handle && it->handle->fd > 0) {
+                    usecaseConflicts = true;
+                    break;
+                }
+            }
+            if (usecaseConflicts == false) {
+                ALOGV("Alternative usecase suggested %s.", list[index]);
+                strlcpy(altUsecase, list[index], MAX_STR_LEN);
+                ret = 1;
+                break;
+            }
+        }
+        index++;
+    }
+    if (listCount < 0 || index == listCount)
+        ret = -1;
+    if (listCount > 0)
+        snd_use_case_free_list(list, listCount);
+    return ret;
+}
+
+int ALSADevice::setUseCase(alsa_handle_t *handle, bool bIsUseCaseSet)
 {
     char *rxDevice = NULL, *txDevice = NULL;
+    char altUseCase[MAX_STR_LEN] = "";
+    int ret = 0;
+
+    // check for Conflicts if usecase is already set
+    if (!bIsUseCaseSet) {
+        ret = checkAndGetAvailableUseCase(handle, altUseCase);
+        if (ret > 0 && altUseCase[0] != '\0'){
+            strlcpy(handle->useCase, altUseCase, sizeof(handle->useCase));
+        } else if (ret < 0) {
+            ALOGV("no valid match for usecase found,req usecase %s", handle->useCase);
+            return -1;
+        }
+    }
+
     getDevices(handle->devices, handle->mode, &rxDevice, &txDevice);
 
     if(rxDevice != NULL) {
@@ -1835,6 +1898,7 @@ void ALSADevice::setUseCase(alsa_handle_t *handle, bool bIsUseCaseSet)
            txDevice = NULL;
         }
     }
+    return 0;
 }
 
 status_t ALSADevice::exitReadFromProxy()
@@ -2348,7 +2412,7 @@ status_t ALSADevice::setCaptureHardwareParams(alsa_handle_t *handle, bool isComp
     param_set_mask(params, SNDRV_PCM_HW_PARAM_SUBFORMAT,
                    SNDRV_PCM_SUBFORMAT_STD);
     param_set_int(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES,
-                  handle->bufferSize);
+                  handle->periodSize);
     param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 16);
     param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS,
                   handle->channels* 16);

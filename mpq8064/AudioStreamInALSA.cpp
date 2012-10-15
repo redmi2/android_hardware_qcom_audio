@@ -141,7 +141,8 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
             mHandle->mode = mParent->mode();
         }
         mHandle->activeDevice = mDevices;
-        mHandle->module->setUseCase(&(*mHandle), bIsUseCaseSet);
+       if (mHandle->module->setUseCase(&(*mHandle), bIsUseCaseSet))
+           return NO_INIT;
        if((!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,
                                 strlen(SND_USE_CASE_VERB_IP_VOICECALL))) ||
            (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP,
@@ -150,7 +151,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
         }
         else
             mHandle->module->open(mHandle);
-        if(mHandle->handle == NULL) {
+        if(mHandle->handle->fd < 0) {
             ALOGE("read:: PCM device open failed");
             mParent->mLock.unlock();
 

@@ -155,13 +155,15 @@ enum {
     INVALID_FORMAT               = -1,
     PCM_FORMAT                   = 0,
     COMPRESSED_FORMAT            = 1,
-    COMPRESSED_FORCED_PCM_FORMAT = 2
+    COMPRESSED_FORCED_PCM_FORMAT = 2,
+    COMPRESSED_PASSTHROUGH_FORMAT = 3
 };
 
 struct alsa_handle_t {
     ALSADevice*         module;
     uint32_t            devices;
     char                useCase[MAX_STR_LEN];
+    uint8_t             type;            // Device Node Type, i.e. PCM/COMPRESSED/PASSTHROUGH
     struct pcm *        handle;
     snd_pcm_format_t    format;
     uint16_t            channels;
@@ -258,7 +260,7 @@ public:
     void        switchDeviceUseCase(alsa_handle_t *handle, uint32_t devices,
                                             uint32_t mode);
     void        setDeviceList(ALSAHandleList *mDeviceList);
-    void        setUseCase(alsa_handle_t *handle, bool bIsUseCaseSet);
+    int         setUseCase(alsa_handle_t *handle, bool bIsUseCaseSet);
     void        setUseCase(alsa_handle_t *handle, bool bIsUseCaseSet, char *device);
     status_t    openCapture(alsa_handle_t *handle, bool isMmapMode,
                             bool isCompressed);
@@ -279,6 +281,8 @@ private:
     status_t   startProxy();
 
 private:
+    bool        isUsecaseMatching(const char *usecase, const char *requsecase);
+    int         checkAndGetAvailableUseCase(alsa_handle_t *handle, char altUsecase[]);
     int         deviceName(alsa_handle_t *handle, unsigned flags, char **value);
     status_t    setHardwareParams(alsa_handle_t *handle);
     status_t    setSoftwareParams(alsa_handle_t *handle);
