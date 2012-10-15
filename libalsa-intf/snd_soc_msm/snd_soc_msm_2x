@@ -1795,7 +1795,7 @@ SectionVerb
 EndSection
 
 SectionVerb
-        Name "SGLTE CallHDMI"
+        Name "SGLTEHDMI"
 
         EnableSequence
         EndSequence
@@ -1812,7 +1812,7 @@ SectionVerb
 EndSection
 
 SectionVerb
-        Name "SGLTE CallHDMI Tx"
+        Name "SGLTEHDMI Tx"
 
         EnableSequence
                 'HDMI_RX_Voice Mixer SGLTE':1:1
@@ -1829,7 +1829,7 @@ SectionVerb
 EndSection
 
 SectionVerb
-        Name "SGLTE CallBT SCO Rx"
+        Name "SGLTEBT SCO Rx"
 
         EnableSequence
         EndSequence
@@ -1847,7 +1847,7 @@ SectionVerb
 EndSection
 
 SectionVerb
-        Name "SGLTE CallBT SCO Tx"
+        Name "SGLTEBT SCO Tx"
 
         EnableSequence
                 'Internal BTSCO SampleRate':0:8000
@@ -1865,7 +1865,7 @@ SectionVerb
 EndSection
 
 SectionVerb
-        Name "SGLTE CallBT SCO WB Rx"
+        Name "SGLTEBT SCO WB Rx"
 
         EnableSequence
         EndSequence
@@ -1883,7 +1883,7 @@ SectionVerb
 EndSection
 
 SectionVerb
-        Name "SGLTE CallBT SCO WB Tx"
+        Name "SGLTEBT SCO WB Tx"
 
         EnableSequence
                 'Internal BTSCO SampleRate':0:16000
@@ -1901,7 +1901,7 @@ SectionVerb
 EndSection
 
 SectionVerb
-        Name "SGLTE CallPROXY Rx"
+        Name "SGLTEPROXY Rx"
 
         EnableSequence
         EndSequence
@@ -1918,7 +1918,41 @@ SectionVerb
 EndSection
 
 SectionVerb
-        Name "SGLTE CallPROXY Tx"
+        Name "SGLTEPROXY Tx"
+
+        EnableSequence
+                'AFE_PCM_RX_Voice Mixer SGLTE':1:1
+                'SGLTE_Tx Mixer AFE_PCM_TX_SGLTE':1:1
+        EndSequence
+
+        DisableSequence
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 13
+        CapturePCM 13
+
+EndSection
+
+SectionVerb
+        Name "SGLTEUSB PROXY Rx"
+
+        EnableSequence
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX_Voice Mixer SGLTE':1:0
+                'SGLTE_Tx Mixer AFE_PCM_TX_SGLTE':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 13
+        CapturePCM 13
+
+EndSection
+
+SectionVerb
+        Name "SGLTEUSB PROXY Tx"
 
         EnableSequence
                 'AFE_PCM_RX_Voice Mixer SGLTE':1:1
@@ -7280,6 +7314,40 @@ EndSection
 
 SectionModifier
         Name "Play SGLTEPROXY Tx"
+
+        EnableSequence
+                'AFE_PCM_RX_Voice Mixer SGLTE':1:1
+                'SGLTE_Tx Mixer AFE_PCM_TX_SGLTE':1:1
+        EndSequence
+
+        DisableSequence
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 13
+        CapturePCM 13
+
+EndSection
+
+SectionModifier
+        Name "Play SGLTEUSB PROXY Rx"
+
+        EnableSequence
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX_Voice Mixer SGLTE':1:0
+                'SGLTE_Tx Mixer AFE_PCM_TX_SGLTE':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 13
+        CapturePCM 13
+
+EndSection
+
+SectionModifier
+        Name "Play SGLTEUSB PROXY Tx"
 
         EnableSequence
                 'AFE_PCM_RX_Voice Mixer SGLTE':1:1
