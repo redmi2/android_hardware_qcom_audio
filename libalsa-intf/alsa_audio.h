@@ -148,6 +148,8 @@ int get_compressed_format(const char *format);
 void param_dump(struct snd_pcm_hw_params *p);
 int pcm_prepare(struct pcm *pcm);
 long pcm_avail(struct pcm *pcm);
+int pcm_set_channel_map(struct pcm *pcm, struct mixer *mixer,
+                        int max_channels, char *chmap);
 
 /* Returns a human readable reason for the last error. */
 const char *pcm_error(struct pcm *pcm);

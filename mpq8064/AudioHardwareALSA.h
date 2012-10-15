@@ -146,6 +146,38 @@ class AudioBitstreamSM;
 #define AFE_PROXY_SAMPLE_RATE 48000
 #define AFE_PROXY_CHANNEL_COUNT 2
 
+#define PCM_CHANNEL_FL    1
+/* Front right channel. */
+#define PCM_CHANNEL_FR    2
+/* Front center channel. */
+#define PCM_CHANNEL_FC    3
+/* Left surround channel.*/
+#define PCM_CHANNEL_LS   4
+/* Right surround channel.*/
+#define PCM_CHANNEL_RS   5
+/* Low frequency effect channel. */
+#define PCM_CHANNEL_LFE  6
+/* Center surround channel; Rear center channel. */
+#define PCM_CHANNEL_CS   7
+/* Left back channel; Rear left channel. */
+#define PCM_CHANNEL_LB   8
+/* Right back channel; Rear right channel. */
+#define PCM_CHANNEL_RB   9
+/* Top surround channel. */
+#define PCM_CHANNEL_TS   10
+/* Center vertical height channel.*/
+#define PCM_CHANNEL_CVH  11
+/* Mono surround channel.*/
+#define PCM_CHANNEL_MS   12
+/* Front left of center. */
+#define PCM_CHANNEL_FLC  13
+/* Front right of center. */
+#define PCM_CHANNEL_FRC  14
+/* Rear left of center. */
+#define PCM_CHANNEL_RLC  15
+/* Rear right of center. */
+#define PCM_CHANNEL_RRC  16
+
 static uint32_t FLUENCE_MODE_ENDFIRE   = 0;
 static uint32_t FLUENCE_MODE_BROADSIDE = 1;
 class ALSADevice;
@@ -254,6 +286,8 @@ public:
     status_t    setPlaybackVolume(int, char *);
     status_t    setPlaybackFormat(const char *value, int device);
     status_t    setCaptureFormat(const char *value);
+    status_t    setChannelMap(alsa_handle_t *handle, int maxChannels,
+                              char *channelMap);
     status_t    setWMAParams(alsa_handle_t* , int[], int);
     int         getALSABufferSize(alsa_handle_t *handle);
     status_t    setHDMIChannelCount(int channels);
@@ -560,6 +594,7 @@ private:
     void                updateRoutingFlags();
     void                setSpdifHdmiRoutingFlags(int devices);
     status_t            setPlaybackFormat();
+    void                setChannelMap(alsa_handle_t *handle);
     status_t            pause_l();
     status_t            resume_l();
     void                reset();
