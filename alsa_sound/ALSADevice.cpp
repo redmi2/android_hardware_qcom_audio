@@ -172,7 +172,11 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     if ((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
         (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL)) ||
         (!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED)) ||
-        (!strcmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED))) {
+        (!strcmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED)) ||
+        (!strcmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_COMPRESSED_VOICE_DL)) ||
+        (!strcmp(handle->useCase, SND_USE_CASE_VERB_CAPTURE_COMPRESSED_VOICE_DL)) ||
+        (!strcmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_COMPRESSED_VOICE_UL_DL)) ||
+        (!strcmp(handle->useCase, SND_USE_CASE_VERB_CAPTURE_COMPRESSED_VOICE_UL_DL))) {
         ALOGV("Tunnel mode detected...");
         //get the list of codec supported by hardware
         if (ioctl(handle->handle->fd, SNDRV_COMPRESS_GET_CAPS, &compr_cap)) {
@@ -187,7 +191,11 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
         else if (handle->format == AUDIO_FORMAT_AMR_WB) {
           codec_id = get_compressed_format("AMR_WB");
           if ((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED)) ||
-              (!strcmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED))) {
+              (!strcmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED)) ||
+              (!strcmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_COMPRESSED_VOICE_UL_DL)) ||
+              (!strcmp(handle->useCase, SND_USE_CASE_VERB_CAPTURE_COMPRESSED_VOICE_UL_DL)) ||
+              (!strcmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_COMPRESSED_VOICE_DL)) ||
+              (!strcmp(handle->useCase, SND_USE_CASE_VERB_CAPTURE_COMPRESSED_VOICE_DL))) {
               compr_params.codec.options.generic.reserved[0] = 8; /*band mode - 23.85 kbps*/
               compr_params.codec.options.generic.reserved[1] = 0; /*dtx mode - disable*/
           }
@@ -272,6 +280,10 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
             if ((strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL)) &&
                 (strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL)) &&
                 (strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED)) &&
+                (strcmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_COMPRESSED_VOICE_UL_DL)) &&
+                (strcmp(handle->useCase, SND_USE_CASE_VERB_CAPTURE_COMPRESSED_VOICE_UL_DL)) &&
+                (strcmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_COMPRESSED_VOICE_DL)) &&
+                (strcmp(handle->useCase, SND_USE_CASE_VERB_CAPTURE_COMPRESSED_VOICE_DL)) &&
                 (strcmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED))) {
               format = SNDRV_PCM_FORMAT_SPECIAL;
               ALOGW("setting format to SNDRV_PCM_FORMAT_SPECIAL");
