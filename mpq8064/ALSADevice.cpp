@@ -220,7 +220,8 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
             err = -errno;
             return err;
         }
-
+        handle->handle->flags &= ~(PCM_STEREO | PCM_MONO | PCM_QUAD | PCM_5POINT1);
+        handle->handle->flags |= PCM_7POINT1;
         handle->channels = 8;
     }
     if(handle->sampleRate > 48000) {
