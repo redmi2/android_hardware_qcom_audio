@@ -334,7 +334,7 @@ private:
     status_t    dumpInternals(int fd, const Vector<String16>& args);
     uint32_t    getInputSampleRate(uint32_t sampleRate);
     bool        checkOutputStandby();
-    status_t    doRouting(AudioStreamInMSM72xx *input);
+    status_t    doRouting(AudioStreamInMSM72xx *input, int outputDevice = 0);
     status_t    enableFM(int sndDevice);
     status_t enableComboDevice(uint32_t sndDevice, bool enableOrDisable);
     status_t    disableFM();
