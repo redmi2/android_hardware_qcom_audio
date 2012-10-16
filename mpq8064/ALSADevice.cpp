@@ -1200,6 +1200,10 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input)
                 return strdup(SND_USE_CASE_DEV_SPDIF_SPEAKER_HEADSET);
             }
         } else if( (devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
+                   (devices & AudioSystem::DEVICE_OUT_SPDIF) &&
+                   ((devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)) ) {
+            return strdup(SND_USE_CASE_DEV_HDMI_SPDIF_SPEAKER);
+        } else if( (devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
                    (devices & AudioSystem::DEVICE_OUT_PROXY) &&
                    ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
                     (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE) ) ) {
@@ -1231,6 +1235,9 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input)
         } else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
                  (devices & AudioSystem::DEVICE_OUT_FM_TX)) {
             return strdup(SND_USE_CASE_DEV_SPEAKER_FM_TX); /* COMBO SPEAKER+FM_TX RX */
+        } else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
+                 (devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)) {
+            return strdup(SND_USE_CASE_DEV_HDMI_SPEAKER); /* COMBO SPEAKER+ HDMI */
         } else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
                  (devices & AudioSystem::DEVICE_OUT_SPDIF)) {
             return strdup(SND_USE_CASE_DEV_SPDIF_SPEAKER); /* COMBO SPEAKER+ SPDIF */

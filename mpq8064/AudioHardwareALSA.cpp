@@ -677,7 +677,9 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
         mRouteAudioToA2dp = true;
 
     }
-    if(devices == AudioSystem::DEVICE_OUT_DIRECTOUTPUT) {
+    if((devices == AudioSystem::DEVICE_OUT_DIRECTOUTPUT) ||
+       (flags & AUDIO_OUTPUT_FLAG_DIRECT) && (flags & AUDIO_OUTPUT_FLAG_VOIP_RX)&&
+       ((*sampleRate == VOIP_SAMPLING_RATE_8K) || (*sampleRate == VOIP_SAMPLING_RATE_16K))) {
         bool voipstream_active = false;
         for(it = mDeviceList.begin();
             it != mDeviceList.end(); ++it) {
