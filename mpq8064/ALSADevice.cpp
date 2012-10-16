@@ -1646,10 +1646,16 @@ status_t ALSADevice::setPlaybackVolume(int value, char *useCase)
 status_t ALSADevice::setPlaybackFormat(const char *value, int device)
 {
     status_t err = NO_ERROR;
-    if (device == AudioSystem::DEVICE_OUT_SPDIF)
+    if (device == AudioSystem::DEVICE_OUT_SPDIF) {
         err = setMixerControl("SEC RX Format",value);
-    else if(device == AudioSystem::DEVICE_OUT_AUX_DIGITAL)
+    }
+    else if(device == AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
         err = setMixerControl("HDMI RX Format",value);
+        if (!strncmp(value, "Compr", sizeof(value)))
+            err = setMixerControl("HDMI RX Rate", "Variable");
+        else
+            err = setMixerControl("HDMI RX Rate", "Default");
+    }
     if(err) {
         ALOGE("setPlaybackFormat error = %d",err);
     }
