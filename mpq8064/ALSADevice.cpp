@@ -208,7 +208,10 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
              ALOGV("DTS PASSTHROUGH CODEC");
              compr_params.codec.id = compr_cap.codecs[7];
              hdmiChannels = 2;
-        } else {
+        }  else if(format == AUDIO_FORMAT_MP2) {
+             ALOGV("MP2 CODEC");
+             compr_params.codec.id = compr_cap.codecs[12];
+        }else {
              ALOGE("format not supported to open tunnel device");
              return BAD_VALUE;
         }
