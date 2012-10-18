@@ -2509,6 +2509,25 @@ SectionVerb
 
 EndSection
 }
+SectionUseCase."Compressed DL REC" {
+Comment "Voice Downlink Compressed Recording use case"
+SectionVerb
+	Name "Compressed DL REC"
+
+	EnableSequence
+		'MultiMedia4 Mixer VOC_REC_DL':1:1
+	EndSequence
+
+	DisableSequence
+		'MultiMedia4 Mixer VOC_REC_DL':1:0
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 9
+	CapturePCM 9
+
+EndSection
+}
 SectionUseCase."UL DL REC" {
 Comment "Voice Uplink Downlink Recording use case"
 SectionVerb
@@ -2527,6 +2546,27 @@ SectionVerb
 	# ALSA PCMs
 	PlaybackPCM 0
 	CapturePCM 0
+
+EndSection
+}
+SectionUseCase."Compressed UL DL REC" {
+Comment "Voice Uplink Downlink Compressed Recording use case"
+SectionVerb
+	Name "Compressed UL DL REC"
+
+	EnableSequence
+		'MultiMedia4 Mixer VOC_REC_UL':1:1
+		'MultiMedia4 Mixer VOC_REC_DL':1:1
+	EndSequence
+
+	DisableSequence
+		'MultiMedia4 Mixer VOC_REC_UL':1:0
+		'MultiMedia4 Mixer VOC_REC_DL':1:0
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 9
+	CapturePCM 9
 
 EndSection
 }
@@ -6584,6 +6624,23 @@ SectionModifier
 EndSection
 
 SectionModifier
+        Name "Capture Compressed Voice DL"
+
+        EnableSequence
+                'MultiMedia4 Mixer VOC_REC_DL':1:1
+        EndSequence
+
+        DisableSequence
+                'MultiMedia4 Mixer VOC_REC_DL':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 9
+        CapturePCM 9
+
+EndSection
+
+SectionModifier
         Name "Capture Voice Uplink Downlink"
 
         EnableSequence
@@ -6599,6 +6656,25 @@ SectionModifier
         # ALSA PCMs
         PlaybackPCM 0
         CapturePCM 0
+
+EndSection
+
+SectionModifier
+        Name "Capture Compressed Voice UL DL"
+
+        EnableSequence
+                'MultiMedia4 Mixer VOC_REC_UL':1:1
+                'MultiMedia4 Mixer VOC_REC_DL':1:1
+        EndSequence
+
+        DisableSequence
+                'MultiMedia4 Mixer VOC_REC_UL':1:0
+                'MultiMedia4 Mixer VOC_REC_DL':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 9
+        CapturePCM 9
 
 EndSection
 
