@@ -402,8 +402,7 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
                       AudioSystem::DEVICE_IN_PROXY);
 #endif
         } else if (devices & AudioSystem::DEVICE_OUT_ALL_A2DP) {
-            devices = devices | (AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET |
-                      AudioSystem::DEVICE_OUT_BLUETOOTH_SCO);
+            devices = devices | (AudioSystem::DEVICE_IN_PROXY);
         }
     }
 #ifdef QCOM_SSR_ENABLED
@@ -1576,7 +1575,22 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
                  return strdup(SND_USE_CASE_DEV_BTSCO_NB_TX); /* BTSCO TX*/
 #ifdef QCOM_USBAUDIO_ENABLED
         } else if (devices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) {
-            return strdup(SND_USE_CASE_DEV_USB_PROXY_TX); /* PROXY TX */
+            if ((mCallMode == AudioSystem::MODE_IN_CALL) ||
+                (mCallMode == AudioSystem::MODE_IN_COMMUNICATION)) {
+                if ((rxDevice != NULL) &&
+                   (!strncmp(rxDevice, SND_USE_CASE_DEV_USB_PROXY_RX,
+                    (strlen(SND_USE_CASE_DEV_USB_PROXY_RX)+1)))) {
+                    return strdup(SND_USE_CASE_DEV_USB_PROXY_TX); /* USB PROXY TX */
+                } else if ((rxDevice != NULL) &&
+                   (!strncmp(rxDevice, SND_USE_CASE_DEV_PROXY_RX,
+                    (strlen(SND_USE_CASE_DEV_PROXY_RX)+1)))) {
+                    return strdup(SND_USE_CASE_DEV_PROXY_TX); /* PROXY TX */
+                } else {
+                    return strdup(SND_USE_CASE_DEV_USB_PROXY_TX); /* USB PROXY TX */
+                }
+            } else {
+                return strdup(SND_USE_CASE_DEV_USB_PROXY_TX); /* USB PROXY TX */
+            }
 #endif
         } else if (devices & AudioSystem::DEVICE_IN_PROXY) {
             return strdup(SND_USE_CASE_DEV_PROXY_TX); /* PROXY TX */
