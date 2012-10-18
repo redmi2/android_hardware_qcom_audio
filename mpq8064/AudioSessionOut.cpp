@@ -656,11 +656,12 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
             if((mCompreRxHandle) &&
                ((mSpdifFormat == COMPRESSED_FORMAT) ||
                (mHdmiFormat == COMPRESSED_FORMAT))) {
-                period_size = mCompreRxHandle->periodSize - mOutputMetadataLength;
-                while(mBitstreamSM->sufficientSamplesToRender(SPDIF_OUT,period_size) == true) {
+                int availableSize = mBitstreamSM->getOutputBufferWritePtr(SPDIF_OUT) -
+                                        mBitstreamSM->getOutputBufferPtr(SPDIF_OUT);
+                while(mBitstreamSM->sufficientSamplesToRender(SPDIF_OUT,1) == true) {
                     n = writeToCompressedDriver(
                                    mBitstreamSM->getOutputBufferPtr(SPDIF_OUT),
-                                   period_size);
+                                   availableSize);
                     ALOGD("mCompreRxHandle - pcm_write returned with %d", n);
                     if (n == -EBADFD) {
                         // Somehow the stream is in a bad state. The driver probably
@@ -671,7 +672,7 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
                         ALOGE("mCompreRxHandle - pcm_write returned n < 0");
                         return static_cast<ssize_t>(n);
                     } else {
-                        mBitstreamSM->copyResidueOutputToStart(SPDIF_OUT,period_size);
+                        mBitstreamSM->copyResidueOutputToStart(SPDIF_OUT, availableSize);
                     }
                 }
             }
@@ -762,8 +763,10 @@ int32_t AudioSessionOutALSA::writeToCompressedDriver(char *buffer, int bytes)
         // Set the channel status after first frame decode/transcode and for change
         // in sample rate or channel mode as we close and open the device again
         if (bytes < (local_handle->period_size - mOutputMetadataLength )) {
-            ALOGD("Last buffer case");
-            mReachedExtractorEOS = true;
+            if(!((bytes != 0) && (mUseMS11Decoder == true))) {
+                ALOGD("Last buffer case");
+                mReachedExtractorEOS = true;
+            }
         }
         n = pcm_write(local_handle, buf.memBuf, local_handle->period_size);
         // write to second handle if present
