@@ -632,14 +632,12 @@ status_t AudioHardwareALSA::doRouting(int device)
         if(!(device & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET) &&
             !(device & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET) &&
             !(device & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) &&
-             (musbPlaybackState)){
+             (musbPlaybackState || musbRecordingState)){
                 //USB unplugged
                 ALSAHandleList::iterator it = mDeviceList.end();
                 it--;
                 mALSADevice->route(&(*it), (uint32_t)device, newMode);
                 ALOGD("USB UNPLUGGED, setting musbPlaybackState to 0");
-                musbPlaybackState = 0;
-                musbRecordingState = 0;
                 closeUSBRecording();
                 closeUSBPlayback();
         } else if((device & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
