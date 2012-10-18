@@ -1200,7 +1200,9 @@ status_t AudioHardwareALSA::stopA2dpPlayback_l(uint32_t activeUsecase) {
          if(!getA2DPActiveUseCases_l()) {
              mIsA2DPEnabled = false;
 
+             mA2dpMutex.unlock();
              err = stopA2dpThread();
+             mA2dpMutex.lock();
              if(err) {
                  ALOGE("stopA2dpOutput = %d" ,err);
              }

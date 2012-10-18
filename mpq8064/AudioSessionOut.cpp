@@ -278,10 +278,10 @@ AudioSessionOutALSA::~AudioSessionOutALSA()
     mWriteCv.signal();
 
     if (mRouteAudioToA2dp) {
-        ALOGD("destructor - suspendA2dpPlayback - A2DPDirectOutput");
-        status_t err = mParent->suspendA2dpPlayback(AudioHardwareALSA::A2DPDirectOutput);
+        ALOGD("destructor - stopA2dpPlayback - A2DPDirectOutput");
+        status_t err = mParent->stopA2dpPlayback(AudioHardwareALSA::A2DPDirectOutput);
         if(err) {
-            ALOGE("destructor - suspendA2dpPlayback-A2DPDirectOutput return err = %d", err);
+            ALOGE("destructor - stopA2dpPlayback-A2DPDirectOutput return err = %d", err);
         }
         mRouteAudioToA2dp = false;
     }
@@ -1069,7 +1069,7 @@ status_t AudioSessionOutALSA::pause()
         ALOGD("Pause - suspendA2dpPlayback - A2DPDirectOutput");
         err = mParent->suspendA2dpPlayback(AudioHardwareALSA::A2DPDirectOutput);
         if(err != NO_ERROR) {
-            ALOGE("Suspend Proxy from Pause returned error = %d",err);
+            ALOGE("suspend Proxy from Pause returned error = %d",err);
             return err;
         }
     }
@@ -1258,10 +1258,10 @@ status_t AudioSessionOutALSA::stop()
     mWriteCv.signal();
 
     if (mRouteAudioToA2dp) {
-        ALOGD("stop - suspendA2dpPlayback - A2DPDirectOutput");
-        status_t err = mParent->suspendA2dpPlayback(AudioHardwareALSA::A2DPDirectOutput);
+        ALOGD("stop - stopA2dpPlayback - A2DPDirectOutput");
+        status_t err = mParent->stopA2dpPlayback(AudioHardwareALSA::A2DPDirectOutput);
         if(err) {
-            ALOGE("stop-suspendA2dpPlayback-A2DPDirectOutput return err = %d", err);
+            ALOGE("stop-stopA2dpPlayback-A2DPDirectOutput return err = %d", err);
             return err;
         }
         mRouteAudioToA2dp = false;
@@ -1283,10 +1283,10 @@ status_t AudioSessionOutALSA::standby()
     Mutex::Autolock autoLock(mLock);
     ALOGD("standby");
     if (mRouteAudioToA2dp) {
-         ALOGD("standby - suspendA2dpPlayback - A2DPDirectOutput");
-         status_t err = mParent->suspendA2dpPlayback(AudioHardwareALSA::A2DPDirectOutput);
+         ALOGD("standby - stopA2dpPlayback - A2DPDirectOutput");
+         status_t err = mParent->stopA2dpPlayback(AudioHardwareALSA::A2DPDirectOutput);
          if(err) {
-             ALOGE("standby-suspendA2dpPlayback-A2DPDirectOutput return er = %d", err);
+             ALOGE("standby-stopA2dpPlayback-A2DPDirectOutput return er = %d", err);
          }
     }
 
