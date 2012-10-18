@@ -377,8 +377,6 @@ status_t AudioStreamOutALSA::standby()
         if(err) {
             ALOGE("stopA2dpPlayback return err  %d", err);
         }
-        ALOGD("A2DP Case, Bypassing standby");
-        return err;
     }
     mHandle->module->standby(mHandle);
 
