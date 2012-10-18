@@ -872,8 +872,8 @@ void  AudioSessionOutALSA::eventThreadEntry() {
     bool freeBuffer = false;
     bool mCompreCBk = false;
     bool mSecCompreCBk = false;
-    bool mPostedEOS = false;
     struct snd_timer_tread rbuf[4];
+    mPostedEOS = false;
     pid_t tid  = gettid();
     androidSetThreadPriority(tid, ANDROID_PRIORITY_AUDIO);
     prctl(PR_SET_NAME, (unsigned long)"HAL Audio EventThread", 0, 0, 0);
@@ -1179,6 +1179,7 @@ status_t AudioSessionOutALSA::flush()
                     request queue2 to handle seek");
         }
         mReachedExtractorEOS = false;
+        mPostedEOS = false;
         mInputMemRequestMutex.unlock();
         mInputMemResponseMutex.unlock();
         if (!mTunnelPaused) {
