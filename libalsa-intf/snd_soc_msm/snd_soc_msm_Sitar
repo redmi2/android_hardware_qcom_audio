@@ -2062,6 +2062,7 @@ SectionDevice
 	Comment "Handset Rx device"
 
 	EnableSequence
+		'SLIM RX1 MUX':0:AIF1_PB
 		'SLIM_0_RX Channels':0:One
 		'DAC1 MUX':0:RX1
 		'RX1 MIX1 INP1':0:RX1
@@ -2071,6 +2072,7 @@ SectionDevice
 	EndSequence
 
 	DisableSequence
+		'SLIM RX1 MUX':0:ZERO
 		'DAC1 MUX':0:ZERO
 		'RX1 MIX1 INP1':0:ZERO
 		'EAR PA Gain':0:POS_6_DB
@@ -2088,6 +2090,7 @@ SectionDevice
 	Comment "Handset Rx device for voice call"
 
 	EnableSequence
+		'SLIM RX1 MUX':0:AIF1_PB
 		'SLIM_0_RX Channels':0:One
 		'DAC1 MUX':0:RX1
 		'RX1 MIX1 INP1':0:RX1
@@ -2097,6 +2100,7 @@ SectionDevice
 	EndSequence
 
 	DisableSequence
+		'SLIM RX1 MUX':0:ZERO
 		'DAC1 MUX':0:ZERO
 		'RX1 MIX1 INP1':0:ZERO
 		'EAR PA Gain':0:POS_6_DB
@@ -2113,6 +2117,7 @@ SectionDevice
 	Comment "TTY HCO Handset Rx device"
 
 	EnableSequence
+		'SLIM RX1 MUX':0:AIF1_PB
 		'DAC1 MUX':0:RX1
 		'SLIM_0_RX Channels':0:One
 		'RX1 MIX1 INP1':0:RX1
@@ -2122,6 +2127,7 @@ SectionDevice
 	EndSequence
 
 	DisableSequence
+		'SLIM RX1 MUX':0:ZERO
 		'DAC1 MUX':0:ZERO
 		'RX1 MIX1 INP1':0:ZERO
 		'EAR PA Gain':0:POS_6_DB
@@ -2139,6 +2145,7 @@ SectionDevice
 	Comment "Speaker Rx device"
 
 	EnableSequence
+		'SLIM RX1 MUX':0:AIF1_PB
 		'DAC3 MUX':0:INV_RX1
 		'DAC2 MUX':0:RX1
 		'LINEOUT1 Volume':1:100
@@ -2150,6 +2157,7 @@ SectionDevice
 	EndSequence
 
 	DisableSequence
+		'SLIM RX1 MUX':0:ZERO
 		'RX1 MIX1 INP1':0:ZERO
 		'DAC3 MUX':0:ZERO
 		'DAC2 MUX':0:ZERO
@@ -2165,6 +2173,8 @@ SectionDevice
 	Comment "Headset Rx device"
 
 	EnableSequence
+		'SLIM RX1 MUX':0:AIF1_PB
+		'SLIM RX2 MUX':0:AIF1_PB
 		'SLIM_0_RX Channels':0:Two
 		'RX2 MIX1 INP1':0:RX1
 		'RX3 MIX1 INP1':0:RX2
@@ -2176,6 +2186,8 @@ SectionDevice
 	EndSequence
 
 	DisableSequence
+		'SLIM RX1 MUX':0:ZERO
+		'SLIM RX2 MUX':0:ZERO
 		'RX2 MIX1 INP1':0:ZERO
 		'RX3 MIX1 INP1':0:ZERO
 		'DAC4 MUX':0:ZERO
@@ -2194,6 +2206,8 @@ SectionDevice
 	Comment "Headset Rx device for voice call"
 
 	EnableSequence
+		'SLIM RX1 MUX':0:AIF1_PB
+		'SLIM RX2 MUX':0:AIF1_PB
 		'SLIM_0_RX Channels':0:Two
 		'RX2 MIX1 INP1':0:RX1
 		'RX3 MIX1 INP1':0:RX2
@@ -2205,6 +2219,8 @@ SectionDevice
 	EndSequence
 
 	DisableSequence
+		'SLIM RX1 MUX':0:ZERO
+		'SLIM RX2 MUX':0:ZERO
 		'RX2 MIX1 INP1':0:ZERO
 		'RX3 MIX1 INP1':0:ZERO
 		'DAC4 MUX':0:ZERO
@@ -2222,6 +2238,8 @@ SectionDevice
 	Comment "Speaker Headset Rx combo device"
 
 	EnableSequence
+		'SLIM RX1 MUX':0:AIF1_PB
+		'SLIM RX2 MUX':0:AIF1_PB
 		'SLIM_0_RX Channels':0:Two
 		'RX2 MIX1 INP1':0:RX1
 		'RX3 MIX1 INP1':0:RX2
@@ -2240,6 +2258,8 @@ SectionDevice
 	EndSequence
 
 	DisableSequence
+		'SLIM RX1 MUX':0:ZERO
+		'SLIM RX2 MUX':0:ZERO
 		'RX2 MIX1 INP1':0:ZERO
 		'RX3 MIX1 INP1':0:ZERO
 		'DAC4 MUX':0:ZERO
@@ -2261,6 +2281,8 @@ SectionDevice
 	Comment "Speaker ANC Headset Rx combo device"
 
 	EnableSequence
+		'SLIM RX1 MUX':0:AIF1_PB
+		'SLIM RX2 MUX':0:AIF1_PB
 		'SLIM_0_RX Channels':0:Two
 		'DAC3 MUX':0:INV_RX1
 		'DAC2 MUX':0:RX1
@@ -2285,6 +2307,8 @@ SectionDevice
 	EndSequence
 
 	DisableSequence
+		'SLIM RX1 MUX':0:ZERO
+		'SLIM RX2 MUX':0:ZERO
 		'DAC3 MUX':0:ZERO
 		'DAC2 MUX':0:ZERO
 		'LINEOUT1 Volume':1:0
@@ -2312,6 +2336,8 @@ SectionDevice
 	Comment "ANC Headset Rx device"
 
 	EnableSequence
+		'SLIM RX1 MUX':0:AIF1_PB
+		'SLIM RX2 MUX':0:AIF1_PB
 		'SLIM_0_RX Channels':0:Two
 		'RX2 MIX1 INP1':0:RX1
 		'RX3 MIX1 INP1':0:RX2
@@ -2329,6 +2355,8 @@ SectionDevice
 	EndSequence
 
 	DisableSequence
+		'SLIM RX1 MUX':0:ZERO
+		'SLIM RX2 MUX':0:ZERO
 		'RX2 MIX1 INP1':0:ZERO
 		'RX3 MIX1 INP1':0:ZERO
 		'DAC4 MUX':0:ZERO
@@ -2351,6 +2379,8 @@ SectionDevice
 	Comment "ANC Headset Rx device for voice call"
 
 	EnableSequence
+		'SLIM RX1 MUX':0:AIF1_PB
+		'SLIM RX2 MUX':0:AIF1_PB
 		'SLIM_0_RX Channels':0:Two
 		'RX2 MIX1 INP1':0:RX1
 		'RX3 MIX1 INP1':0:RX2
@@ -2368,6 +2398,8 @@ SectionDevice
 	EndSequence
 
 	DisableSequence
+		'SLIM RX1 MUX':0:ZERO
+		'SLIM RX2 MUX':0:ZERO
 		'RX2 MIX1 INP1':0:ZERO
 		'RX3 MIX1 INP1':0:ZERO
 		'DAC4 MUX':0:ZERO
@@ -2389,6 +2421,7 @@ SectionDevice
 	Comment "Speaker FM Tx combo device"
 
 	EnableSequence
+		'SLIM RX1 MUX':0:AIF1_PB
 		'DAC3 MUX':0:INV_RX1
 		'DAC2 MUX':0:RX1
 		'LINEOUT1 Volume':1:100
@@ -2400,6 +2433,7 @@ SectionDevice
 	EndSequence
 
 	DisableSequence
+		'SLIM RX1 MUX':0:ZERO
 		'RX1 MIX1 INP1':0:ZERO
 		'DAC3 MUX':0:ZERO
 		'DAC2 MUX':0:ZERO
@@ -2415,6 +2449,7 @@ SectionDevice
 	Comment "Headset Tx device"
 
 	EnableSequence
+		'AIF1_CAP Mixer SLIM TX1':1:1
 		'SLIM_0_TX Channels':0:One
 		'SLIM TX1 MUX':0:DEC1
 		'DEC1 MUX':0:ADC2
@@ -2422,6 +2457,7 @@ SectionDevice
 	EndSequence
 
 	DisableSequence
+		'AIF1_CAP Mixer SLIM TX1':1:0
 		'SLIM TX1 MUX':0:ZERO
 		'DEC1 MUX':0:ZERO
 		'ADC2 Volume':1:0
@@ -2437,12 +2473,14 @@ SectionDevice
 	Comment "Handset Tx device"
 
 	EnableSequence
+		'AIF1_CAP Mixer SLIM TX1':1:1
 		'SLIM_0_TX Channels':0:One
 		'SLIM TX1 MUX':0:DEC1
 		'DEC1 MUX':0:DMIC1
 	EndSequence
 
 	DisableSequence
+		'AIF1_CAP Mixer SLIM TX1':1:0
 		'SLIM TX1 MUX':0:ZERO
 		'DEC1 MUX':0:ZERO
 	EndSequence
@@ -2457,12 +2495,14 @@ SectionDevice
 	Comment "TTY Handset Analog Tx device"
 
 	EnableSequence
+		'AIF1_CAP Mixer SLIM TX1':1:1
 		'SLIM_0_TX Channels':0:One
 		'SLIM TX1 MUX':0:DEC1
 		'DEC1 MUX':0:DMIC1
 	EndSequence
 
 	DisableSequence
+		'AIF1_CAP Mixer SLIM TX1':1:0
 		'SLIM TX1 MUX':0:ZERO
 		'DEC1 MUX':0:ZERO
 	EndSequence
@@ -2477,12 +2517,14 @@ SectionDevice
 	Comment "Speaker Tx device"
 
 	EnableSequence
+		'AIF1_CAP Mixer SLIM TX1':1:1
 		'SLIM_0_TX Channels':0:One
 		'SLIM TX1 MUX':0:DEC1
 		'DEC1 MUX':0:DMIC1
 	EndSequence
 
 	DisableSequence
+		'AIF1_CAP Mixer SLIM TX1':1:0
 		'SLIM TX1 MUX':0:ZERO
 		'DEC1 MUX':0:ZERO
 	EndSequence
@@ -2497,12 +2539,14 @@ SectionDevice
 	Comment "TTY VCO Handset Tx device"
 
 	EnableSequence
+		'AIF1_CAP Mixer SLIM TX1':1:1
 		'SLIM_0_TX Channels':0:One
 		'SLIM TX1 MUX':0:DEC1
 		'DEC1 MUX':0:DMIC1
 	EndSequence
 
 	DisableSequence
+		'AIF1_CAP Mixer SLIM TX1':1:0
 		'SLIM TX1 MUX':0:ZERO
 		'DEC1 MUX':0:ZERO
 	EndSequence
@@ -2518,12 +2562,14 @@ SectionDevice
 	Comment "HDMI Tx device"
 
 	EnableSequence
+		'AIF1_CAP Mixer SLIM TX1':1:1
 		'SLIM_0_TX Channels':0:One
 		'SLIM TX1 MUX':0:DEC1
 		'DEC1 MUX':0:DMIC1
 	EndSequence
 
 	DisableSequence
+		'AIF1_CAP Mixer SLIM TX1':1:0
 		'SLIM TX1 MUX':0:ZERO
 		'DEC1 MUX':0:ZERO
 	EndSequence
@@ -2539,6 +2585,10 @@ SectionDevice
 	Comment "Quad mic device"
 
 	EnableSequence
+		'AIF1_CAP Mixer SLIM TX1':1:1
+		'AIF1_CAP Mixer SLIM TX5':1:1
+		'AIF1_CAP Mixer SLIM TX3':1:1
+		'AIF1_CAP Mixer SLIM TX4':1:1
 		'SLIM_0_TX Channels':0:Four
 		'SLIM TX1 MUX':0:DEC1
 		'DEC1 MUX':0:DMIC1
@@ -2551,6 +2601,10 @@ SectionDevice
 	EndSequence
 
 	DisableSequence
+		'AIF1_CAP Mixer SLIM TX1':1:0
+		'AIF1_CAP Mixer SLIM TX5':1:0
+		'AIF1_CAP Mixer SLIM TX3':1:0
+		'AIF1_CAP Mixer SLIM TX4':1:0
 		'SLIM TX1 MUX':0:ZERO
 		'DEC1 MUX':0:ZERO
 		'SLIM TX5 MUX':0:ZERO
@@ -2571,6 +2625,8 @@ SectionDevice
 	Comment "Dual MIC Endfire Tx device"
 
 	EnableSequence
+		'AIF1_CAP Mixer SLIM TX1':1:1
+		'AIF1_CAP Mixer SLIM TX5':1:1
 		'SLIM TX1 MUX':0:DEC1
 		'DEC1 MUX':0:DMIC1
 		'SLIM TX5 MUX':0:DEC2
@@ -2579,6 +2635,8 @@ SectionDevice
 	EndSequence
 
 	DisableSequence
+		'AIF1_CAP Mixer SLIM TX1':1:0
+		'AIF1_CAP Mixer SLIM TX5':1:0
 		'SLIM TX1 MUX':0:ZERO
 		'DEC2 MUX':0:ZERO
 		'SLIM TX5 MUX':0:ZERO
@@ -2595,6 +2653,8 @@ SectionDevice
 	Comment "Dual MIC Endfire Tx device"
 
 	EnableSequence
+		'AIF1_CAP Mixer SLIM TX1':1:1
+		'AIF1_CAP Mixer SLIM TX5':1:1
 		'SLIM TX1 MUX':0:DEC1
 		'DEC1 MUX':0:DMIC1
 		'SLIM TX5 MUX':0:DEC2
@@ -2603,6 +2663,8 @@ SectionDevice
 	EndSequence
 
 	DisableSequence
+		'AIF1_CAP Mixer SLIM TX1':1:0
+		'AIF1_CAP Mixer SLIM TX5':1:0
 		'SLIM TX1 MUX':0:ZERO
 		'DEC1 MUX':0:ZERO
 		'SLIM TX5 MUX':0:ZERO
@@ -2619,6 +2681,7 @@ SectionDevice
 	Comment "TTY Headset Rx device"
 
 	EnableSequence
+		'SLIM RX1 MUX':0:AIF1_PB
 		'TTY Mode':0:VCO
 		'SLIM_0_RX Channels':0:One
 		'RX2 MIX1 INP1':0:RX1
@@ -2627,6 +2690,7 @@ SectionDevice
 	EndSequence
 
 	DisableSequence
+		'SLIM RX1 MUX':0:ZERO
 		'TTY Mode':0:ZERO
 		'RX2 MIX1 INP1':0:ZERO
 		'DAC4 MUX':0:ZERO
@@ -2643,6 +2707,7 @@ SectionDevice
 	Comment "TTY Headset Tx device"
 
         EnableSequence
+		'AIF1_CAP Mixer SLIM TX7':1:1
 		'TTY Mode':0:HCO
                 'SLIM_0_TX Channels':0:One
                 'SLIM TX1 MUX':0:DEC1
@@ -2651,6 +2716,7 @@ SectionDevice
         EndSequence
 
         DisableSequence
+		'AIF1_CAP Mixer SLIM TX7':1:0
 		'TTY Mode':0:ZERO
                 'SLIM TX1 MUX':0:ZERO
                 'DEC1 MUX':0:ZERO
@@ -2667,6 +2733,7 @@ SectionDevice
 	Comment "TTY Full Rx device"
 
 	EnableSequence
+		'SLIM RX1 MUX':0:AIF1_PB
 		'TTY Mode':0:FULL
 		'SLIM_0_RX Channels':0:One
 		'RX2 MIX1 INP1':0:RX1
@@ -2676,6 +2743,7 @@ SectionDevice
 	EndSequence
 
 	DisableSequence
+		'SLIM RX1 MUX':0:ZERO
 		'TTY Mode':0:ZERO
 		'RX2 MIX1 INP1':0:ZERO
 		'DAC4 MUX':0:ZERO
@@ -2692,6 +2760,7 @@ SectionDevice
 	Comment "TTY Full Tx device"
 
         EnableSequence
+		'AIF1_CAP Mixer SLIM TX1':1:1
                 'SLIM_0_TX Channels':0:One
                 'SLIM TX1 MUX':0:DEC1
                 'DEC1 MUX':0:ADC2
@@ -2699,6 +2768,7 @@ SectionDevice
         EndSequence
 
         DisableSequence
+		'AIF1_CAP Mixer SLIM TX1':1:0
                 'SLIM TX1 MUX':0:ZERO
                 'DEC1 MUX':0:ZERO
                 'ADC2 Volume':1:0
@@ -2865,6 +2935,10 @@ SectionDevice
 	Comment "Quad mic device for Surround Sound Recording"
 
 	EnableSequence
+		'AIF1_CAP Mixer SLIM TX1':1:1
+		'AIF1_CAP Mixer SLIM TX5':1:1
+		'AIF1_CAP Mixer SLIM TX3':1:1
+		'AIF1_CAP Mixer SLIM TX4':1:1
 		'SLIM_0_TX Channels':0:Four
 		'SLIM TX1 MUX':0:DEC1
 		'DEC1 MUX':0:DMIC1
@@ -2877,6 +2951,10 @@ SectionDevice
 	EndSequence
 
 	DisableSequence
+		'AIF1_CAP Mixer SLIM TX1':1:0
+		'AIF1_CAP Mixer SLIM TX5':1:0
+		'AIF1_CAP Mixer SLIM TX3':1:0
+		'AIF1_CAP Mixer SLIM TX4':1:0
 		'SLIM TX1 MUX':0:ZERO
 		'DEC1 MUX':0:ZERO
 		'SLIM TX5 MUX':0:ZERO
@@ -2912,6 +2990,7 @@ SectionDevice
 	Comment "PROXY Rx + Handset Rx device combo device"
 
 	EnableSequence
+		'SLIM RX1 MUX':0:AIF1_PB
 		'SLIM_0_RX Channels':0:One
 		'DAC1 MUX':0:RX1
 		'RX1 MIX1 INP1':0:RX1
@@ -2921,6 +3000,7 @@ SectionDevice
 	EndSequence
 
 	DisableSequence
+		'SLIM RX1 MUX':0:ZERO
 		'DAC1 MUX':0:ZERO
 		'RX1 MIX1 INP1':0:ZERO
 		'EAR PA Gain':0:POS_6_DB
@@ -2938,6 +3018,7 @@ SectionDevice
 	Comment "PROXY Rx + Speaker Rx device combo device"
 
 	EnableSequence
+		'SLIM RX1 MUX':0:AIF1_PB
 		'DAC3 MUX':0:INV_RX1
 		'DAC2 MUX':0:RX1
 		'LINEOUT1 Volume':1:100
@@ -2949,6 +3030,7 @@ SectionDevice
 	EndSequence
 
 	DisableSequence
+		'SLIM RX1 MUX':0:ZERO
 		'RX1 MIX1 INP1':0:ZERO
 		'DAC3 MUX':0:ZERO
 		'DAC2 MUX':0:ZERO
@@ -2965,6 +3047,8 @@ SectionDevice
 	Comment "PROXY Rx + Headphone Rx device combo device"
 
 	EnableSequence
+		'SLIM RX1 MUX':0:AIF1_PB
+		'SLIM RX2 MUX':0:AIF1_PB
 		'SLIM_0_RX Channels':0:Two
 		'RX2 MIX1 INP1':0:RX1
 		'RX3 MIX1 INP1':0:RX2
@@ -2976,6 +3060,8 @@ SectionDevice
 	EndSequence
 
 	DisableSequence
+		'SLIM RX1 MUX':0:ZERO
+		'SLIM RX2 MUX':0:ZERO
 		'RX2 MIX1 INP1':0:ZERO
 		'RX3 MIX1 INP1':0:ZERO
 		'DAC4 MUX':0:ZERO
@@ -2994,6 +3080,8 @@ SectionDevice
 	Comment "PROXY Rx + Speaker Headset Rx combo device"
 
 	EnableSequence
+		'SLIM RX1 MUX':0:AIF1_PB
+		'SLIM RX2 MUX':0:AIF1_PB
 		'SLIM_0_RX Channels':0:Two
 		'RX2 MIX1 INP1':0:RX1
 		'RX3 MIX1 INP1':0:RX2
@@ -3012,6 +3100,8 @@ SectionDevice
 	EndSequence
 
 	DisableSequence
+		'SLIM RX1 MUX':0:ZERO
+		'SLIM RX2 MUX':0:ZERO
 		'RX2 MIX1 INP1':0:ZERO
 		'RX3 MIX1 INP1':0:ZERO
 		'DAC4 MUX':0:ZERO
@@ -3033,6 +3123,8 @@ SectionDevice
 	Comment "PROXY Rx + Speaker ANC Headset Rx combo device"
 
 	EnableSequence
+		'SLIM RX1 MUX':0:AIF1_PB
+		'SLIM RX2 MUX':0:AIF1_PB
 		'SLIM_0_RX Channels':0:Two
 		'DAC3 MUX':0:INV_RX1
 		'DAC2 MUX':0:RX1
@@ -3057,6 +3149,8 @@ SectionDevice
 	EndSequence
 
 	DisableSequence
+		'SLIM RX1 MUX':0:ZERO
+		'SLIM RX2 MUX':0:ZERO
 		'DAC3 MUX':0:ZERO
 		'DAC2 MUX':0:ZERO
 		'LINEOUT1 Volume':1:0
@@ -3084,6 +3178,8 @@ SectionDevice
 	Comment "PROXY Rx ANC Headset Rx device combo device"
 
 	EnableSequence
+		'SLIM RX1 MUX':0:AIF1_PB
+		'SLIM RX2 MUX':0:AIF1_PB
 		'SLIM_0_RX Channels':0:Two
 		'RX2 MIX1 INP1':0:RX1
 		'RX3 MIX1 INP1':0:RX2
@@ -3101,6 +3197,8 @@ SectionDevice
 	EndSequence
 
 	DisableSequence
+		'SLIM RX1 MUX':0:ZERO
+		'SLIM RX2 MUX':0:ZERO
 		'RX2 MIX1 INP1':0:ZERO
 		'RX3 MIX1 INP1':0:ZERO
 		'DAC4 MUX':0:ZERO
