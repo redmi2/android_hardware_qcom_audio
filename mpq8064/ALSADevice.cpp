@@ -179,17 +179,6 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
             ALOGV("AC3 CODEC");
             compr_params.codec.id = compr_cap.codecs[2];
             hdmiChannels = 2;
-        } else if(format == AUDIO_FORMAT_DTS_LBR) {
-             ALOGV("DTS LBR CODEC");
-             property_get("ro.build.modelid", dtsModelId, "0");
-             ALOGV("from property modelId=%s,length=%d\n",
-                 dtsModelId, strlen(dtsModelId));
-             compr_params.codec.options.dts.modelIdLength = strlen(dtsModelId);
-             compr_params.codec.options.dts.modelId = (__u8 *)dtsModelId;
-             ALOGV("passing to driver modelId=%s,length=%d\n",
-                compr_params.codec.options.dts.modelId,
-                compr_params.codec.options.dts.modelIdLength);
-             compr_params.codec.id = compr_cap.codecs[6];
         } else if(format == AUDIO_FORMAT_MP3) {
              ALOGV("MP3 CODEC");
              compr_params.codec.id = compr_cap.codecs[0];
@@ -204,9 +193,26 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
                 compr_params.codec.options.dts.modelId,
                 compr_params.codec.options.dts.modelIdLength);
              compr_params.codec.id = compr_cap.codecs[5];
-        } else if(format == AUDIO_FORMAT_DTS && handle->type == COMPRESSED_PASSTHROUGH_FORMAT) {
+        } else if(format == AUDIO_FORMAT_DTS_LBR && handle->type == COMPRESSED_FORMAT) {
+             ALOGV("DTS LBR CODEC");
+             property_get("ro.build.modelid", dtsModelId, "0");
+             ALOGV("from property modelId=%s,length=%d\n",
+                 dtsModelId, strlen(dtsModelId));
+             compr_params.codec.options.dts.modelIdLength = strlen(dtsModelId);
+             compr_params.codec.options.dts.modelId = (__u8 *)dtsModelId;
+             ALOGV("passing to driver modelId=%s,length=%d\n",
+                compr_params.codec.options.dts.modelId,
+                compr_params.codec.options.dts.modelIdLength);
+             compr_params.codec.id = compr_cap.codecs[6];
+        } else if(format == AUDIO_FORMAT_DTS
+                 && handle->type == COMPRESSED_PASSTHROUGH_FORMAT) {
              ALOGV("DTS PASSTHROUGH CODEC");
              compr_params.codec.id = compr_cap.codecs[7];
+             hdmiChannels = 2;
+        } else if(format == AUDIO_FORMAT_DTS_LBR
+                 && handle->type == COMPRESSED_PASSTHROUGH_FORMAT) {
+             ALOGV("DTS LBR PASSTHROUGH CODEC");
+             compr_params.codec.id = compr_cap.codecs[13];
              hdmiChannels = 2;
         }  else if(format == AUDIO_FORMAT_MP2) {
              ALOGV("MP2 CODEC");
