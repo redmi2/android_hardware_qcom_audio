@@ -1733,8 +1733,10 @@ ssize_t AudioBroadcastStreamALSA::write_l(char *buffer, size_t bytes)
     size_t   sent = 0;
     bool     continueDecode;
 
-    if (bytes == 0 && mCompreRxHandle != NULL)
+    if (bytes == 0 && mCompreRxHandle != NULL) {
+        ALOGD("Number of bytes in the buffer - zero");
         writeToCompressedDriver(buffer, bytes);
+    }
 
     // set decoder configuration data if any
     if(setDecoderConfig(buffer, bytes)) {
@@ -2422,15 +2424,12 @@ uint32_t AudioBroadcastStreamALSA::render(bool continueDecode)
         (mHdmiFormat == COMPRESSED_FORMAT) ||
         (mUseTunnelDecoder))) {
         period_size = mCompreRxHandle->periodSize;
-        if(mTimeStampModeSet)
-            requiredSize = mBitstreamSM->getOutputBufferWritePtr(SPDIF_OUT) -
+        requiredSize = mBitstreamSM->getOutputBufferWritePtr(SPDIF_OUT) -
                           mBitstreamSM->getOutputBufferPtr(SPDIF_OUT);
-        else
-            requiredSize = period_size - sizeof(mOutputMetadataCompre);
 
         ALOGV("requiredSize- %d", requiredSize);
         while(mBitstreamSM->sufficientSamplesToRender(SPDIF_OUT,
-                                requiredSize?requiredSize:1) == true) {
+                                1) == true) {
             if(mTimeStampModeSet) {
                 update_time_stamp_pre_write_to_driver(COMPRESSED_OUT);
                 ALOGV("ts- %lld", mOutputMetadataCompre.timestamp);
@@ -2451,7 +2450,7 @@ uint32_t AudioBroadcastStreamALSA::render(bool continueDecode)
                            requiredSize);
             }
             n = writeToCompressedDriver(mCompreWriteTempBuffer, period_size);
-            ALOGV("pcm_write returned with %d", n);
+            ALOGD("pcm_write returned with %d", n);
             if (n < 0) {
                 // Recovery is part of pcm_write. TODO split is later.
                 ALOGE("pcm_write returned n < 0");
