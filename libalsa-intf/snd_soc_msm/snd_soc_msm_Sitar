@@ -1408,6 +1408,117 @@ SectionUseCase."ADSP testfwk" {
 Comment "ADSP testfwk use case"
 
 SectionVerb
+        Name "HiFi TunnelPROXY Rx Speaker"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia4':1:1
+                'SLIMBUS_0_RX Audio Mixer MultiMedia4':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia4':1:0
+                'SLIMBUS_0_RX Audio Mixer MultiMedia4':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 9
+
+EndSection
+
+SectionVerb
+        Name "HiFi TunnelPROXY Rx Earpiece"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia4':1:1
+                'SLIMBUS_0_RX Audio Mixer MultiMedia4':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia4':1:0
+                'SLIMBUS_0_RX Audio Mixer MultiMedia4':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 9
+
+EndSection
+
+SectionVerb
+        Name "HiFi TunnelPROXY Rx Headphones"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia4':1:1
+                'SLIMBUS_0_RX Audio Mixer MultiMedia4':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia4':1:0
+                'SLIMBUS_0_RX Audio Mixer MultiMedia4':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 9
+
+EndSection
+
+SectionVerb
+        Name "HiFi TunnelPROXY Rx ANC Headset"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia4':1:1
+                'SLIMBUS_0_RX Audio Mixer MultiMedia4':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia4':1:0
+                'SLIMBUS_0_RX Audio Mixer MultiMedia4':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 9
+
+EndSection
+
+SectionVerb
+        Name "HiFi TunnelPROXY Rx Speaker Headset"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia4':1:1
+                'SLIMBUS_0_RX Audio Mixer MultiMedia4':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia4':1:0
+                'SLIMBUS_0_RX Audio Mixer MultiMedia4':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 9
+
+EndSection
+
+SectionVerb
+        Name "HiFi TunnelPROXY Rx Speaker ANC Headset"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia4':1:1
+                'SLIMBUS_0_RX Audio Mixer MultiMedia4':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia4':1:0
+                'SLIMBUS_0_RX Audio Mixer MultiMedia4':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 9
+
+EndSection
+}
+SectionUseCase."ADSP testfwk" {
+Comment "ADSP testfwk use case"
+
+SectionVerb
         Name "ADSP testfwk"
 
         EnableSequence
