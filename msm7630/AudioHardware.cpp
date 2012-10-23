@@ -1273,15 +1273,18 @@ status_t AudioHardware::doAudioRouteOrMute(uint32_t device)
     return do_route_audio_rpc(device,earMute, mMicMute);
 }
 
-status_t AudioHardware::doRouting(AudioStreamInMSM72xx *input)
+status_t AudioHardware::doRouting(AudioStreamInMSM72xx *input, int outputDevice)
 {
     Mutex::Autolock lock(mLock);
-    uint32_t outputDevices = mOutput->devices();
+    uint32_t outputDevices ;
     status_t ret = NO_ERROR;
     int audProcess = (ADRC_DISABLE | EQ_DISABLE | RX_IIR_DISABLE);
     int sndDevice = -1;
 
-
+    if (outputDevice)
+        outputDevices = outputDevice;
+    else
+        outputDevices = mOutput->devices();
 
     if (input != NULL) {
         uint32_t inputDevice = input->devices();
@@ -3161,7 +3164,7 @@ status_t AudioHardware::AudioSessionOutLPA::setParameters(const String8& keyValu
     if (param.getInt(key, device) == NO_ERROR) {
         mDevices = device;
         ALOGV("set output routing %x", mDevices);
-        status = mHardware->doRouting(NULL);
+        status = mHardware->doRouting(NULL, device);
         param.remove(key);
     }
 
@@ -3307,10 +3310,10 @@ status_t AudioHardware::AudioSessionOutLPA::setVolume(float left, float right)
 
     float v = (left + right) / 2;
     if (v < 0.0) {
-        ALOGW("AudioSessionOutMSM7xxx::setVolume(%f) under 0.0, assuming 0.0\n", v);
+        ALOGW("AudioSessionOutLPA::setVolume(%f) under 0.0, assuming 0.0\n", v);
         v = 0.0;
     } else if (v > 1.0) {
-        ALOGW("AudioSessionOutMSM7xxx::setVolume(%f) over 1.0, assuming 1.0\n", v);
+        ALOGW("AudioSessionOutLPA::setVolume(%f) over 1.0, assuming 1.0\n", v);
         v = 1.0;
     }
 
@@ -3324,7 +3327,7 @@ status_t AudioHardware::AudioSessionOutLPA::setVolume(float left, float right)
 
     // Ensure to convert the log volume back to linear for LPA
     float vol = v * 100;
-    ALOGV("AudioSessionOutMSM7xxx::setVolume(%f)\n", v);
+    ALOGV("AudioSessionOutLPA::setVolume(%f)\n", v);
     ALOGV("Setting session volume to %f (available range is 0 to 100)\n", vol);
 
     if(msm_set_volume(sessionId, vol)) {
