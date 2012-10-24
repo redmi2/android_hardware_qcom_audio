@@ -511,7 +511,7 @@ void AudioBroadcastStreamALSA::initialization()
     mBufferSize        = DEFAULT_BUFFER_SIZE;
     mStreamVol         = 0x2000;
     mPowerLock         = false;
-
+    hw_ptr = 0;
     // device handles
     mPcmRxHandle       = NULL;
     mCompreRxHandle    = NULL;
@@ -1054,7 +1054,7 @@ status_t AudioBroadcastStreamALSA::openTunnelDevice(int devices)
     ALOGV("openTunnelDevice");
     char *use_case;
     status_t status = NO_ERROR;
-
+    hw_ptr = 0;
     if(mCaptureFromProxy) {
         devices = (mDevices & AudioSystem::DEVICE_OUT_SPDIF);
         devices |= AudioSystem::DEVICE_OUT_PROXY;
@@ -1282,7 +1282,7 @@ void AudioBroadcastStreamALSA::allocateCapturePollFd()
     struct pcm* pcm = mCaptureHandle->handle;
 
     if(mCapturefd == -1) {
-        mCapturePfd[0].fd     = mCaptureHandle->handle->fd;
+        mCapturePfd[0].fd     = mCaptureHandle->handle->timer_fd;
         mCapturePfd[0].events = POLLIN | POLLERR | POLLNVAL;
         mCapturefd            = eventfd(0,0);
         mCapturePfd[1].fd     = mCapturefd;
@@ -1568,8 +1568,10 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
         struct snd_timer_tread rbuf[4];
         read(local_handle->timer_fd, rbuf, sizeof(struct snd_timer_tread) * 4 );
         if((mPlaybackPfd[0].revents & POLLERR) ||
-           (mPlaybackPfd[0].revents & POLLNVAL))
+           (mPlaybackPfd[0].revents & POLLNVAL)) {
+            mPlaybackPfd[0].revents = 0;
             continue;
+        }
 
         if (mPlaybackPfd[0].revents & POLLIN && !mKillPlaybackThread) {
             mPlaybackPfd[0].revents = 0;
@@ -1577,7 +1579,7 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
             if (isSessionPaused)
                 continue;
             ALOGV("After an event occurs");
-            {
+            do {
                 if (mInputMemFilledQueue.empty()) {
                     ALOGV("Filled queue is empty");
                     continue;
@@ -1607,7 +1609,12 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
 
                 mInputMemRequestMutex.unlock();
                 mWriteCv.signal();
-            }
+                hw_ptr += mCompreRxHandle->bufferSize/(2*mCompreRxHandle->channels);
+                mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_APPL |
+                                        SNDRV_PCM_SYNC_PTR_AVAIL_MIN);
+                sync_ptr(mCompreRxHandle->handle);
+                ALOGE("hw_ptr1 = %lld status.hw_ptr1 = %lld", hw_ptr, mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr);
+            } while(hw_ptr < mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr);
         }
     }
     mPlaybackThreadAlive = false;
