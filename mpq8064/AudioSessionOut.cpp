@@ -137,7 +137,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
         ALOGE("No output device specified");
         return;
     }
-    if((format == AUDIO_FORMAT_PCM_16_BIT) && (channels == 0 || channels > 6)) {
+    if((format == AUDIO_FORMAT_PCM_16_BIT) && (channels <= 0 || channels > 8)) {
         ALOGE("Invalid number of channels %d", channels);
         return;
     }
@@ -199,6 +199,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
 
     } else if(format == AUDIO_FORMAT_PCM_16_BIT) {
         mMinBytesReqToDecode = PCM_BLOCK_PER_CHANNEL_MS11*mChannels-1;
+/* Enable this when Support of 6 channel to AC3 is required. Till then PCM is pass throughed
         if(channels > 2 && channels <= 6) {
             // Instantiate MS11 decoder for downmix and re-encode
             mMS11Decoder = new SoftMS11;
@@ -214,6 +215,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
             }
             mUseMS11Decoder  = true;
         }
+*/
         mBitstreamSM = new AudioBitstreamSM;
         if(false == mBitstreamSM->initBitstreamPtr()) {
             ALOGE("Unable to allocate Memory for i/p and o/p buffering for MS11");
@@ -555,7 +557,7 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
         size_t  copyBytesMS11 = 0;
         char    *bufPtr;
         uint32_t outSampleRate=mSampleRate,outChannels=mChannels;
-        mBitstreamSM->copyBitsreamToInternalBuffer((char *)buffer, bytes);
+        mBitstreamSM->copyBitstreamToInternalBuffer((char *)buffer, bytes);
 
         do
         {
@@ -700,7 +702,7 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
             int write_pending = bytes;
             period_size = mPcmRxHandle->periodSize;
 
-            mBitstreamSM->copyBitsreamToInternalBuffer((char *)buffer, bytes);
+            mBitstreamSM->copyBitstreamToInternalBuffer((char *)buffer, bytes);
 
             while(mPcmRxHandle->handle &&
                   (mBitstreamSM->sufficientBitstreamToDecode(period_size)
@@ -1932,6 +1934,8 @@ status_t AudioSessionOutALSA::openPcmDevice(int devices)
 
     if(mUseMS11Decoder && (mPcmRxHandle->channels > 2))
         setChannelMap(mPcmRxHandle);
+    else if(mPcmRxHandle->channels > 2)
+        setPCMChannelMap(mPcmRxHandle);
 
     return status;
 }
@@ -1953,12 +1957,61 @@ void AudioSessionOutALSA::setChannelMap(alsa_handle_t *handle)
         channelMap[1] = PCM_CHANNEL_FR;
         channelMap[2] = PCM_CHANNEL_FC;
         channelMap[3] = PCM_CHANNEL_LFE;
-        channelMap[4] = PCM_CHANNEL_LS;
-        channelMap[5] = PCM_CHANNEL_RS;
+        channelMap[4] = PCM_CHANNEL_LB;
+        channelMap[5] = PCM_CHANNEL_RB;
         break;
     case 7:
     case 8:
         ALOGE("TODO: Investigate and add appropriate channel map appropriately");
+        break;
+    default:
+        ALOGE("un supported channels for setting channel map");
+        return;
+    }
+
+    status = mALSADevice->setChannelMap(handle, sizeof(channelMap), channelMap);
+    if(status)
+        ALOGE("set channel map failed. Default channel map is used instead");
+
+    return;
+}
+
+void AudioSessionOutALSA::setPCMChannelMap(alsa_handle_t *handle)
+{
+    char channelMap[8];
+    status_t status = NO_ERROR;
+
+    memset(channelMap, 0, sizeof(channelMap));
+    switch (handle->channels) {
+    case 3:
+    case 4:
+        channelMap[0] = PCM_CHANNEL_FL;
+        channelMap[1] = PCM_CHANNEL_FR;
+        channelMap[2] = PCM_CHANNEL_LB;
+        channelMap[3] = PCM_CHANNEL_RB;
+    case 5:
+        ALOGE("TODO: Investigate and add appropriate channel map appropriately");
+        break;
+    case 6:
+        channelMap[0] = PCM_CHANNEL_FL;
+        channelMap[1] = PCM_CHANNEL_FR;
+        channelMap[2] = PCM_CHANNEL_FC;
+        channelMap[3] = PCM_CHANNEL_LFE;
+        channelMap[4] = PCM_CHANNEL_LB;
+        channelMap[5] = PCM_CHANNEL_RB;
+        break;
+    case 7:
+        ALOGE("TODO: Investigate and add appropriate channel map appropriately");
+        break;
+    case 8:
+        channelMap[0] = PCM_CHANNEL_FL;
+        channelMap[1] = PCM_CHANNEL_FR;
+        channelMap[2] = PCM_CHANNEL_FC;
+        channelMap[3] = PCM_CHANNEL_LFE;
+        channelMap[4] = PCM_CHANNEL_LB;
+        channelMap[5] = PCM_CHANNEL_RB;
+        channelMap[4] = PCM_CHANNEL_LS;
+        channelMap[5] = PCM_CHANNEL_RS;
         break;
     default:
         ALOGE("un supported channels for setting channel map");

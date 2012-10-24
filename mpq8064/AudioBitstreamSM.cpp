@@ -132,7 +132,7 @@ void AudioBitstreamSM::resetOutputBitstreamPtr()
 Copy the bitstream/pcm from Player to internal buffer.
 The incoming bitstream is appended to existing bitstream
 */
-void AudioBitstreamSM::copyBitsreamToInternalBuffer(char *bufPtr, size_t bytes)
+void AudioBitstreamSM::copyBitstreamToInternalBuffer(char *bufPtr, size_t bytes)
 {
     int32_t bufLen = SAMPLES_PER_CHANNEL*MAX_INPUT_CHANNELS_SUPPORTED*FACTOR_FOR_BUFFERING;
     // flush the input buffer if input is not consumed

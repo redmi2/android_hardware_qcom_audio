@@ -106,7 +106,7 @@ class AudioBitstreamSM;
 #define TTY_HCO         0x00000080
 #define TTY_CLEAR       0xFFFFFF0F
 
-#define SAMPLES_PER_CHANNEL             1024*2
+#define SAMPLES_PER_CHANNEL             1536*2
 #define MAX_INPUT_CHANNELS_SUPPORTED    8
 #define FACTOR_FOR_BUFFERING            2
 #define STEREO_CHANNELS                 2
@@ -596,6 +596,7 @@ private:
     void                setSpdifHdmiRoutingFlags(int devices);
     status_t            setPlaybackFormat();
     void                setChannelMap(alsa_handle_t *handle);
+    void                setPCMChannelMap(alsa_handle_t *handle);
     status_t            pause_l();
     status_t            resume_l();
     void                reset();
@@ -1130,7 +1131,7 @@ public:
     ~AudioBitstreamSM();
     bool    initBitstreamPtr();
     void    resetBitstreamPtr();
-    void    copyBitsreamToInternalBuffer(char *bufPtr, size_t bytes);
+    void    copyBitstreamToInternalBuffer(char *bufPtr, size_t bytes);
     bool    sufficientBitstreamToDecode(size_t minThreshBytesToDecode);
     bool    sufficientSamplesToRender(int format, int minSizeReqdToRender);
     char*   getInputBufferPtr();
