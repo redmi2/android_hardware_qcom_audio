@@ -982,3 +982,46 @@ int pcm_ready(struct pcm *pcm)
 {
     return pcm->fd >= 0;
 }
+
+int pcm_set_channel_map(struct pcm *pcm, struct mixer *mixer,
+                        int max_channels, char *chmap)
+{
+    struct mixer_ctl *ctl;
+    char control_name[44]; // max length of name is 44 as defined
+    char device_num[3]; // device number upto 2 digit
+    char **set_values;
+    int i;
+
+    ALOGV("pcm_set_channel_map");
+    set_values = (char**)malloc(max_channels*sizeof(char*));
+    if(set_values) {
+        for(i=0; i< max_channels; i++) {
+            set_values[i] = (char*)malloc(4*sizeof(char));
+            if(set_values[i]) {
+                sprintf(set_values[i],"%d",chmap[i]);
+            } else {
+                ALOGE("memory allocation for set channel map failed");
+                return -1;
+            }
+        }
+    } else {
+        ALOGE("memory allocation for set channel map failed");
+        return -1;
+    }
+    strlcpy(control_name, "Playback Channel Map", sizeof(control_name));
+    sprintf(device_num, "%d", pcm->device_no);
+    strcat(control_name, device_num);
+    ALOGV("pcm_set_channel_map: control name:%s", control_name);
+    ctl = mixer_get_control(mixer, control_name, 0);
+    if(ctl == NULL) {
+        ALOGE(stderr, "Could not get the mixer control\n");
+        return -1;
+    }
+    mixer_ctl_set_value(ctl, max_channels, set_values);
+    for(i=0; i< max_channels; i++)
+        if(set_values[i])
+            free(set_values[i]);
+    if(set_values)
+        free(set_values);
+    return 0;
+}

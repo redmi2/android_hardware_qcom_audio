@@ -1642,6 +1642,17 @@ status_t ALSADevice::setPlaybackFormat(const char *value, int device)
     return NO_ERROR;
 }
 
+status_t ALSADevice::setChannelMap(alsa_handle_t *handle, int maxChannels,
+                                       char *channelMap)
+{
+    status_t status = NO_ERROR;
+
+    if(handle)
+        status = pcm_set_channel_map(handle->handle, mMixer,
+                                     maxChannels, channelMap);
+    return status;
+}
+
 status_t ALSADevice::setCaptureFormat(const char *value)
 {
     status_t err = NO_ERROR;

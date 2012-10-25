@@ -197,42 +197,20 @@ static int set_params(struct pcm *pcm)
 
 void send_channel_map_driver(struct pcm *pcm)
 {
-    char **set_values;
     int i, ret;
     struct mixer *mixer;
-    struct mixer_ctl *ctl;
     const char* device = "/dev/snd/controlC0";
 
-    set_values = (char**)malloc(8*sizeof(char*));
-    if(set_values) {
-        for(i=0; i< 8; i++) {
-            set_values[i] = (char*)malloc(4*sizeof(char));
-            if(set_values[i])
-                sprintf(set_values[i],"%d",channel_map[i]);
-            else
-                return;
-        }
-        mixer = mixer_open(device);
-        if (!mixer) {
-            fprintf(stderr,"oops: %s: %d\n", strerror(errno), __LINE__);
-            return;
-        }
-        ctl = mixer_get_control(mixer, "Playback Channel Map", 0);
-        if(ctl == NULL) {
-            fprintf(stderr, "Could not get the mixer control\n");
-            return;
-        }
-        ret = mixer_ctl_set_value(ctl, 8, set_values);
-        if (ret < 0)
-            fprintf(stderr, "could not set channel mask\n");
-        mixer_close(mixer);
-
-        for(i=0; i< 8; i++)
-            if(set_values[i])
-                free(set_values[i]);
-        if(set_values)
-            free(set_values);
+    mixer = mixer_open(device);
+    if (!mixer) {
+        fprintf(stderr,"oops: %s: %d\n", strerror(errno), __LINE__);
+        return;
     }
+    ret = pcm_set_channel_map(pcm, mixer, 8, channel_map);
+    if (ret < 0)
+        fprintf(stderr, "could not set channel mask\n");
+    mixer_close(mixer);
+
     return;
 }
 
