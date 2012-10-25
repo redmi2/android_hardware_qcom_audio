@@ -843,8 +843,8 @@ status_t AudioBroadcastStreamALSA::openCapturingAndRoutingDevices()
         }
     }
     if((mUseTunnelDecoder) ||
-       (mSpdifFormat == COMPRESSED_FORMAT) ||
-       (mHdmiFormat == COMPRESSED_FORMAT)) {
+       ((mSpdifFormat == COMPRESSED_FORMAT) && (mDevices & (AudioSystem::DEVICE_OUT_SPDIF))) ||
+       ((mHdmiFormat == COMPRESSED_FORMAT) && (mDevices & (AudioSystem::DEVICE_OUT_AUX_DIGITAL)))) {
         if((mSpdifFormat == COMPRESSED_FORMAT) &&
            (mHdmiFormat == COMPRESSED_FORMAT))
             devices = AudioSystem::DEVICE_OUT_SPDIF |
@@ -1167,7 +1167,15 @@ status_t AudioBroadcastStreamALSA::openRoutingDevice(char *useCase,
                           strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2))))) {
         if (mUseMS11Decoder == true)
             alsa_handle.type = COMPRESSED_PASSTHROUGH_FORMAT;
-        else
+        else if (mFormat == AUDIO_FORMAT_DTS || mFormat == AUDIO_FORMAT_DTS_LBR) {
+            if (((mSpdifFormat == COMPRESSED_FORMAT) &&
+                (mDevices & (AudioSystem::DEVICE_OUT_SPDIF))) ||
+                ((mHdmiFormat == COMPRESSED_FORMAT) &&
+                (mDevices & (AudioSystem::DEVICE_OUT_AUX_DIGITAL))))
+                alsa_handle.type = COMPRESSED_PASSTHROUGH_FORMAT;
+            else
+                alsa_handle.type = COMPRESSED_FORMAT;
+        } else
             alsa_handle.type = COMPRESSED_FORMAT;
     }
     else
@@ -1402,7 +1410,7 @@ void AudioBroadcastStreamALSA::captureThreadEntry()
                             mFormat = AudioSystem::DTS;
                             break;
                        case Q6_DTS_LBR:
-                            mFormat = AudioSystem::DTS;
+                            mFormat = AUDIO_FORMAT_DTS_LBR;
                             break;
                        default:
                             ALOGE("Invalid supported format");
