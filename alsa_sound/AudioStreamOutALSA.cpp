@@ -181,7 +181,7 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
             if(mHandle->handle == NULL) {
                 ALOGE("write:: device open failed");
                 mParent->mLock.unlock();
-                return 0;
+                return bytes;
             }
 #ifdef QCOM_USBAUDIO_ENABLED
             if((mHandle->devices == AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET)||
@@ -259,6 +259,11 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
                 }
                 else
                     mHandle->module->open(mHandle);
+                if(mHandle->handle == NULL) {
+                   ALOGE("write:: device re-open failed");
+                   mParent->mLock.unlock();
+                   return bytes;
+                }
             }
             mParent->mLock.unlock();
             continue;

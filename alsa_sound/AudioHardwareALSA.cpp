@@ -753,26 +753,6 @@ status_t AudioHardwareALSA::doRouting(int device)
             if (device != mCurDevice) {
                 mALSADevice->route(&(*it),(uint32_t)device, newMode);
             }
-        } else if((((mCurDevice & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
-                  (mCurDevice & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE)) &&
-                  (mCurDevice & AudioSystem::DEVICE_OUT_SPEAKER) &&
-                  ((device & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
-                  (device & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE))) ||
-                  (((device & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
-                  (device & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE))  &&
-                  (device & AudioSystem::DEVICE_OUT_SPEAKER) &&
-                  ((mCurDevice & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
-                  (mCurDevice & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE)))) {
-            for(ALSAHandleList::iterator it = mDeviceList.begin();
-                 it != mDeviceList.end(); ++it) {
-                 if((!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI,
-                     strlen(SND_USE_CASE_VERB_HIFI))) ||
-                     (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_MUSIC,
-                     strlen(SND_USE_CASE_MOD_PLAY_MUSIC)))) {
-                         mALSADevice->route(&(*it),(uint32_t)device, newMode);
-                         break;
-                 }
-            }
         } else {
              setInChannels(device);
              ALSAHandleList::iterator it = mDeviceList.end();
