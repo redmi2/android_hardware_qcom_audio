@@ -498,6 +498,13 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
         mWMAConfigDataSet = true;
         return bytes;
     }
+#ifdef DEBUG
+    mFpDumpInput = fopen("/data/input.raw","a");
+    if(mFpDumpInput != NULL) {
+        fwrite((char *)buffer, 1, bytes, mFpDumpInput);
+        fclose(mFpDumpInput);
+    }
+#endif
     if (mUseTunnelDecoder && mCompreRxHandle) {
 
         writeToCompressedDriver((char *)buffer, bytes);
@@ -632,6 +639,14 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
             if(mPcmRxHandle && mRoutePcmAudio) {
                 period_size = mPcmRxHandle->periodSize;
                 while(mBitstreamSM->sufficientSamplesToRender(PCM_MCH_OUT,period_size) == true) {
+#ifdef DEBUG
+                    mFpDumpPCMOutput = fopen("/data/pcm_output.raw","a");
+                    if(mFpDumpPCMOutput != NULL) {
+                        fwrite(mBitstreamSM->getOutputBufferPtr(PCM_MCH_OUT), 1,
+                                   period_size, mFpDumpPCMOutput);
+                        fclose(mFpDumpPCMOutput);
+                    }
+#endif
                     n = pcm_write(mPcmRxHandle->handle,
                               mBitstreamSM->getOutputBufferPtr(PCM_MCH_OUT),
                               period_size);
@@ -691,6 +706,14 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
                   (mBitstreamSM->sufficientBitstreamToDecode(period_size)
                                      == true)) {
                 ALOGV("Calling pcm_write");
+#ifdef DEBUG
+                mFpDumpPCMOutput = fopen("/data/pcm_output.raw","a");
+                if(mFpDumpPCMOutput != NULL) {
+                    fwrite(mBitstreamSM->getInputBufferPtr(), 1,
+                               period_size, mFpDumpPCMOutput);
+                    fclose(mFpDumpPCMOutput);
+                }
+#endif
                 n = pcm_write(mPcmRxHandle->handle,
                          mBitstreamSM->getInputBufferPtr(),
                           period_size);
@@ -1068,6 +1091,19 @@ status_t AudioSessionOutALSA::pause()
         ALOGE("pause returned error");
         return err;
     }
+#ifdef DEBUG
+    char debugString[] = "Playback Paused";
+    mFpDumpPCMOutput = fopen("/data/pcm_output.raw","a");
+    if(mFpDumpPCMOutput != NULL) {
+        fwrite(debugString, 1, sizeof(debugString), mFpDumpPCMOutput);
+        fclose(mFpDumpPCMOutput);
+    }
+    mFpDumpInput = fopen("/data/input.raw","a");
+    if(mFpDumpInput != NULL) {
+        fwrite(debugString, 1, sizeof(debugString), mFpDumpInput);
+        fclose(mFpDumpInput);
+    }
+#endif
     if (mRouteAudioToA2dp) {
         ALOGD("Pause - suspendA2dpPlayback - A2DPDirectOutput");
         err = mParent->suspendA2dpPlayback(AudioHardwareALSA::A2DPDirectOutput);
@@ -1206,24 +1242,52 @@ status_t AudioSessionOutALSA::flush()
         mSkipWrite = true;
         mWriteCv.signal();
     }
-    /*if(mPcmRxHandle) {
-        if (ioctl(mPcmRxHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE,1) < 0) {
-            ALOGE("flush(): Audio Pause failed");
+    if(mPcmRxHandle) {
+        if(!mPaused) {
+            ALOGE("flush(): Move to pause state if flush without pause");
+            if (ioctl(mPcmRxHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE,1) < 0)
+                ALOGE("flush(): Audio Pause failed");
         }
-        mPcmRxHandle->handle->start = 0;
         pcm_prepare(mPcmRxHandle->handle);
-        ALOGV("flush(): Reset, drain and prepare completed");
-        mPcmRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_APPL |
-                                                 SNDRV_PCM_SYNC_PTR_AVAIL_MIN);
-        sync_ptr(mPcmRxHandle->handle);
-    }*/
+        ALOGV("flush(): prepare completed");
+    }
     mFrameCountMutex.lock();
     mFrameCount = 0;
     mFrameCountMutex.unlock();
-    if(mUseMS11Decoder == true) {
+    if(mBitstreamSM)
         mBitstreamSM->resetBitstreamPtr();
+    if(mUseMS11Decoder == true) {
         mMS11Decoder->flush();
+        if (mFormat == AUDIO_FORMAT_AC3 || mFormat == AUDIO_FORMAT_EAC3) {
+            delete mMS11Decoder;
+            mMS11Decoder = new SoftMS11;
+            if(mMS11Decoder->initializeMS11FunctionPointers() == false) {
+                ALOGE("Could not resolve all symbols Required for MS11");
+                delete mMS11Decoder;
+                return -1;
+            }
+            if(mMS11Decoder->setUseCaseAndOpenStream(
+                                     FORMAT_DOLBY_DIGITAL_PLUS_MAIN,
+                                     mChannels, mSampleRate)) {
+                ALOGE("SetUseCaseAndOpen MS11 failed");
+                delete mMS11Decoder;
+                return -1;
+            }
+        }
     }
+#ifdef DEBUG
+    char debugString[] = "Playback Flushd";
+    mFpDumpPCMOutput = fopen("/data/pcm_output.raw","a");
+    if(mFpDumpPCMOutput != NULL) {
+        fwrite(debugString, 1, sizeof(debugString), mFpDumpPCMOutput);
+        fclose(mFpDumpPCMOutput);
+    }
+    mFpDumpInput = fopen("/data/input.raw","a");
+    if(mFpDumpInput != NULL) {
+        fwrite(debugString, 1, sizeof(debugString), mFpDumpInput);
+        fclose(mFpDumpInput);
+    }
+#endif
     ALOGD("AudioSessionOutALSA::flush X");
     return NO_ERROR;
 }
@@ -1249,6 +1313,19 @@ status_t AudioSessionOutALSA::resume_l()
         mTunnelPaused = false;
     }
     mPaused = false;
+#ifdef DEBUG
+    char debugString[] = "Playback Resumd";
+    mFpDumpPCMOutput = fopen("/data/pcm_output.raw","a");
+    if(mFpDumpPCMOutput != NULL) {
+        fwrite(debugString, 1, sizeof(debugString), mFpDumpPCMOutput);
+        fclose(mFpDumpPCMOutput);
+    }
+    mFpDumpInput = fopen("/data/input.raw","a");
+    if(mFpDumpInput != NULL) {
+        fwrite(debugString, 1, sizeof(debugString), mFpDumpInput);
+        fclose(mFpDumpInput);
+    }
+#endif
     return NO_ERROR;
 }
 
