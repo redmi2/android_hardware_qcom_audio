@@ -438,7 +438,9 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
         buffer = buffer_start;
     } else
 #endif
-    if (mHandle->format == AUDIO_FORMAT_AMR_WB) {
+    if (mHandle->format == AUDIO_FORMAT_AMR_WB &&
+        (strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL, strlen(SND_USE_CASE_VERB_IP_VOICECALL))) &&
+        (strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP, strlen(SND_USE_CASE_MOD_PLAY_VOIP)))) {
         ALOGV("AUDIO_FORMAT_AMR_WB");
         do {
             if (read_pending < 61) {
