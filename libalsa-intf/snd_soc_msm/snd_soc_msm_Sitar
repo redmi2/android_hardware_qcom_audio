@@ -616,6 +616,70 @@ SectionVerb
 EndSection
 
 SectionVerb
+        Name "HiFi RecPROXY Rx"
+
+        EnableSequence
+        EndSequence
+
+        DisableSequence
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 0
+        PlaybackPCM 0
+
+EndSection
+
+SectionVerb
+        Name "HiFi RecUSB PROXY Rx"
+
+        EnableSequence
+        EndSequence
+
+        DisableSequence
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 0
+        PlaybackPCM 0
+
+EndSection
+
+SectionVerb
+        Name "HiFi RecPROXY Tx"
+
+        EnableSequence
+                'MultiMedia1 Mixer AFE_PCM_TX':1:1
+        EndSequence
+
+        DisableSequence
+                'MultiMedia1 Mixer AFE_PCM_TX':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 0
+        PlaybackPCM 0
+
+EndSection
+
+SectionVerb
+        Name "HiFi RecUSB PROXY Tx"
+
+        EnableSequence
+                'MultiMedia1 Mixer AFE_PCM_TX':1:1
+        EndSequence
+
+        DisableSequence
+                'MultiMedia1 Mixer AFE_PCM_TX':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 0
+        PlaybackPCM 0
+
+EndSection
+
+SectionVerb
 	Name "HiFi RecSSR QMIC"
 
 	EnableSequence
@@ -794,6 +858,74 @@ SectionVerb
 	CapturePCM 2
 
 EndSection
+
+SectionVerb
+	Name "Voice CallPROXY Rx"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+		'AFE_PCM_RX_Voice Mixer CSVoice':1:0
+		'Voice_Tx Mixer AFE_PCM_TX_Voice':1:0
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 2
+	CapturePCM 2
+
+EndSection
+
+SectionVerb
+	Name "Voice CallUSB PROXY Rx"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+		'AFE_PCM_RX_Voice Mixer CSVoice':1:0
+		'Voice_Tx Mixer AFE_PCM_TX_Voice':1:0
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 2
+	CapturePCM 2
+
+EndSection
+
+SectionVerb
+	Name "Voice CallPROXY Tx"
+
+	EnableSequence
+		'AFE_PCM_RX_Voice Mixer CSVoice':1:1
+		'Voice_Tx Mixer AFE_PCM_TX_Voice':1:1
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 2
+	CapturePCM 2
+
+EndSection
+
+SectionVerb
+	Name "Voice CallUSB PROXY Tx"
+
+	EnableSequence
+		'AFE_PCM_RX_Voice Mixer CSVoice':1:1
+		'Voice_Tx Mixer AFE_PCM_TX_Voice':1:1
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 2
+	CapturePCM 2
+
+EndSection
 }
 SectionUseCase."Voice Call IP" {
 Comment "VOIP Call use case"
@@ -919,6 +1051,74 @@ SectionVerb
 	# ALSA PCMs
 	PlaybackPCM 3
 	CapturePCM 3
+
+EndSection
+
+SectionVerb
+	Name "Voice Call IPPROXY Rx"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+		'AFE_PCM_RX_Voice Mixer Voip':1:0
+		'Voip_Tx Mixer AFE_PCM_TX_Voip':1:0
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 2
+	CapturePCM 2
+
+EndSection
+
+SectionVerb
+	Name "Voice Call IPUSB PROXY Rx"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+		'AFE_PCM_RX_Voice Mixer Voip':1:0
+		'Voip_Tx Mixer AFE_PCM_TX_Voip':1:0
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 2
+	CapturePCM 2
+
+EndSection
+
+SectionVerb
+	Name "Voice Call IPPROXY Tx"
+
+	EnableSequence
+		'AFE_PCM_RX_Voice Mixer Voip':1:1
+		'Voip_Tx Mixer AFE_PCM_TX_Voip':1:1
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 2
+	CapturePCM 2
+
+EndSection
+
+SectionVerb
+	Name "Voice Call IPUSB PROXY Tx"
+
+	EnableSequence
+		'AFE_PCM_RX_Voice Mixer Voip':1:1
+		'Voip_Tx Mixer AFE_PCM_TX_Voip':1:1
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 2
+	CapturePCM 2
 
 EndSection
 }
@@ -3637,6 +3837,40 @@ SectionModifier
 EndSection
 
 SectionModifier
+        Name "Capture MusicPROXY Tx"
+
+        EnableSequence
+                'MultiMedia1 Mixer AFE_PCM_TX':1:1
+        EndSequence
+
+        DisableSequence
+                'MultiMedia1 Mixer AFE_PCM_TX':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 0
+        PlaybackPCM 0
+
+EndSection
+
+SectionModifier
+        Name "Capture MusicUSB PROXY Tx"
+
+        EnableSequence
+                'MultiMedia1 Mixer AFE_PCM_TX':1:1
+        EndSequence
+
+        DisableSequence
+                'MultiMedia1 Mixer AFE_PCM_TX':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 0
+        PlaybackPCM 0
+
+EndSection
+
+SectionModifier
 	Name "Capture Music Compressed"
 
 	EnableSequence
@@ -3784,6 +4018,141 @@ SectionModifier
 		'Internal BTSCO SampleRate':0:16000
 		'INTERNAL_BT_SCO_RX_Voice Mixer CSVoice':1:1
 		'Voice_Tx Mixer INTERNAL_BT_SCO_TX_Voice':1:1
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 2
+	CapturePCM 2
+
+EndSection
+SectionModifier
+	Name "Play VoicePROXY Rx"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+		'AFE_PCM_RX_Voice Mixer CSVoice':1:0
+		'Voice_Tx Mixer AFE_PCM_TX_Voice':1:0
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 2
+	CapturePCM 2
+
+EndSection
+
+SectionModifier
+	Name "Play VoiceUSB PROXY Rx"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+		'AFE_PCM_RX_Voice Mixer CSVoice':1:0
+		'Voice_Tx Mixer AFE_PCM_TX_Voice':1:0
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 2
+	CapturePCM 2
+
+EndSection
+
+SectionModifier
+	Name "Play VoicePROXY Tx"
+
+	EnableSequence
+		'AFE_PCM_RX_Voice Mixer CSVoice':1:1
+		'Voice_Tx Mixer AFE_PCM_TX_Voice':1:1
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 2
+	CapturePCM 2
+
+EndSection
+
+SectionModifier
+	Name "Play VoiceUSB PROXY Tx"
+
+	EnableSequence
+		'AFE_PCM_RX_Voice Mixer CSVoice':1:1
+		'Voice_Tx Mixer AFE_PCM_TX_Voice':1:1
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 2
+	CapturePCM 2
+
+EndSection
+
+SectionModifier
+	Name "Play VOIPPROXY Rx"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+		'AFE_PCM_RX_Voice Mixer Voip':1:0
+		'Voip_Tx Mixer AFE_PCM_TX_Voip':1:0
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 2
+	CapturePCM 2
+
+EndSection
+
+SectionModifier
+	Name "Play VOIPUSB PROXY Rx"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+		'AFE_PCM_RX_Voice Mixer Voip':1:0
+		'Voip_Tx Mixer AFE_PCM_TX_Voip':1:0
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 2
+	CapturePCM 2
+
+EndSection
+
+SectionModifier
+	Name "Play VOIPPROXY Tx"
+
+	EnableSequence
+		'AFE_PCM_RX_Voice Mixer Voip':1:1
+		'Voip_Tx Mixer AFE_PCM_TX_Voip':1:1
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 2
+	CapturePCM 2
+
+EndSection
+
+SectionModifier
+	Name "Play VOIPUSB PROXY Tx"
+
+	EnableSequence
+		'AFE_PCM_RX_Voice Mixer Voip':1:1
+		'Voip_Tx Mixer AFE_PCM_TX_Voip':1:1
 	EndSequence
 
 	DisableSequence
