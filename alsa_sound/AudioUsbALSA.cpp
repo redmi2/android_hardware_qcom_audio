@@ -54,6 +54,9 @@ struct pollfd pfdUsbRecording[1];
 
 #define USB_PERIOD_SIZE 2048
 #define PROXY_PERIOD_SIZE 3072
+#define PROXY_SUPPORTED_RATE_8000 8000
+#define PROXY_SUPPORTED_RATE_16000 16000
+#define PROXY_SUPPORTED_RATE_48000 48000
 
 namespace android_audio_legacy
 {
@@ -233,7 +236,13 @@ status_t AudioUsbALSA::getCap(char * type, int &channels, int &sampleRate)
 
     for (i = 0; i<size; i++) {
         if ((ratesSupported[i] > sampleRate) && (ratesSupported[i] <= 48000)) {
-            sampleRate = ratesSupported[i];
+            // Sample Rate should be one of the proxy supported rates only
+            // This is because proxy port is used to read from/write to DSP .
+            if ((ratesSupported[i] == PROXY_SUPPORTED_RATE_8000) ||
+                (ratesSupported[i] == PROXY_SUPPORTED_RATE_16000) ||
+                (ratesSupported[i] == PROXY_SUPPORTED_RATE_48000)) {
+                sampleRate = ratesSupported[i];
+            }
         }
     }
     ALOGD("sampleRate: %d", sampleRate);
