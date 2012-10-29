@@ -732,8 +732,12 @@ int32_t AudioSessionOutALSA::writeToCompressedDriver(char *buffer, int bytes)
             (mSecCompreRxHandle!=NULL && mInputMemEmptyQueue[1].empty())) {
             ALOGV("Write: waiting on mWriteCv");
             mLock.unlock();
-            mWriteCv.wait(mInputMemRequestMutex);
+            mInputMemRequestMutex.unlock();
+            mWriteCvMutex.lock();
+            mWriteCv.wait(mWriteCvMutex);
+            mWriteCvMutex.unlock();
             mLock.lock();
+            mInputMemRequestMutex.lock();
             if (mSkipWrite) {
                 ALOGV("Write: Flushing the previous write buffer");
                 mSkipWrite = false;
@@ -771,6 +775,7 @@ int32_t AudioSessionOutALSA::writeToCompressedDriver(char *buffer, int bytes)
         n = pcm_write(local_handle, buf.memBuf, local_handle->period_size);
         // write to second handle if present
         if (mSecCompreRxHandle) {
+                mInputMemRequestMutex.lock();
                 it = mInputMemEmptyQueue[1].begin();
                 buf = *it;
                 if (bytes)
@@ -1100,6 +1105,37 @@ status_t AudioSessionOutALSA::pause_l()
     return NO_ERROR;
 }
 
+status_t AudioSessionOutALSA::resetBufferQueue()
+{
+        mInputMemResponseMutex.lock();
+        mInputMemRequestMutex.lock();
+        mInputMemFilledQueue[0].clear();
+        mInputMemEmptyQueue[0].clear();
+        List<BuffersAllocated>::iterator it = mInputBufPool[0].begin();
+        for (;it!=mInputBufPool[0].end();++it) {
+            memset((*it).memBuf, 0x0, (*it).memBufsize);
+            mInputMemEmptyQueue[0].push_back(*it);
+        }
+        ALOGV("Transferred all the buffers from response queue1 to\
+            request queue1 to handle seek");
+        if (mSecCompreRxHandle) {
+                mInputMemFilledQueue[1].clear();
+                mInputMemEmptyQueue[1].clear();
+                it = mInputBufPool[1].begin();
+                for (;it!=mInputBufPool[1].end();++it) {
+                    memset((*it).memBuf, 0x0, (*it).memBufsize);
+                    mInputMemEmptyQueue[1].push_back(*it);
+                }
+                ALOGV("Transferred all the buffers from response queue2 to\
+                    request queue2 to handle seek");
+        }
+        mReachedExtractorEOS = false;
+        mPostedEOS = false;
+        mInputMemRequestMutex.unlock();
+        mInputMemResponseMutex.unlock();
+        return NO_ERROR;
+}
+
 status_t AudioSessionOutALSA::drainTunnel()
 {
     status_t err = OK;
@@ -1144,6 +1180,7 @@ status_t AudioSessionOutALSA::drainTunnel()
         ALOGV("appl_ptr2= %d",\
         (int)mSecCompreRxHandle->handle->sync_ptr->c.control.appl_ptr);
     }
+    resetBufferQueue();
     ALOGV("Reset, drain and prepare completed");
     return err;
 }
@@ -1157,42 +1194,13 @@ status_t AudioSessionOutALSA::flush()
         struct pcm * local_handle = mCompreRxHandle->handle;
         ALOGV("Paused case, %d",mTunnelPaused);
 
-        mInputMemResponseMutex.lock();
-        mInputMemRequestMutex.lock();
-        mInputMemFilledQueue[0].clear();
-        mInputMemEmptyQueue[0].clear();
-        List<BuffersAllocated>::iterator it = mInputBufPool[0].begin();
-        for (;it!=mInputBufPool[0].end();++it) {
-            memset((*it).memBuf, 0x0, (*it).memBufsize);
-            mInputMemEmptyQueue[0].push_back(*it);
-        }
-        ALOGV("Transferred all the buffers from response queue1 to\
-            request queue1 to handle seek");
-        if (mSecCompreRxHandle) {
-                local_handle = mSecCompreRxHandle->handle;
-
-                mInputMemFilledQueue[1].clear();
-                mInputMemEmptyQueue[1].clear();
-                it = mInputBufPool[1].begin();
-                for (;it!=mInputBufPool[1].end();++it) {
-                    memset((*it).memBuf, 0x0, (*it).memBufsize);
-                    mInputMemEmptyQueue[1].push_back(*it);
-                }
-                ALOGV("Transferred all the buffers from response queue2 to\
-                    request queue2 to handle seek");
-        }
-        mReachedExtractorEOS = false;
-        mPostedEOS = false;
-        mInputMemRequestMutex.unlock();
-        mInputMemResponseMutex.unlock();
         if (!mTunnelPaused) {
             if ((err = ioctl(local_handle->fd, SNDRV_PCM_IOCTL_PAUSE,1)) < 0) {
                 ALOGE("Audio Pause failed");
                 return err;
             }
-            if (mSecCompreRxHandle){
-                // if SecCompreRx exists reset handle to CompreRx
-                local_handle = mCompreRxHandle->handle;
+            if (mSecCompreRxHandle) {
+                local_handle = mSecCompreRxHandle->handle;
                 if ((err = ioctl(local_handle->fd, SNDRV_PCM_IOCTL_PAUSE,1)) < 0) {
                         ALOGE("Audio Pause failed");
                         return err;
