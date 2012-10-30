@@ -1686,7 +1686,7 @@ void AudioSessionOutALSA::updateRoutingFlags()
 
     if(mUseTunnelDecoder)
         mRoutePcmAudio = false;
-    if(mFormat == AUDIO_FORMAT_DTS)
+    if(mFormat == AUDIO_FORMAT_DTS || mFormat == AUDIO_FORMAT_DTS_LBR)
     {
         if((mDevices & AudioSystem::DEVICE_OUT_SPDIF) &&
             (mDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) && mSpdifFormat != mHdmiFormat){
