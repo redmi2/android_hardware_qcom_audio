@@ -135,6 +135,8 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     mCurDevice           = 0;
     mOutputMetadataLength = 0;
     mTranscodeDevices     = 0;
+    mFirstBuffer         = true;
+
     if(devices == 0) {
         ALOGE("No output device specified");
         return;
@@ -566,12 +568,41 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
             }
         }
 
+        /* check for sync word, if present then configure MS11 for fileplayback mode OFF
+           This is specifically done to handle Widevine usecase, in which the ADTS HEADER is
+           not stripped off by the Widevine parser */
+        if( mFirstBuffer && (mFormat == AUDIO_FORMAT_AAC || mFormat == AUDIO_FORMAT_HE_AAC_V1 ||
+            mFormat == AUDIO_FORMAT_AAC_ADIF || mFormat == AUDIO_FORMAT_HE_AAC_V2)){
+
+            uint16_t uData = (*((char *)buffer) << 8) + *((char *)buffer + 1) ;
+
+            ALOGD("Check for ADTS SYNC WORD ");
+            if(ADTS_HEADER_SYNC_RESULT == (uData & ADTS_HEADER_SYNC_MASK)){
+                ALOGD("Sync word found hence configure MS11 in file_playback Mode OFF");
+                delete mMS11Decoder;
+                mMS11Decoder = new SoftMS11;
+                if(mMS11Decoder->initializeMS11FunctionPointers() == false) {
+                    ALOGE("Could not resolve all symbols Required for MS11");
+                    delete mMS11Decoder;
+                    return -1;
+                }
+                ALOGD("mChannels %d mSampleRate %d",mChannels,mSampleRate);
+                if(mMS11Decoder->setUseCaseAndOpenStream(FORMAT_DOLBY_PULSE_MAIN,mChannels,
+                    mSampleRate,false)){
+                    ALOGE("SetUseCaseAndOpen MS11 failed");
+                    delete mMS11Decoder;
+                    return -1;
+                }
+            }
+        }
+
         bool    continueDecode=false;
         size_t  bytesConsumedInDecode = 0;
         size_t  copyBytesMS11 = 0;
         char    *bufPtr;
         uint32_t outSampleRate=mSampleRate,outChannels=mChannels;
         mBitstreamSM->copyBitstreamToInternalBuffer((char *)buffer, bytes);
+        mFirstBuffer = false;
 
         do
         {

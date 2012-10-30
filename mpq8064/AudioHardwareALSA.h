@@ -178,6 +178,10 @@ class AudioBitstreamSM;
 /* Rear right of center. */
 #define PCM_CHANNEL_RRC  16
 
+//Required for ADTS Header Parsing
+#define ADTS_HEADER_SYNC_RESULT 0xfff0
+#define ADTS_HEADER_SYNC_MASK 0xfff6
+
 static uint32_t FLUENCE_MODE_ENDFIRE   = 0;
 static uint32_t FLUENCE_MODE_BROADSIDE = 1;
 class ALSADevice;
@@ -579,6 +583,7 @@ private:
     AudioEventObserver *mObserver;
     output_metadata_handle_t mOutputMetadataTunnel;
     uint32_t            mOutputMetadataLength;
+    bool                mFirstBuffer;
 
     status_t            openPcmDevice(int devices);
     status_t            openDevice(char *pUseCase, bool bIsUseCase, int devices);
