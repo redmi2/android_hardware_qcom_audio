@@ -688,12 +688,6 @@ void AudioBroadcastStreamALSA::setRoutingFlagsBasedOnConfig()
     if(mDevices & AudioSystem::DEVICE_OUT_PROXY)
         mCaptureFromProxy = true;
 
-    if( mRoutePCMMChToDSP &&
-        (mDevices & ~(AudioSystem::DEVICE_OUT_SPDIF |
-          AudioSystem::DEVICE_OUT_AUX_DIGITAL))) {
-          mRoutePCMStereoToDSP = true;
-          mRoutePCMMChToDSP = false;
-    }
     setSpdifHdmiRoutingFlags(mDevices);
 
     if((((mSpdifFormat == PCM_FORMAT) ||
