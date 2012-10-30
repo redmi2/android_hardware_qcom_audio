@@ -559,6 +559,7 @@ private:
     char                mSpdifOutputFormat[128];
     char                mHdmiOutputFormat[128];
     uint32_t            mCurDevice;
+    uint32_t            mCurMode;
     int32_t             mSpdifFormat;
     int32_t             mHdmiFormat;
     uint64_t            hw_ptr[2];
@@ -1078,6 +1079,7 @@ protected:
 
 
     uint32_t            mCurDevice;
+    uint32_t            mCurMode;
     /* The flag holds all the audio related device settings from
      * Settings and Qualcomm Settings applications */
     uint32_t            mDevSettingsFlag;

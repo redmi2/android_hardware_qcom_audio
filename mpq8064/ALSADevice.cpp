@@ -383,8 +383,6 @@ void ALSADevice::switchDeviceUseCase(alsa_handle_t *handle,
     char *rxDeviceOld=NULL, *txDeviceOld=NULL;
 
     ALOGV("switchDeviceUseCase devices = %d, mode = %d", devices,mode);
-    if(handle->devices == devices)
-        return;
 
     getDevices(devices, mode, &rxDeviceNew, &txDeviceNew);
     getDevices(handle->devices, handle->mode, &rxDeviceOld, &txDeviceOld);
@@ -1370,6 +1368,8 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input)
                     return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
                 }
             }
+        } else if (devices & AudioSystem::DEVICE_IN_PROXY) {
+            return strdup(SND_USE_CASE_DEV_PROXY_TX); /* PROXY TX */
         } else if ((devices & AudioSystem::DEVICE_IN_COMMUNICATION) ||
                    (devices & AudioSystem::DEVICE_IN_FM_RX) ||
                    (devices & AudioSystem::DEVICE_IN_FM_RX_A2DP) ||
@@ -1774,7 +1774,9 @@ void ALSADevice::getDevices(uint32_t devices, uint32_t mode, char **rxDevice, ch
                       AudioSystem::DEVICE_IN_AUX_DIGITAL);
         } else if (devices & AudioSystem::DEVICE_OUT_PROXY) {
             devices = devices | (AudioSystem::DEVICE_OUT_PROXY |
-                      AudioSystem::DEVICE_IN_BUILTIN_MIC);
+                      AudioSystem::DEVICE_IN_PROXY);
+        } else if (devices & AudioSystem::DEVICE_OUT_ALL_A2DP) {
+            devices = devices | (AudioSystem::DEVICE_IN_PROXY);
         }
     }
 

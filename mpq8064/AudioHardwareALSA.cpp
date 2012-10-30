@@ -596,10 +596,11 @@ status_t AudioHardwareALSA::doRouting(int device)
         // ToDo: to use snd_use_case_set_case API here
         // HANDLING ONLY USE CASE WHICH ARE NOT AT OTHER DOROUTING
         // CONFIRM ?
-        if(device != mCurDevice)
+        if ((device != mCurDevice) || (mCurMode != newMode))
             mALSADevice->route((uint32_t)device, newMode);
     }
     mCurDevice = device;
+    mCurMode = newMode;
     return NO_ERROR;
 }
 
