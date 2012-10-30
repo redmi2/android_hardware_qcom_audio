@@ -634,7 +634,10 @@ private:
 
     //event fd to signal the EOS and Kill from the userspace
     int mEfd;
-
+#ifdef DEBUG
+    FILE *mFpDumpInput;
+    FILE *mFpDumpPCMOutput;
+#endif
 };
 
 // ----------------------------------------------------------------------------
