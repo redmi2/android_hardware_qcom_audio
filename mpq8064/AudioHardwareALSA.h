@@ -284,7 +284,7 @@ public:
                                               enum audio_parser_code_type codec_type);
 
     status_t    setPlaybackVolume(int, char *);
-    status_t    setPlaybackFormat(const char *value, int device);
+    status_t    setPlaybackFormat(const char *value, int device, int dtsTranscode);
     status_t    setCaptureFormat(const char *value);
     status_t    setChannelMap(alsa_handle_t *handle, int maxChannels,
                               char *channelMap);
@@ -298,6 +298,7 @@ public:
     void        setUseCase(alsa_handle_t *handle, bool bIsUseCaseSet, char *device);
     status_t    openCapture(alsa_handle_t *handle, bool isMmapMode,
                             bool isCompressed);
+    status_t    configureTranscode(alsa_handle_t *handle);
 protected:
     friend class AudioHardwareALSA;
 
@@ -537,6 +538,7 @@ private:
     int                 mFormat;
     int                 mDevices;
     int                 mSecDevices;
+    int                 mTranscodeDevices;
     uint32_t            mStreamVol;
     bool                mPowerLock;
     bool                mRoutePcmAudio;
@@ -545,6 +547,7 @@ private:
     bool                mUseDualTunnel;
     bool                mCaptureFromProxy;
     bool                mUseMS11Decoder;
+    bool                mDtsTranscode;
     uint32_t            mSessionId;
     size_t              mMinBytesReqToDecode;
     bool                mAacConfigDataSet;
@@ -568,6 +571,7 @@ private:
     alsa_handle_t *     mPcmRxHandle;
     alsa_handle_t *     mCompreRxHandle;
     alsa_handle_t *     mSecCompreRxHandle;
+    alsa_handle_t *     mTranscodeHandle;
     ALSADevice *        mALSADevice;
     snd_use_case_mgr_t *mUcMgr;
     SoftMS11           *mMS11Decoder;
@@ -709,6 +713,7 @@ private:
     uint32_t            mStreamVol;
     size_t              mBufferSize;
     int                 mCurDevice;
+    int                 mTranscodeDevices;
     // Capture and Routing Flags
     bool                mCapturePCMFromDSP;
     bool                mCaptureCompressedFromDSP;
@@ -723,6 +728,7 @@ private:
     int                 mInputBufferCount;
     int32_t             mMinBytesReqToDecode;
     int hw_ptr;
+    bool                mDtsTranscode;
     compressed_read_metadata_t mReadMetaData;
     // HDMI and SPDIF specifics
     int32_t             mSpdifFormat;
@@ -764,6 +770,8 @@ private:
     alsa_handle_t      *mCompreTxHandle;
     // Common handle to handle the Capture thread
     alsa_handle_t      *mCaptureHandle;
+    //ALSA device handle to route the DTS transcoded stream to selected devices
+    alsa_handle_t *     mTranscodeHandle;
     // Open the MS11 decoder for AAC, AC3 and EC3
     SoftMS11           *mMS11Decoder;
     // Bitstream state machine to handle the buffering on input

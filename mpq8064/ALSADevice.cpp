@@ -123,9 +123,12 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     int hdmiChannels = 8;
     property_get("mpq.audio.spdif.format",spdifFormat,"0");
     property_get("mpq.audio.hdmi.format",hdmiFormat,"0");
-    if (!strncmp(spdifFormat,"dts",sizeof(spdifFormat)) ||
-        !strncmp(hdmiFormat,"dts",sizeof(hdmiFormat)))
+
+    if ((!strncmp(spdifFormat,"dts",sizeof(spdifFormat)) ||
+        !strncmp(hdmiFormat,"dts",sizeof(hdmiFormat))) &&
+        format !=AUDIO_FORMAT_DTS && format !=AUDIO_FORMAT_DTS_LBR)
         dtsTranscode = true;
+
     params = (snd_pcm_hw_params*) calloc(1, sizeof(struct snd_pcm_hw_params));
     if (!params) {
         return NO_INIT;
@@ -187,22 +190,22 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
              property_get("ro.build.modelid",dtsModelId,"0");
              ALOGV("from property modelId=%s,length=%d\n",
                 dtsModelId, strlen(dtsModelId));
-             compr_params.codec.options.dts.modelIdLength = strlen(dtsModelId);
-             compr_params.codec.options.dts.modelId = (__u8 *)dtsModelId;
+             compr_params.codec.dts.modelIdLength = strlen(dtsModelId);
+             compr_params.codec.dts.modelId = (__u8 *)dtsModelId;
              ALOGV("passing to driver modelId=%s,length=%d\n",
-                compr_params.codec.options.dts.modelId,
-                compr_params.codec.options.dts.modelIdLength);
+                compr_params.codec.dts.modelId,
+                compr_params.codec.dts.modelIdLength);
              compr_params.codec.id = compr_cap.codecs[5];
         } else if(format == AUDIO_FORMAT_DTS_LBR && handle->type == COMPRESSED_FORMAT) {
              ALOGV("DTS LBR CODEC");
              property_get("ro.build.modelid", dtsModelId, "0");
              ALOGV("from property modelId=%s,length=%d\n",
                  dtsModelId, strlen(dtsModelId));
-             compr_params.codec.options.dts.modelIdLength = strlen(dtsModelId);
-             compr_params.codec.options.dts.modelId = (__u8 *)dtsModelId;
+             compr_params.codec.dts.modelIdLength = strlen(dtsModelId);
+             compr_params.codec.dts.modelId = (__u8 *)dtsModelId;
              ALOGV("passing to driver modelId=%s,length=%d\n",
-                compr_params.codec.options.dts.modelId,
-                compr_params.codec.options.dts.modelIdLength);
+                compr_params.codec.dts.modelId,
+                compr_params.codec.dts.modelIdLength);
              compr_params.codec.id = compr_cap.codecs[6];
         } else if(format == AUDIO_FORMAT_DTS
                  && handle->type == COMPRESSED_PASSTHROUGH_FORMAT) {
@@ -222,7 +225,17 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
              return BAD_VALUE;
         }
         if (dtsTranscode) {
-//            Handle transcode path here
+             property_get("ro.build.modelid",dtsModelId,"0");
+             ALOGD("from property modelId=%s,length=%d\n",
+                dtsModelId, strlen(dtsModelId));
+             compr_params.codec.dts.modelIdLength = strlen(dtsModelId);
+             compr_params.codec.dts.modelId = (__u8 *)dtsModelId;
+             ALOGD("passing to driver modelId=%s,length=%d\n",
+             compr_params.codec.dts.modelId,
+             compr_params.codec.dts.modelIdLength);
+             compr_params.codec.transcode_dts = 1;
+        } else {
+             compr_params.codec.transcode_dts = 0;
         }
         if (ioctl(handle->handle->fd, SNDRV_COMPRESS_SET_PARAMS, &compr_params)) {
             ALOGE("SNDRV_COMPRESS_SET_PARAMS,failed Error no %d \n", errno);
@@ -585,7 +598,42 @@ status_t ALSADevice::open(alsa_handle_t *handle)
     free(devName);
     return NO_ERROR;
 }
+status_t ALSADevice::configureTranscode(alsa_handle_t *handle) {
+    int flags = PCM_STEREO;
+    char *devName;
+    int err = NO_ERROR;
 
+    if (deviceName(handle, flags, &devName) < 0) {
+        ALOGE("Failed to get pcm device node: %s", devName);
+        return NO_INIT;
+    }
+    ALOGE("s_open: opening ALSA device '%s'", devName);
+    handle->handle = pcm_open(PCM_STEREO,  (char*)devName);
+    struct snd_pcm_hw_params *params;
+    params = (snd_pcm_hw_params*) calloc(1, sizeof(struct snd_pcm_hw_params));
+    if (!params) {
+        return NO_INIT;
+    }
+    param_init(params);
+    param_set_int(params, SNDRV_PCM_HW_PARAM_RATE, handle->sampleRate);
+    param_set_int(params, SNDRV_PCM_HW_PARAM_CHANNELS,
+                          handle->channels);
+    if (handle->devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+        err = setHDMIChannelCount(2);
+        if(err != OK) {
+            ALOGE("setHDMIChannelCount err = %d", err);
+            return err;
+        }
+    }
+    param_set_hw_refine(handle->handle, params);
+
+    if (param_set_hw_params(handle->handle, params)) {
+        ALOGE("cannot set local hw_params");
+        return NO_INIT;
+    }
+    pcm_prepare(handle->handle);
+    return NO_ERROR;
+}
 status_t ALSADevice::startVoipCall(alsa_handle_t *handle)
 {
 
@@ -1624,19 +1672,19 @@ status_t ALSADevice::setPlaybackVolume(int value, char *useCase)
     return err;
 }
 
-status_t ALSADevice::setPlaybackFormat(const char *value, int device)
+status_t ALSADevice::setPlaybackFormat(const char *value, int device, int dtsTranscode)
 {
     status_t err = NO_ERROR;
     if (device == AudioSystem::DEVICE_OUT_SPDIF) {
         err = setMixerControl("SEC RX Format",value);
-	if (!strncmp(value, "Compr", sizeof(value)))
+        if (!dtsTranscode && !strncmp(value, "Compr", sizeof(value)))
             err = setMixerControl("SEC RX Rate", "Variable");
         else
             err = setMixerControl("SEC RX Rate", "Default");
     }
     else if(device == AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
         err = setMixerControl("HDMI RX Format",value);
-        if (!strncmp(value, "Compr", sizeof(value)))
+        if (!dtsTranscode && !strncmp(value, "Compr", sizeof(value)))
             err = setMixerControl("HDMI RX Rate", "Variable");
         else
             err = setMixerControl("HDMI RX Rate", "Default");

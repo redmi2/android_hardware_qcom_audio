@@ -948,7 +948,11 @@ int getUseCaseType(const char *useCase)
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
             MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_TUNNEL2)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_FM,
-            MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_FM))) {
+            MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_FM))||
+        !strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_TUNNEL,
+            MAX_LEN(useCase,SND_USE_CASE_MOD_PSEUDO_TUNNEL))||
+        !strncmp(useCase, SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL))) {
         return CAP_RX;
     } else if (!strncmp(useCase, SND_USE_CASE_VERB_HIFI_REC,
             MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI_REC)) ||
