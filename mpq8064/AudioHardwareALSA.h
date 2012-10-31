@@ -588,6 +588,7 @@ private:
     void                bufferAlloc(alsa_handle_t *handle);
     void                bufferDeAlloc();
     bool                isReadyToPostEOS(int errPoll, void *fd);
+    status_t            resetBufferQueue();
     status_t            drainTunnel();
     status_t            openTunnelDevice(int devices);
     // make sure the event thread also exited
@@ -629,6 +630,7 @@ private:
     Mutex mInputMemResponseMutex;
     Mutex mEventMutex;
     Mutex mFrameCountMutex;
+    Mutex mWriteCvMutex;
     Condition mWriteCv;
     Condition mEventCv;
     bool mKillEventThread;
@@ -806,6 +808,7 @@ private:
     struct              pollfd mPlaybackPfd[NUM_FDS];
     Mutex               mInputMemRequestMutex;
     Mutex               mInputMemResponseMutex;
+    Mutex               mWriteCvMutex;
     Condition           mWriteCv;
     int                 mPlaybackfd;
     bool                mKillPlaybackThread;

@@ -1822,7 +1822,11 @@ int32_t AudioBroadcastStreamALSA::writeToCompressedDriver(char *buffer, int byte
     if (mInputMemEmptyQueue.empty()) {
         ALOGV("Write: waiting on mWriteCv");
         mLock.unlock();
-        mWriteCv.wait(mInputMemRequestMutex);
+        mWriteCvMutex.lock();
+        mInputMemRequestMutex.unlock();
+        mWriteCv.wait(mWriteCvMutex);
+        mInputMemRequestMutex.lock();
+        mWriteCvMutex.unlock();
         mLock.lock();
         if (mSkipWrite) {
             mSkipWrite = false;
