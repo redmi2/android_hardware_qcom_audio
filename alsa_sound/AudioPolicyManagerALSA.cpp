@@ -161,25 +161,26 @@ status_t AudioPolicyManager::setDeviceConnectionState(AudioSystem::audio_devices
             return NO_ERROR;
         }
 
+        audio_devices_t newDevice = AudioPolicyManagerBase::getNewDevice(mPrimaryOutput, false /*fromCache*/);
+        if(device == AudioSystem::DEVICE_OUT_FM) {
+            if (state == AudioSystem::DEVICE_STATE_AVAILABLE) {
+                ALOGV("setDeviceConnectionState() changeRefCount Inc");
+                mOutputs.valueFor(mPrimaryOutput)->changeRefCount(AudioSystem::FM, 1);
+            }
+            else {
+                ALOGV("setDeviceConnectionState() changeRefCount Dec");
+                mOutputs.valueFor(mPrimaryOutput)->changeRefCount(AudioSystem::FM, -1);
+            }
+            if(newDevice == 0){
+                newDevice = getDeviceForStrategy(STRATEGY_MEDIA, false);
+            }
+            AudioParameter param = AudioParameter();
+            param.addInt(String8(AudioParameter::keyHandleFm), (int)newDevice);
+            ALOGV("setDeviceConnectionState() setParameters handle_fm");
+            mpClientInterface->setParameters(mPrimaryOutput, param.toString());
+        }
         for (size_t i = 0; i < mOutputs.size(); i++) {
             audio_devices_t newDevice = getNewDevice(mOutputs.keyAt(i), true /*fromCache*/);
-            if(device == AudioSystem::DEVICE_OUT_FM) {
-                if (state == AudioSystem::DEVICE_STATE_AVAILABLE) {
-                    ALOGV("setDeviceConnectionState() changeRefCount Inc");
-                    mOutputs.valueFor(mPrimaryOutput)->changeRefCount(AudioSystem::FM, 1);
-                }
-                else {
-                    ALOGV("setDeviceConnectionState() changeRefCount Dec");
-                    mOutputs.valueFor(mPrimaryOutput)->changeRefCount(AudioSystem::FM, -1);
-                }
-                if(newDevice == 0){
-                    newDevice = getDeviceForStrategy(STRATEGY_MEDIA, false);
-                }
-                AudioParameter param = AudioParameter();
-                param.addInt(String8(AudioParameter::keyHandleFm), (int)newDevice);
-                ALOGV("setDeviceConnectionState() setParameters handle_fm");
-                mpClientInterface->setParameters(mPrimaryOutput, param.toString());
-            }
             if(device == AudioSystem::DEVICE_OUT_ANC_HEADPHONE ||
                device == AudioSystem::DEVICE_OUT_ANC_HEADSET) {
                 if(newDevice == 0){
