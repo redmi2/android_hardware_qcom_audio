@@ -129,10 +129,10 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     //Creates the event thread to poll events from LPA/Compress Driver
     createEventThread();
 
+    mUseCase = mParent->useCaseStringToEnum(mAlsaHandle->useCase);
     ALOGV("mParent->mRouteAudioToA2dp = %d", mParent->mRouteAudioToA2dp);
     if (mParent->mRouteAudioToA2dp) {
         status_t err = NO_ERROR;
-        mUseCase = mParent->useCaseStringToEnum(mAlsaHandle->useCase);
         err = mParent->startA2dpPlayback_l(mUseCase);
         *status = err;
     }
@@ -826,7 +826,10 @@ status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
             mParent->doRouting(device);
         }
         param.remove(key);
+    } else {
+        mParent->setParameters(keyValuePairs);
     }
+
     return NO_ERROR;
 }
 
