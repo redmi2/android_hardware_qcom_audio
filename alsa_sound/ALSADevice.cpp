@@ -1403,6 +1403,9 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
             } else {
                 return strdup(SND_USE_CASE_DEV_SPEAKER_HEADSET); /* COMBO SPEAKER+HEADSET RX */
             }
+        } else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
+                        ((devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL))) {
+                        return strdup(SND_USE_CASE_DEV_HDMI_SPEAKER);
 #ifdef QCOM_ANC_HEADSET_ENABLED
         } else if ((devices & AudioSystem::DEVICE_OUT_PROXY) &&
                    ((devices & AudioSystem::DEVICE_OUT_ANC_HEADSET)||
