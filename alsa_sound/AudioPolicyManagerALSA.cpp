@@ -88,6 +88,11 @@ status_t AudioPolicyManager::setDeviceConnectionState(AudioSystem::audio_devices
             // register new device as available
             mAvailableOutputDevices = (audio_devices_t)(mAvailableOutputDevices | device);
 
+            if ( AudioSystem::isA2dpDevice(device)) {
+               AudioParameter param;
+               param.add(String8("a2dp_connected"), String8("true"));
+               mpClientInterface->setParameters(0, param.toString());
+            }
             if (!outputs.isEmpty()) {
                 String8 paramStr;
                 if (AudioSystem::isA2dpDevice(device)) {
@@ -128,6 +133,11 @@ status_t AudioPolicyManager::setDeviceConnectionState(AudioSystem::audio_devices
                 // handle A2DP device disconnection
                 mA2dpDeviceAddress = "";
                 mA2dpSuspended = false;
+
+                AudioParameter param;
+                param.add(String8("a2dp_connected"), String8("false"));
+                mpClientInterface->setParameters(0, param.toString());
+
             } else if (AudioSystem::isBluetoothScoDevice(device)) {
                 // handle SCO device disconnection
                 mScoDeviceAddress = "";

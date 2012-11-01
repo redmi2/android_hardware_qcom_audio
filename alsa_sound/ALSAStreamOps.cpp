@@ -190,7 +190,7 @@ status_t ALSAStreamOps::set(int      *format,
 status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
 {
     AudioParameter param = AudioParameter(keyValuePairs);
-    String8 key = String8(AudioParameter::keyRouting);
+    String8 key = String8(AudioParameter::keyRouting),value;
     int device;
     status_t err = NO_ERROR;
     if (param.getInt(key, device) == NO_ERROR) {
@@ -210,21 +210,23 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
             }
         }
         param.remove(key);
-    }
+    } else {
+        key = String8("a2dp_sink_address");
+        if (param.get(key, value) == NO_ERROR) {
+            mParent->setParameters(keyValuePairs);
+        }
 #ifdef QCOM_FM_ENABLED
-    else {
         key = String8(AudioParameter::keyHandleFm);
         if (param.getInt(key, device) == NO_ERROR) {
-        ALOGD("setParameters(): handleFm with device %d", device);
+            ALOGD("setParameters(): handleFm with device %d", device);
             if(device) {
                 mDevices = device;
                 mParent->handleFm(device);
             }
             param.remove(key);
         }
-    }
 #endif
-
+    }
     return err;
 }
 
