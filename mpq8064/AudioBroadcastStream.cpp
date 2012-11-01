@@ -2165,7 +2165,7 @@ void AudioBroadcastStreamALSA::copyBitstreamInternalBuffer(char *buffer,
                                    size_t bytes)
 {
     // copy bitstream to internal buffer
-    mBitstreamSM->copyBitsreamToInternalBuffer((char *)buffer, bytes);
+    mBitstreamSM->copyBitstreamToInternalBuffer((char *)buffer, bytes);
 
     //update input meta data list prior decode
     if(mPcmRxHandle)
