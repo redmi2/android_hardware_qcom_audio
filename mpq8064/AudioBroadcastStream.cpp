@@ -1530,20 +1530,27 @@ ssize_t AudioBroadcastStreamALSA::readFromCapturePath(char *buffer)
         if (mAvail < capture_handle->sw_p->avail_min) {
             err_poll = poll(mCapturePfd, NUM_FDS, TIMEOUT_INFINITE);
 
-            if (mCapturePfd[1].revents & POLLIN)
+            if (mCapturePfd[1].revents & POLLIN) {
                 ALOGV("Event on userspace fd");
+                mCapturePfd[1].revents  = 0;
+            }
 
             if ((mCapturePfd[1].revents & POLLERR) ||
                 (mCapturePfd[1].revents & POLLNVAL) ||
                 (mCapturePfd[0].revents & POLLERR) ||
                 (mCapturePfd[0].revents & POLLNVAL)) {
                 ALOGV("POLLERR or INVALID POLL");
+                mCapturePfd[0].revents = 0;
+                mCapturePfd[1].revents = 0;
+
                 status = BAD_VALUE;
                 break;
             }
 
-            if (mCapturePfd[0].revents & POLLIN)
+            if (mCapturePfd[0].revents & POLLIN) {
                 ALOGV("POLLIN on zero");
+                mCapturePfd[0].revents = 0;
+            }
 
             ALOGV("err_poll = %d",err_poll);
             continue;
@@ -1594,6 +1601,8 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
         allocatePlaybackPollFd();
 
     while(!mKillPlaybackThread && ((err_poll = poll(mPlaybackPfd, NUM_FDS, -1)) >=0)) {
+        ALOGD("pfd[0].revents = %d", mPlaybackPfd[0].revents);
+        ALOGD("pfd[1].revents = %d", mPlaybackPfd[1].revents);
         if (err_poll == EINTR)
             ALOGE("Timer is intrrupted");
 
@@ -1609,20 +1618,24 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
             }
         }
         if ((mPlaybackPfd[1].revents & POLLERR) ||
-            (mPlaybackPfd[1].revents & POLLNVAL))
+            (mPlaybackPfd[1].revents & POLLNVAL)) {
             ALOGE("POLLERR or INVALID POLL");
+            mPlaybackPfd[1].revents = 0;
+        }
 
         struct snd_timer_tread rbuf[4];
         read(local_handle->timer_fd, rbuf, sizeof(struct snd_timer_tread) * 4 );
         if((mPlaybackPfd[0].revents & POLLERR) ||
            (mPlaybackPfd[0].revents & POLLNVAL)) {
             mPlaybackPfd[0].revents = 0;
+            mPlaybackPfd[1].revents = 0;
+            ALOGD("pfd 0 poll err");
             continue;
         }
 
         if (mPlaybackPfd[0].revents & POLLIN && !mKillPlaybackThread) {
             mPlaybackPfd[0].revents = 0;
-
+            mPlaybackPfd[1].revents = 0;
             if (isSessionPaused)
                 continue;
             ALOGV("After an event occurs");
@@ -1660,8 +1673,13 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
                 mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_APPL |
                                         SNDRV_PCM_SYNC_PTR_AVAIL_MIN);
                 sync_ptr(mCompreRxHandle->handle);
-                ALOGE("hw_ptr1 = %lld status.hw_ptr1 = %lld", hw_ptr, mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr);
+                ALOGE("hw_ptr = %d status.hw_ptr = %lld", hw_ptr, mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr);
+
             } while(hw_ptr < mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr);
+        } else {
+            ALOGD("No event");
+            mPlaybackPfd[0].revents = 0;
+            mPlaybackPfd[1].revents = 0;
         }
     }
     mPlaybackThreadAlive = false;
