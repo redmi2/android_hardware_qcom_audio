@@ -146,7 +146,6 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
                 if((mDevices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
                       (mDevices & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)||
                       (mDevices & AudioSystem::DEVICE_OUT_PROXY)) {
-                    mDevices |= AudioSystem::DEVICE_OUT_PROXY;
                     mHandle->module->route(mHandle, mDevices , mParent->mode());
                 }else
 #endif         
@@ -157,7 +156,6 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
             } else if((mDevices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
                       (mDevices & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)||
                       (mDevices & AudioSystem::DEVICE_OUT_PROXY)) {
-                mDevices |= AudioSystem::DEVICE_OUT_PROXY;
                 mHandle->module->route(mHandle, mDevices , mParent->mode());
 #endif
             } else {
