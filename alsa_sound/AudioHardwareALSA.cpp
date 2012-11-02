@@ -620,6 +620,12 @@ status_t AudioHardwareALSA::doRouting(int device)
                     ALOGD("Routing everything to prox now");
                     ALSAHandleList::iterator it = mDeviceList.end();
                     it--;
+                    if (device != mCurDevice) {
+                        if(musbRecordingState)
+                            closeUSBRecording();
+                        if(musbPlaybackState)
+                            closeUSBPlayback();
+                    }
                     mALSADevice->route(&(*it), device, newMode);
                     for(it = mDeviceList.begin(); it != mDeviceList.end(); ++it) {
                          if((!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) ||
