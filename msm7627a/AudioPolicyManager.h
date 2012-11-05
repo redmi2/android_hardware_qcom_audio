@@ -54,6 +54,7 @@ public:
         virtual void setForceUse(AudioSystem::force_use usage, AudioSystem::forced_config config);
 protected:
         fm_modes fmMode;
+        bool pendingForceNone;
 
 #ifdef WITH_A2DP
         // true is current platform supports suplication of notifications and ringtones over A2DP output
