@@ -1084,6 +1084,7 @@ static status_t do_route_audio_rpc(uint32_t device,
         ALOGV("In SND_DEVICE_FM_ANALOG_STEREO_HEADSET_CODEC");
     }
     else if(device == SND_DEVICE_FM_ANALOG_STEREO_HEADSET) {
+        args.device.pathtype = CAD_DEVICE_PATH_LB;
         args.device.rx_device = CAD_HW_DEVICE_ID_LP_FM_HEADSET_SPKR_STEREO_RX;
         args.device.tx_device = CAD_HW_DEVICE_ID_NONE;
         ALOGV("In SND_DEVICE_FM_ANALOG_STEREO_HEADSET");
