@@ -325,7 +325,8 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
         strcmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED) &&
         (6 != handle->channels)) {
         //Do not update buffersize for 5.1 recording
-        if (handle->format == AUDIO_FORMAT_AMR_WB) {
+        if (handle->format == AUDIO_FORMAT_AMR_WB &&
+            format != SNDRV_PCM_FORMAT_SPECIAL) {
             ALOGV("### format AMWB, set bufsize to 61");
             handle->bufferSize = 61;
         } else {
