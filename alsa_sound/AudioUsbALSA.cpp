@@ -124,7 +124,11 @@ status_t AudioUsbALSA::getCap(char * type, int &channels, int &sampleRate)
 
     fileSize = st.st_size;
 
-    read_buf = (char *)malloc(BUFFSIZE);
+    if ((read_buf = (char *)malloc(BUFFSIZE)) == NULL) {
+        ALOGE("ERROR: Unable to allocate memory to hold stream caps");
+        close(fd);
+        return NO_MEMORY;
+    }
     memset(read_buf, 0x0, BUFFSIZE);
     err = read(fd, read_buf, BUFFSIZE);
     str_start = strstr(read_buf, type);
@@ -182,8 +186,19 @@ status_t AudioUsbALSA::getCap(char * type, int &channels, int &sampleRate)
         return UNKNOWN_ERROR;
     }
     size = target - ratesStrStart;
-    ratesStr = (char *)malloc(size + 1) ;
-    ratesStrForVal = (char *)malloc(size + 1) ;
+    if ((ratesStr = (char *)malloc(size + 1)) == NULL) {
+        ALOGE("ERROR: Unable to allocate memory to hold sample rate strings");
+        close(fd);
+        free(read_buf);
+        return NO_MEMORY;
+    }
+    if ((ratesStrForVal = (char *)malloc(size + 1)) == NULL) {
+        ALOGE("ERROR: Unable to allocate memory to hold sample rate string");
+        close(fd);
+        free(ratesStr);
+        free(read_buf);
+        return NO_MEMORY;
+    }
     memcpy(ratesStr, ratesStrStart, size);
     memcpy(ratesStrForVal, ratesStrStart, size);
     ratesStr[size] = '\0';
@@ -339,6 +354,7 @@ status_t AudioUsbALSA::setHardwareParams(pcm *txHandle, uint32_t sampleRate, uin
 
     if (param_set_hw_params(txHandle, params)) {
         ALOGE("ERROR: cannot set hw params");
+        free(params);
         return NO_INIT;
     }
 
@@ -352,6 +368,7 @@ status_t AudioUsbALSA::setHardwareParams(pcm *txHandle, uint32_t sampleRate, uin
          txHandle->buffer_size, txHandle->period_size,
          txHandle->period_cnt);
 
+    free(params);
     return NO_ERROR;
 }
 
@@ -387,9 +404,10 @@ status_t AudioUsbALSA::setSoftwareParams(pcm *pcm, bool playback)
 
     if (param_set_sw_params(pcm, params)) {
         ALOGE("ERROR: cannot set sw params");
+        free(params);
         return NO_INIT;
     }
-
+    free(params);
     return NO_ERROR;
 }
 
@@ -415,7 +433,6 @@ void AudioUsbALSA::RecordingThreadEntry() {
     long frames;
     static int start = 0;
     struct snd_xferi x;
-    int filed;
     unsigned avail, bufsize;
     int bytes_written;
     uint32_t sampleRate;
@@ -423,8 +440,6 @@ void AudioUsbALSA::RecordingThreadEntry() {
     u_int8_t *srcUsb_addr = NULL;
     u_int8_t *dstProxy_addr = NULL;
     int err;
-    const char *fn = "/data/RecordPcm.pcm";
-    filed = open(fn, O_WRONLY | O_CREAT | O_TRUNC | O_APPEND, 0664);
     pfdProxyRecording[0].fd = -1;
     pfdUsbRecording[0].fd = -1 ;
 
@@ -842,8 +857,6 @@ void AudioUsbALSA::PlaybackThreadEntry() {
     unsigned int tmp;
     int numOfBytesWritten;
     int err;
-    int filed;
-    const char *fn = "/data/test.pcm";
     mdstUsb_addr = NULL;
     msrcProxy_addr = NULL;
 
@@ -916,9 +929,17 @@ void AudioUsbALSA::PlaybackThreadEntry() {
 
     u_int8_t *proxybuf = ( u_int8_t *) malloc(PROXY_PERIOD_SIZE);
     u_int8_t *usbbuf = ( u_int8_t *) malloc(USB_PERIOD_SIZE);
-    memset(proxybuf, 0x0, PROXY_PERIOD_SIZE);
-    memset(usbbuf, 0x0, USB_PERIOD_SIZE);
 
+    if (proxybuf == NULL || usbbuf == NULL) {
+        ALOGE("ERROR: Unable to allocate USB audio buffer(s): proxybuf=%p, usbbuf=%p",
+              proxybuf, usbbuf);
+        /* Don't run the playback loop if we failed to allocate either of these buffers.
+           If either pointer is non-NULL they'll be freed after the end of the loop. */
+        mkillPlayBackThread = true;
+    } else {
+        memset(proxybuf, 0x0, PROXY_PERIOD_SIZE);
+        memset(usbbuf, 0x0, USB_PERIOD_SIZE);
+    }
 
     /***********************keep reading from proxy and writing to USB******************************************/
     while (mkillPlayBackThread != true) {
