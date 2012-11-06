@@ -104,6 +104,7 @@ AudioHardwareALSA::AudioHardwareALSA() :
     mDevSettingsFlag |= TTY_OFF;
     mBluetoothVGS = false;
     mFusion3Platform = false;
+    mIsVoicePathActive = false;
 
 #ifdef QCOM_ACDB_ENABLED
     if ((acdb_loader_init_ACDB()) < 0) {
@@ -562,6 +563,18 @@ String8 AudioHardwareALSA::getParameters(const String8& keys)
     }
 #endif
 
+    key = String8(VOICE_PATH_ACTIVE);
+    if (param.get(key, value) == NO_ERROR) {
+        if (mIsVoicePathActive) {
+            value = String8("true");
+        } else {
+            value = String8("false");
+        }
+        param.add(key, value);
+
+        ALOGV("AudioHardwareALSA::getParameters() mIsVoicePathActive %d",
+              mIsVoicePathActive);
+    }
 
     key = String8("tunneled-input-formats");
     if ( param.get(key,value) == NO_ERROR ) {
@@ -1709,6 +1722,8 @@ void AudioHardwareALSA::disableVoiceCall(char* verb, char* modifier, int mode, i
             break;
         }
     }
+    mIsVoicePathActive = false;
+
 #ifdef QCOM_USBAUDIO_ENABLED
    if(musbPlaybackState & USBPLAYBACKBIT_VOICECALL) {
           ALOGE("Voice call ended on USB");
@@ -1756,6 +1771,8 @@ char *use_case;
         snd_use_case_set(mUcMgr, "_enamod", modifier);
     }
     mALSADevice->startVoiceCall(&(*it));
+    mIsVoicePathActive = true;
+
 #ifdef QCOM_USBAUDIO_ENABLED
     if((device & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
        (device & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)){
