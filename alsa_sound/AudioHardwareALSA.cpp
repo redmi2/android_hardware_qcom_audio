@@ -657,7 +657,7 @@ status_t AudioHardwareALSA::doRouting(int device)
                                     break;
                          }
                     }
-        } else 
+        } else
 #endif
         if (device & AudioSystem::DEVICE_OUT_ALL_A2DP &&
             mRouteAudioToA2dp == true )  {
@@ -716,8 +716,9 @@ status_t AudioHardwareALSA::doRouting(int device)
                 mALSADevice->route(&(*it),(uint32_t)mCurDevice, newMode);
                 return err;
             }
-        } else if(!(device & AudioSystem::DEVICE_OUT_ALL_A2DP) &&
-            mRouteAudioToA2dp == true ) {
+        } else if(device & AudioSystem::DEVICE_OUT_ALL &&
+                  !(device & AudioSystem::DEVICE_OUT_ALL_A2DP) &&
+                  mRouteAudioToA2dp == true ) {
             ALOGV(" A2DP Disable on hardware output");
             ALSAHandleList::iterator it = mDeviceList.end();
             it--;
@@ -1196,7 +1197,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
               ALOGD("Starting recording in openoutputstream, musbRecordingState: %d", musbRecordingState);
               startUsbRecordingIfNotStarted();
               musbRecordingState |= USBRECBIT_VOIPCALL;
-           }else 
+           } else
 #endif
            {
                mALSADevice->route(&(*it),mCurDevice, AudioSystem::MODE_IN_COMMUNICATION);
