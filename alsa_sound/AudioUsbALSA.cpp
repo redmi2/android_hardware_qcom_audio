@@ -1101,7 +1101,7 @@ void AudioUsbALSA::PlaybackThreadEntry() {
             }
 
             bytes_written = musbPlaybackHandle->sync_ptr->c.control.appl_ptr - musbPlaybackHandle->sync_ptr->s.status.hw_ptr;
-            ALOGE("Appl ptr %d , hw_ptr %d, difference %d",musbPlaybackHandle->sync_ptr->c.control.appl_ptr, musbPlaybackHandle->sync_ptr->s.status.hw_ptr, bytes_written);
+            ALOGE("Appl ptr %lu , hw_ptr %lu, difference %d",musbPlaybackHandle->sync_ptr->c.control.appl_ptr, musbPlaybackHandle->sync_ptr->s.status.hw_ptr, bytes_written);
 
             /*
                 Following is the check to prevent USB from going to bad state.

@@ -176,14 +176,14 @@ status_t AudioSessionOutALSA::setVolume(float left, float right)
     if(mAlsaHandle) {
         if(!strcmp(mAlsaHandle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER) ||
            !strcmp(mAlsaHandle->useCase, SND_USE_CASE_MOD_PLAY_LPA)) {
-            ALOGD("setLpaVolume(%f)\n", mStreamVol);
+            ALOGD("setLpaVolume(%u)\n", mStreamVol);
             ALOGD("Setting LPA volume to %d (available range is 0 to 100)\n", mStreamVol);
             mAlsaHandle->module->setLpaVolume(mStreamVol);
             return status;
         }
         else if(!strcmp(mAlsaHandle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL) ||
                 !strcmp(mAlsaHandle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL)) {
-            ALOGD("setCompressedVolume(%f)\n", mStreamVol);
+            ALOGD("setCompressedVolume(%u)\n", mStreamVol);
             ALOGD("Setting Compressed volume to %d (available range is 0 to 100)\n", mStreamVol);
             mAlsaHandle->module->setCompressedVolume(mStreamVol);
             return status;
@@ -833,10 +833,10 @@ status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
     if (param.getInt(key, device) == NO_ERROR) {
         // Ignore routing if device is 0.
         if(device) {
-            ALOGV("setParameters(): keyRouting with device %d", device);
+            ALOGV("setParameters(): keyRouting with device %#x", device);
             if(device & AudioSystem::DEVICE_OUT_ALL_A2DP) {
                 mParent->mRouteAudioToA2dp = true;
-                ALOGD("setParameters(): A2DP device %d", device);
+                ALOGD("setParameters(): A2DP device %#x", device);
             }
             mParent->doRouting(device);
         }
