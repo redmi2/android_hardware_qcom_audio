@@ -401,7 +401,7 @@ void ALSADevice::switchDeviceUseCase(alsa_handle_t *handle,
     char *rxDeviceNew=NULL, *txDeviceNew=NULL;
     char *rxDeviceOld=NULL, *txDeviceOld=NULL;
 
-    ALOGV("switchDeviceUseCase devices = %d, mode = %d", devices,mode);
+    ALOGV("switchDeviceUseCase usecase %s devices = %d, mode = %d", handle->useCase, devices,mode);
 
     getDevices(devices, mode, &rxDeviceNew, &txDeviceNew);
     getDevices(handle->devices, handle->mode, &rxDeviceOld, &txDeviceOld);
@@ -417,10 +417,10 @@ void ALSADevice::switchDeviceUseCase(alsa_handle_t *handle,
         if ( ((strcmp(rxDeviceNew, rxDeviceOld)) || (inCallDevSwitch == true))) {
             if ((use_case != NULL) && (strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
                     strlen(SND_USE_CASE_VERB_INACTIVE)))) {
-                usecase_type = getUseCaseType(use_case);
+                usecase_type = getUseCaseType(handle->useCase);
                 if (usecase_type & USECASE_TYPE_RX) {
                     strlcpy(useCase, handle->useCase, MAX_STR_LEN);
-                    ALOGD("Deroute use case %s type is %d\n", use_case, usecase_type);
+                    ALOGD("Deroute use case %s type is %d\n", handle->useCase, usecase_type);
                     if(!strcmp(use_case,handle->useCase)) {
                         snd_use_case_set_case(handle->ucMgr, "_verb", SND_USE_CASE_VERB_INACTIVE,rxDeviceOld);
                     } else {
@@ -434,10 +434,10 @@ void ALSADevice::switchDeviceUseCase(alsa_handle_t *handle,
         if ( ((strcmp(txDeviceNew, txDeviceOld)) || (inCallDevSwitch == true))) {
             if ((use_case != NULL) && (strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
                     strlen(SND_USE_CASE_VERB_INACTIVE)))) {
-                usecase_type = getUseCaseType(use_case);
-                if ((usecase_type & USECASE_TYPE_TX) && (!(usecase_type & USECASE_TYPE_RX))) {
+                usecase_type = getUseCaseType(handle->useCase);
+                if ((usecase_type & USECASE_TYPE_TX)) {
                     strlcpy(useCase, handle->useCase, MAX_STR_LEN);
-                    ALOGD("Deroute use case %s type is %d\n", use_case, usecase_type);
+                    ALOGD("Deroute use case %s type is %d\n", handle->useCase, usecase_type);
                     if(!strcmp(use_case,handle->useCase)) {
                         snd_use_case_set_case(handle->ucMgr, "_verb", SND_USE_CASE_VERB_INACTIVE,txDeviceOld);
                     } else {
@@ -451,24 +451,30 @@ void ALSADevice::switchDeviceUseCase(alsa_handle_t *handle,
     disableDevice(handle);
 
     if (rxDeviceNew != NULL) {
-        if ((use_case != NULL) && (strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
-            strlen(SND_USE_CASE_VERB_INACTIVE))) && (!strncmp(use_case, useCase, MAX_UC_LEN))) {
-            snd_use_case_set_case(handle->ucMgr, "_verb", useCase,rxDeviceNew);
-        } else {
-            snd_use_case_set_case(handle->ucMgr, "_enamod", useCase, rxDeviceNew);
+        usecase_type = getUseCaseType(handle->useCase);
+        if (usecase_type & USECASE_TYPE_RX) {
+            if ((use_case != NULL) && (strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
+                strlen(SND_USE_CASE_VERB_INACTIVE))) && (!strncmp(use_case, useCase, MAX_UC_LEN))) {
+                snd_use_case_set_case(handle->ucMgr, "_verb", handle->useCase,rxDeviceNew);
+            } else {
+                snd_use_case_set_case(handle->ucMgr, "_enamod", handle->useCase, rxDeviceNew);
+            }
+            handle->activeDevice = devices;
+            handle->devices = devices;
         }
-        handle->activeDevice = devices;
-        handle->devices = devices;
     }
     if (txDeviceNew != NULL) {
-        if ((use_case != NULL) && (strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
-            strlen(SND_USE_CASE_VERB_INACTIVE))) && (!strncmp(use_case, useCase, MAX_UC_LEN))) {
-            snd_use_case_set_case(handle->ucMgr, "_verb", useCase,txDeviceNew);
-        } else {
-            snd_use_case_set_case(handle->ucMgr, "_enamod", useCase, txDeviceNew);
+        usecase_type = getUseCaseType(handle->useCase);
+        if ((usecase_type & USECASE_TYPE_TX)) {
+            if ((use_case != NULL) && (strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
+                 strlen(SND_USE_CASE_VERB_INACTIVE))) && (!strncmp(use_case, handle->useCase, MAX_UC_LEN))) {
+                 snd_use_case_set_case(handle->ucMgr, "_verb", handle->useCase,txDeviceNew);
+            } else {
+                snd_use_case_set_case(handle->ucMgr, "_enamod", handle->useCase, txDeviceNew);
+            }
+            handle->activeDevice = devices;
+            handle->devices = devices;
         }
-        handle->activeDevice = devices;
-        handle->devices = devices;
     }
     ALOGE("After enable device");
     if(rxDeviceNew != NULL) {
@@ -1184,9 +1190,9 @@ void ALSADevice::disableDevice(alsa_handle_t *handle)
         if(it->useCase != NULL) {
             if(strcmp(it->useCase,handle->useCase)) {
                 if((&(*it)) != handle && handle->activeDevice && it->activeDevice && (it->activeDevice & handle->activeDevice)) {
-                    ALOGD("disableRxDevice - false ");
-                    disableRxDevice = false;
-                    disableTxDevice = false;
+                   ALOGD("disableRxDevice - false ");
+                   disableRxDevice = false;
+                   disableTxDevice = false;
                 }
             }
         }
@@ -1947,6 +1953,7 @@ int ALSADevice::setUseCase(alsa_handle_t *handle, bool bIsUseCaseSet)
     char *rxDevice = NULL, *txDevice = NULL;
     char altUseCase[MAX_STR_LEN] = "";
     int ret = 0;
+    unsigned usecase_type = 0;
 
     // check for Conflicts if usecase is already set
     if (!bIsUseCaseSet) {
@@ -1962,20 +1969,26 @@ int ALSADevice::setUseCase(alsa_handle_t *handle, bool bIsUseCaseSet)
     getDevices(handle->devices, handle->mode, &rxDevice, &txDevice);
 
     if(rxDevice != NULL) {
-        if(bIsUseCaseSet)
-            snd_use_case_set_case(handle->ucMgr, "_verb", handle->useCase, rxDevice);
-        else
-            snd_use_case_set_case(handle->ucMgr, "_enamod", handle->useCase, rxDevice);
+        usecase_type = getUseCaseType(handle->useCase);
+        if (usecase_type & USECASE_TYPE_RX) {
+            if(bIsUseCaseSet)
+                snd_use_case_set_case(handle->ucMgr, "_verb", handle->useCase, rxDevice);
+            else
+                snd_use_case_set_case(handle->ucMgr, "_enamod", handle->useCase, rxDevice);
+        }
         if(rxDevice) {
             free(rxDevice);
             rxDevice = NULL;
         }
     }
     if(txDevice != NULL) {
-        if(bIsUseCaseSet)
-            snd_use_case_set_case(handle->ucMgr, "_verb", handle->useCase, txDevice);
-        else
-            snd_use_case_set_case(handle->ucMgr, "_enamod", handle->useCase, txDevice);
+        usecase_type = getUseCaseType(handle->useCase);
+        if (usecase_type & USECASE_TYPE_TX) {
+            if(bIsUseCaseSet)
+                snd_use_case_set_case(handle->ucMgr, "_verb", handle->useCase, txDevice);
+            else
+                snd_use_case_set_case(handle->ucMgr, "_enamod", handle->useCase, txDevice);
+        }
         if(txDevice) {
            free(txDevice);
            txDevice = NULL;
