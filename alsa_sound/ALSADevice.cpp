@@ -367,7 +367,7 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
     char *rxDevice, *txDevice, ident[70], *use_case = NULL;
     int err = 0, index, mods_size;
     int rx_dev_id, tx_dev_id;
-    ALOGV("%s: device %d", __FUNCTION__, devices);
+    ALOGV("%s: device %#x", __FUNCTION__, devices);
 
     if ((mode == AudioSystem::MODE_IN_CALL)  || (mode == AudioSystem::MODE_IN_COMMUNICATION)) {
         if ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||

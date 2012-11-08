@@ -196,10 +196,10 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
     if (param.getInt(key, device) == NO_ERROR) {
         // Ignore routing if device is 0.
         if(device) {
-            ALOGD("setParameters(): keyRouting with device %d", device);
+            ALOGD("setParameters(): keyRouting with device %#x", device);
             if(device & AudioSystem::DEVICE_OUT_ALL_A2DP) {
                 mParent->mRouteAudioToA2dp = true;
-                ALOGD("setParameters(): A2DP device %d", device);
+                ALOGD("setParameters(): A2DP device %#x", device);
             }
             err = mParent->doRouting(device);
             if(err) {
