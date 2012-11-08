@@ -1848,11 +1848,15 @@ void AudioSessionOutALSA::setSpdifHdmiRoutingFlags(int devices)
             mHdmiFormat = PCM_FORMAT;
     }
     if(!strncmp(mSpdifOutputFormat,"ac3",sizeof(mSpdifOutputFormat))) {
-        if(mDevices & AudioSystem::DEVICE_OUT_SPDIF)
+        if(mDevices & AudioSystem::DEVICE_OUT_SPDIF) {
             if(mSampleRate > 24000 && mUseMS11Decoder)
                 mSpdifFormat = COMPRESSED_FORMAT;
             else
                 mSpdifFormat = PCM_FORMAT;
+        // 44.1, 22.05 and 11.025K are not supported on Spdif for Passthrough
+            if (mSampleRate == 44100)
+                mSpdifFormat = COMPRESSED_FORCED_PCM_FORMAT;
+        }
     }
     if(!strncmp(mHdmiOutputFormat,"ac3",sizeof(mHdmiOutputFormat))) {
         if(mDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
@@ -1862,7 +1866,7 @@ void AudioSessionOutALSA::setSpdifHdmiRoutingFlags(int devices)
                 mHdmiFormat = PCM_FORMAT;
     }
     if(!strncmp(mSpdifOutputFormat,"dts",sizeof(mSpdifOutputFormat))) {
-        if(mDevices & AudioSystem::DEVICE_OUT_SPDIF)
+        if(mDevices & AudioSystem::DEVICE_OUT_SPDIF) {
             if(mFormat != AUDIO_FORMAT_PCM_16_BIT && mUseTunnelDecoder == true) {
                 mSpdifFormat = COMPRESSED_FORMAT;
                 if(mFormat != AUDIO_FORMAT_DTS) {
@@ -1872,6 +1876,11 @@ void AudioSessionOutALSA::setSpdifHdmiRoutingFlags(int devices)
             }
             else
                 mSpdifFormat = COMPRESSED_FORCED_PCM_FORMAT;
+        // 44.1, 22.05 and 11.025K are not supported on Spdif for Passthrough
+            if (mSampleRate == 44100 || mSampleRate == 22050 ||
+                mSampleRate == 11025)
+                mSpdifFormat = COMPRESSED_FORCED_PCM_FORMAT;
+        }
     }
     if(!strncmp(mHdmiOutputFormat,"dts",sizeof(mHdmiOutputFormat))) {
         if(mDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
