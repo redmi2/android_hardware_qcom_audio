@@ -633,7 +633,7 @@ status_t AudioHardwareALSA::doRouting(int device)
     ALOGV("device = 0x%x,mCurDevice 0x%x", device, mCurDevice);
     if (device == 0)
         device = mCurDevice;
-    ALOGV("doRouting: device %d newMode %d mCSCallActive %d mVolteCallActive %d"
+    ALOGV("doRouting: device %#x newMode %d mCSCallActive %d mVolteCallActive %d"
           "mSGLTECallActive %d mIsFmActive %d", device, newMode, mCSCallActive,
           mVolteCallActive, mSGLTECallActive, mIsFmActive);
     isRouted = routeVoLTECall(device, newMode);
