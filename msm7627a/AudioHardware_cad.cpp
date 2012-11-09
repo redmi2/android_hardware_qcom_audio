@@ -2881,6 +2881,7 @@ status_t AudioHardware::AudioSessionOutLPA::openAudioSessionDevice( )
     } else {
         //initCheck = true;
         ALOGV("pcm_lp_dec: pcm_lp_dec Driver opened");
+        lpa_playback_in_progress = true;
     }
 
     start();
@@ -3321,6 +3322,7 @@ void AudioHardware::AudioSessionOutLPA::reset()
     //Close the LPA driver
     ioctl(afd,AUDIO_STOP,0);
     ::close(afd);
+    lpa_playback_in_progress = false;
     ALOGD("AudioSessionOutLPA::reset() complete");
 }
 
