@@ -501,18 +501,12 @@ status_t AudioSessionOutALSA::start()
         if (mSeeking) {
             drain();
             mSeeking = false;
-        } else if (ioctl(mAlsaHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE,0) < 0) {
-            ALOGE("Resume failed on use case %s", mAlsaHandle->useCase);
-            return UNKNOWN_ERROR;
-        }
-        mPaused = false;
-        if (mParent->mRouteAudioToA2dp) {
-            err = mParent->startA2dpPlayback_l(mUseCase);
-            if(err != NO_ERROR) {
-                ALOGE("start Proxy from start returned error = %d",err);
-                return err;
+        } else {
+            if (resume_l() == UNKNOWN_ERROR) {
+                return UNKNOWN_ERROR;
             }
         }
+        mPaused = false;
     }
     else {
         //Signal the driver to start rendering data
@@ -530,8 +524,7 @@ status_t AudioSessionOutALSA::pause()
     status_t err = NO_ERROR;
     ALOGD("Pausing the driver");
     //Signal the driver to pause rendering data
-    if (ioctl(mAlsaHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE,1) < 0) {
-        ALOGE("PAUSE failed on use case %s", mAlsaHandle->useCase);
+    if (pause_l() == UNKNOWN_ERROR) {
         return UNKNOWN_ERROR;
     }
     mPaused = true;
@@ -539,13 +532,6 @@ status_t AudioSessionOutALSA::pause()
     if(err) {
         ALOGE("pause returned error");
         return err;
-    }
-    if (mParent->mRouteAudioToA2dp) {
-        err = mParent->suspendA2dpPlayback(mUseCase);
-        if(err != NO_ERROR) {
-            ALOGE("Suspend Proxy from Pause returned error = %d",err);
-            return err;
-        }
     }
     return err;
 
@@ -565,7 +551,7 @@ status_t AudioSessionOutALSA::pause_l()
 status_t AudioSessionOutALSA::resume_l()
 {
     status_t err = NO_ERROR;
-    if (!mPaused) {
+    if (mPaused) {
         if (ioctl(mAlsaHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE,0) < 0) {
             ALOGE("Resume failed on use case %s", mAlsaHandle->useCase);
             return UNKNOWN_ERROR;
@@ -680,6 +666,7 @@ status_t AudioSessionOutALSA::standby()
              ALOGE("stopA2dpPlayback return err  %d", err);
          }
     }
+    mPaused = false;
     return err;
 }
 

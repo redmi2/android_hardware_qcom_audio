@@ -658,9 +658,6 @@ status_t AudioHardwareALSA::doRouting(int device)
         if (device & AudioSystem::DEVICE_OUT_ALL_A2DP &&
             mRouteAudioToA2dp == true )  {
             ALOGV(" A2DP Enabled - Routing everything to proxy now");
-            if (device != mCurDevice) {
-                pauseIfUseCaseTunnelOrLPA();
-            }
             ALSAHandleList::iterator it = mDeviceList.end();
             it--;
             status_t err = NO_ERROR;
@@ -703,9 +700,6 @@ status_t AudioHardwareALSA::doRouting(int device)
                         stopA2dpPlayback_l(activeUsecase);
                     }
                 }
-            }
-            if (device != mCurDevice) {
-                resumeIfUseCaseTunnelOrLPA();
             }
             if(err) {
                 mRouteAudioToA2dp = false;
