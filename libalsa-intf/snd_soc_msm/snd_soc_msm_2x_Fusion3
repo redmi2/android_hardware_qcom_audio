@@ -734,7 +734,7 @@ SectionVerb
 	EndSequence
 
 	DisableSequence
-		'Internal BTSCO SampleRate':0:8000
+		'Internal BTSCO SampleRate':1:8000
 		'Voice Stub Tx Mixer INTERNAL_BT_SCO_TX':1:0
 		'SLIMBUS_1_RX Mixer Voice Stub':1:0
 		'Voice Stub Tx Mixer SLIM_1_TX':1:0
@@ -755,7 +755,7 @@ SectionVerb
 	Name "Voice CallBT SCO Tx"
 
 	EnableSequence
-		'Internal BTSCO SampleRate':0:8000
+		'Internal BTSCO SampleRate':1:8000
 		'Voice Stub Tx Mixer INTERNAL_BT_SCO_TX':1:1
 		'SLIMBUS_1_RX Mixer Voice Stub':1:1
 		'Voice Stub Tx Mixer SLIM_1_TX':1:1
@@ -783,7 +783,7 @@ SectionVerb
 	EndSequence
 
 	DisableSequence
-		'Internal BTSCO SampleRate':0:8000
+		'Internal BTSCO SampleRate':1:8000
 		'Voice Stub Tx Mixer INTERNAL_BT_SCO_TX':1:0
 		'SLIMBUS_1_RX Mixer Voice Stub':1:0
 		'Voice Stub Tx Mixer SLIM_1_TX':1:0
@@ -804,7 +804,7 @@ SectionVerb
 	Name "Voice CallBT SCO WB Tx"
 
 	EnableSequence
-		'Internal BTSCO SampleRate':0:16000
+		'Internal BTSCO SampleRate':1:16000
 		'Voice Stub Tx Mixer INTERNAL_BT_SCO_TX':1:1
 		'SLIMBUS_1_RX Mixer Voice Stub':1:1
 		'Voice Stub Tx Mixer SLIM_1_TX':1:1
@@ -917,7 +917,7 @@ SectionVerb
 	EndSequence
 
 	DisableSequence
-		'Internal BTSCO SampleRate':0:8000
+		'Internal BTSCO SampleRate':1:8000
 		'INTERNAL_BT_SCO_RX_Voice Mixer Voip':1:0
 		'Voip_Tx Mixer INTERNAL_BT_SCO_TX_Voip':1:0
 	EndSequence
@@ -932,7 +932,7 @@ SectionVerb
 	Name "Voice Call IPBT SCO Tx"
 
 	EnableSequence
-		'Internal BTSCO SampleRate':0:8000
+		'Internal BTSCO SampleRate':1:8000
 		'INTERNAL_BT_SCO_RX_Voice Mixer Voip':1:1
 		'Voip_Tx Mixer INTERNAL_BT_SCO_TX_Voip':1:1
 	EndSequence
@@ -953,7 +953,7 @@ SectionVerb
 	EndSequence
 
 	DisableSequence
-		'Internal BTSCO SampleRate':0:8000
+		'Internal BTSCO SampleRate':1:8000
 		'INTERNAL_BT_SCO_RX_Voice Mixer Voip':1:0
 		'Voip_Tx Mixer INTERNAL_BT_SCO_TX_Voip':1:0
 	EndSequence
@@ -968,7 +968,7 @@ SectionVerb
 	Name "Voice Call IPBT SCO WB Tx"
 
 	EnableSequence
-		'Internal BTSCO SampleRate':0:16000
+		'Internal BTSCO SampleRate':1:16000
 		'INTERNAL_BT_SCO_RX_Voice Mixer Voip':1:1
 		'Voip_Tx Mixer INTERNAL_BT_SCO_TX_Voip':1:1
 	EndSequence
@@ -3961,7 +3961,7 @@ SectionModifier
 	EndSequence
 
 	DisableSequence
-		'Internal BTSCO SampleRate':0:8000
+		'Internal BTSCO SampleRate':1:8000
 		'Voice Stub Tx Mixer INTERNAL_BT_SCO_TX':1:0
 		'SLIMBUS_1_RX Mixer Voice Stub':1:0
 		'Voice Stub Tx Mixer SLIM_1_TX':1:0
@@ -3982,7 +3982,7 @@ SectionModifier
 	Name "Play VoiceBT SCO Tx"
 
 	EnableSequence
-		'Internal BTSCO SampleRate':0:8000
+		'Internal BTSCO SampleRate':1:8000
 		'Voice Stub Tx Mixer INTERNAL_BT_SCO_TX':1:1
 		'SLIMBUS_1_RX Mixer Voice Stub':1:1
 		'Voice Stub Tx Mixer SLIM_1_TX':1:1
@@ -4010,7 +4010,7 @@ SectionModifier
 	EndSequence
 
 	DisableSequence
-		'Internal BTSCO SampleRate':0:8000
+		'Internal BTSCO SampleRate':1:8000
 		'Voice Stub Tx Mixer INTERNAL_BT_SCO_TX':1:0
 		'SLIMBUS_1_RX Mixer Voice Stub':1:0
 		'Voice Stub Tx Mixer SLIM_1_TX':1:0
@@ -4031,7 +4031,7 @@ SectionModifier
 	Name "Play VoiceBT SCO WB Tx"
 
 	EnableSequence
-		'Internal BTSCO SampleRate':0:16000
+		'Internal BTSCO SampleRate':1:16000
 		'Voice Stub Tx Mixer INTERNAL_BT_SCO_TX':1:1
 		'SLIMBUS_1_RX Mixer Voice Stub':1:1
 		'Voice Stub Tx Mixer SLIM_1_TX':1:1
@@ -4158,7 +4158,7 @@ SectionModifier
 	EndSequence
 
 	DisableSequence
-		'Internal BTSCO SampleRate':0:8000
+		'Internal BTSCO SampleRate':1:8000
 		'INTERNAL_BT_SCO_RX_Voice Mixer Voip':1:0
 		'Voip_Tx Mixer INTERNAL_BT_SCO_TX_Voip':1:0
 	EndSequence
@@ -4173,7 +4173,7 @@ SectionModifier
 	Name "Play VOIPBT SCO Tx"
 
 	EnableSequence
-		'Internal BTSCO SampleRate':0:8000
+		'Internal BTSCO SampleRate':1:8000
 		'INTERNAL_BT_SCO_RX_Voice Mixer Voip':1:1
 		'Voip_Tx Mixer INTERNAL_BT_SCO_TX_Voip':1:1
 	EndSequence
@@ -4194,7 +4194,7 @@ SectionModifier
 	EndSequence
 
 	DisableSequence
-		'Internal BTSCO SampleRate':0:8000
+		'Internal BTSCO SampleRate':1:8000
 		'INTERNAL_BT_SCO_RX_Voice Mixer Voip':1:0
 		'Voip_Tx Mixer INTERNAL_BT_SCO_TX_Voip':1:0
 	EndSequence
@@ -4209,7 +4209,7 @@ SectionModifier
 	Name "Play VOIPBT SCO WB Tx"
 
 	EnableSequence
-		'Internal BTSCO SampleRate':0:16000
+		'Internal BTSCO SampleRate':1:16000
 		'INTERNAL_BT_SCO_RX_Voice Mixer Voip':1:1
 		'Voip_Tx Mixer INTERNAL_BT_SCO_TX_Voip':1:1
 	EndSequence
