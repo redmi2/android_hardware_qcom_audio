@@ -2040,7 +2040,6 @@ ssize_t  ALSADevice::readFromProxy(void **captureBuffer , ssize_t *bufferSize) {
     struct pcm * capture_handle = (struct pcm *)mProxyParams.mProxyPcmHandle;
 
     while(!mProxyParams.mExitRead) {
-        ALOGV("Calling sync_ptr(proxy");
         err = sync_ptr(capture_handle);
         if(err == EPIPE) {
                ALOGE("Failed in sync_ptr \n");
@@ -2055,12 +2054,11 @@ ssize_t  ALSADevice::readFromProxy(void **captureBuffer , ssize_t *bufferSize) {
         }
 
         mProxyParams.mAvail = pcm_avail(capture_handle);
-        ALOGV("avail is = %d frames = %ld, avai_min = %d\n",\
-                      mProxyParams.mAvail,  mProxyParams.mFrames,(int)capture_handle->sw_p->avail_min);
         if (mProxyParams.mAvail < capture_handle->sw_p->avail_min) {
             err_poll = poll(mProxyParams.mPfdProxy, NUM_FDS, TIMEOUT_INFINITE);
             if (mProxyParams.mPfdProxy[1].revents & POLLIN) {
                 ALOGV("Event on userspace fd");
+                mProxyParams.mPfdProxy[1].revents = 0;
             }
             if ((mProxyParams.mPfdProxy[1].revents & POLLERR) ||
                     (mProxyParams.mPfdProxy[1].revents & POLLNVAL)) {
@@ -2076,8 +2074,8 @@ ssize_t  ALSADevice::readFromProxy(void **captureBuffer , ssize_t *bufferSize) {
             }
             if (mProxyParams.mPfdProxy[0].revents & POLLIN) {
                 ALOGV("POLLIN on zero");
+                mProxyParams.mPfdProxy[0].revents = 0;
             }
-            ALOGV("err_poll = %d",err_poll);
             continue;
         }
         break;
@@ -2123,9 +2121,11 @@ void ALSADevice::initProxyParams() {
         int channels = mProxyParams.mProxyPcmHandle->channels;
         mProxyParams.mPfdProxy[0].fd = mProxyParams.mProxyPcmHandle->fd;
         mProxyParams.mPfdProxy[0].events = (POLLIN | POLLERR | POLLNVAL);
+        mProxyParams.mPfdProxy[0].revents = 0;
         ALOGV("Allocated A2DP poll fd");
         mProxyParams.mPfdProxy[1].fd = eventfd(0,0);
         mProxyParams.mPfdProxy[1].events = (POLLIN | POLLERR | POLLNVAL);
+        mProxyParams.mPfdProxy[1].revents = 0;
         mProxyParams.mFrames =
             (mProxyParams.mProxyPcmHandle->period_size / (2*channels));
         mProxyParams.mX.frames =

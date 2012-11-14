@@ -54,6 +54,8 @@ namespace android_audio_legacy
 {
 // ----------------------------------------------------------------------------
 
+static int sessionCount = 0;
+
 AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
                                          uint32_t   devices,
                                          int        format,
@@ -274,6 +276,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
         *status = err;
     }
     mCurDevice = devices;
+    sessionCount++;
 }
 
 AudioSessionOutALSA::~AudioSessionOutALSA()
@@ -283,9 +286,9 @@ AudioSessionOutALSA::~AudioSessionOutALSA()
     mSkipWrite = true;
     mWriteCv.signal();
 
-    if (mRouteAudioToA2dp) {
+    if (mRouteAudioToA2dp && sessionCount == 1) {
         ALOGD("destructor - stopA2dpPlayback - A2DPDirectOutput");
-        status_t err = mParent->stopA2dpPlayback(AudioHardwareALSA::A2DPDirectOutput);
+        status_t err = mParent->stopA2dpPlayback_l(AudioHardwareALSA::A2DPDirectOutput);
         if(err) {
             ALOGE("destructor - stopA2dpPlayback-A2DPDirectOutput return err = %d", err);
         }
@@ -294,6 +297,7 @@ AudioSessionOutALSA::~AudioSessionOutALSA()
 
     //TODO: This might need to be Locked using Parent lock
     reset();
+    sessionCount--;
 }
 
 status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
@@ -1117,10 +1121,10 @@ status_t AudioSessionOutALSA::start()
     
     if(mPaused) {
         if (mRouteAudioToA2dp) {
-            ALOGD("startA2dpPlayback - resume - A2DPDirectOutput");
-            err = mParent->startA2dpPlayback(AudioHardwareALSA::A2DPDirectOutput);
+            ALOGD("startA2dpPlayback_l - resume - A2DPDirectOutput");
+            err = mParent->startA2dpPlayback_l(AudioHardwareALSA::A2DPDirectOutput);
             if(err) {
-                ALOGE("startA2dpPlayback from resume return error = %d", err);
+                ALOGE("startA2dpPlayback_l from resume return error = %d", err);
                 return err;
             }
         }
@@ -1161,7 +1165,7 @@ status_t AudioSessionOutALSA::pause()
         fclose(mFpDumpInput);
     }
 #endif
-    if (mRouteAudioToA2dp) {
+    if (mRouteAudioToA2dp && sessionCount == 1) {
         ALOGD("Pause - suspendA2dpPlayback - A2DPDirectOutput");
         err = mParent->suspendA2dpPlayback(AudioHardwareALSA::A2DPDirectOutput);
         if(err != NO_ERROR) {
@@ -1398,18 +1402,18 @@ status_t AudioSessionOutALSA::stop()
     mSkipWrite = true;
     mWriteCv.signal();
 
-    if (mRouteAudioToA2dp) {
-        ALOGD("stop - stopA2dpPlayback - A2DPDirectOutput");
-        status_t err = mParent->stopA2dpPlayback(AudioHardwareALSA::A2DPDirectOutput);
+    //TODO: This might need to be Locked using Parent lock
+    reset();
+
+    if (mRouteAudioToA2dp && sessionCount == 1) {
+        ALOGD("stop - suspendA2dpPlayback - A2DPDirectOutput");
+        status_t err = mParent->suspendA2dpPlayback(AudioHardwareALSA::A2DPDirectOutput);
         if(err) {
-            ALOGE("stop-stopA2dpPlayback-A2DPDirectOutput return err = %d", err);
+            ALOGE("stop-suspendA2dpPlayback-A2DPDirectOutput return err = %d", err);
             return err;
         }
         mRouteAudioToA2dp = false;
     }
-
-    //TODO: This might need to be Locked using Parent lock
-    reset();
 
     return NO_ERROR;
 }
@@ -1424,10 +1428,10 @@ status_t AudioSessionOutALSA::standby()
     Mutex::Autolock autoLock(mLock);
     ALOGD("standby");
     if (mRouteAudioToA2dp) {
-         ALOGD("standby - stopA2dpPlayback - A2DPDirectOutput");
-         status_t err = mParent->stopA2dpPlayback(AudioHardwareALSA::A2DPDirectOutput);
+         ALOGD("standby - suspendA2dpPlayback - A2DPDirectOutput");
+         status_t err = mParent->suspendA2dpPlayback(AudioHardwareALSA::A2DPDirectOutput);
          if(err) {
-             ALOGE("standby-stopA2dpPlayback-A2DPDirectOutput return er = %d", err);
+             ALOGE("standby-suspendA2dpPlayback-A2DPDirectOutput return er = %d", err);
          }
     }
 
