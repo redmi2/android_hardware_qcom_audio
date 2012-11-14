@@ -38,7 +38,7 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.*/
 int pil_fd;
 #define NUM_FD 1
 int bootup_complete = 0;
-char adsp_pil_state_file[] = "/sys/bus/pil/devices/pil0/state";
+char adsp_pil_state_file[] = "/sys/bus/msm_subsys/devices/subsys0/state";
 
 namespace android {
 
@@ -67,7 +67,8 @@ namespace android {
 
         if (pil_fd < 0) {
             ALOGE("SSR: File open failed for %s. errno=%d\n", errno, adsp_pil_state_file);
-    }
+            return errno;
+        }
 
         ALOGD("readyToRun: success");
 
@@ -89,13 +90,13 @@ namespace android {
 
         if (pil_fd < 0) {
             ALOGE("SSR: open pil0-adsp_state failed. errno=%d\n",errno);
+            return false;
         }
 
         pfd[0].fd = pil_fd;
         pfd[0].events = POLLPRI;
 
-
-       while (1) {
+        while (1) {
            ALOGD("poll() for ADSP pil state change ");
            if (poll(pfd, 1, -1) < 0) {
               ALOGE("poll() failed (%s)", strerror(errno));
