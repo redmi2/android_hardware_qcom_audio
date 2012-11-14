@@ -1137,22 +1137,14 @@ size_t AudioHardwareALSA::getInputBufferSize(uint32_t sampleRate, int format, in
 }
 
 status_t AudioHardwareALSA::startA2dpPlayback(uint32_t activeUsecase) {
-    uint32_t currUsecases = getA2DPActiveUseCases_l();
-    if (activeUsecase != currUsecases) {
-        stopA2dpPlayback(currUsecases);
-        ALOGE("restarting A2dp prevusecase %u, addedusecase %u", currUsecases, activeUsecase);
-        currUsecases |= activeUsecase;
-    }
-
     Mutex::Autolock autoLock(mLock);
-    status_t err = startA2dpPlayback_l(currUsecases);
+    status_t err = startA2dpPlayback_l(activeUsecase);
     if(err) {
         ALOGE("startA2dpPlayback_l  = %d", err);
     }
     return err;
 }
 status_t AudioHardwareALSA::startA2dpPlayback_l(uint32_t activeUsecase) {
-
     ALOGV("startA2dpPlayback_l");
     status_t err = NO_ERROR;
     if(!getA2DPActiveUseCases_l() && !mIsA2DPEnabled) {
@@ -1313,7 +1305,10 @@ status_t AudioHardwareALSA::stopA2dpThread()
     if(err) {
         ALOGE("exitReadFromProxy failed = %d", err);
     }
-    mA2dpCv.signal();
+    while (mA2dpThreadAlive) {
+        mA2dpCv.signal();
+        usleep(500);
+    }
     int ret = pthread_join(mA2dpThread,NULL);
     ALOGD("a2dp thread killed = %d", ret);
     return err;

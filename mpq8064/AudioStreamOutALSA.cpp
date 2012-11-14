@@ -56,8 +56,8 @@ AudioStreamOutALSA::AudioStreamOutALSA(AudioHardwareALSA *parent, alsa_handle_t 
 AudioStreamOutALSA::~AudioStreamOutALSA()
 {
     if (mParent->mRouteAudioToA2dp) {
-         status_t err = mParent->stopA2dpPlayback(AudioHardwareALSA::A2DPHardwareOutput);
-         ALOGW("stopA2dpPlayback return err  %d", err);
+         status_t err = mParent->stopA2dpPlayback_l(AudioHardwareALSA::A2DPHardwareOutput);
+         ALOGW("stopA2dpPlayback_l return err  %d", err);
          mParent->mRouteAudioToA2dp = false;
     }
     close();
@@ -240,7 +240,7 @@ status_t AudioStreamOutALSA::close()
          ALOGD("close-stopA2dpPlayback_l-A2DPHardwareOutput");
          status_t err = mParent->stopA2dpPlayback_l(AudioHardwareALSA::A2DPHardwareOutput);
          if(err) {
-             ALOGE("stopA2dpPlayback from hardware output close return err = %d", err);
+             ALOGE("stopA2dpPlayback_l from hardware output close return err = %d", err);
              return err;
          }
     }
