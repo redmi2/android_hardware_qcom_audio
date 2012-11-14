@@ -1421,7 +1421,18 @@ static int set_controls_of_device_for_usecase(snd_use_case_mgr_t *uc_mgr,
         strlcat(use_case, device, sizeof(use_case));
         if ((uc_index = get_use_case_index(uc_mgr, use_case,
             get_usecase_type(uc_mgr, usecase))) < 0) {
-            ALOGV("No valid use case found: %s", use_case);
+            ALOGV("No valid use case found: %s,\
+                   set %d for use case value: %s",use_case, enable, usecase);
+            if ((uc_index =
+                get_use_case_index(uc_mgr, usecase, get_usecase_type(uc_mgr, usecase))) < 0) {
+                    ALOGE("No valid use case found: %s", usecase);
+            } else {
+                ret = snd_use_case_apply_mixer_controls(uc_mgr, usecase, enable,
+                          get_usecase_type(uc_mgr, usecase), uc_index);
+                if (ret != 0)
+                    ALOGE("No valid controls exists for usecase %s and device %s, \
+                         enable: %d", usecase, device, enable);
+            }
         } else {
             if (enable) {
                 if (!snd_ucm_get_status_at_index(
