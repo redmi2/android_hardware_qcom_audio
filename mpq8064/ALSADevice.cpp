@@ -1832,7 +1832,7 @@ void ALSADevice::getDevices(uint32_t devices, uint32_t mode, char **rxDevice, ch
                       AudioSystem::DEVICE_IN_BUILTIN_MIC);
         } else if (devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
             devices = devices | (AudioSystem::DEVICE_OUT_AUX_DIGITAL |
-                      AudioSystem::DEVICE_IN_AUX_DIGITAL);
+                      AudioSystem::DEVICE_IN_WIRED_HEADSET);
         } else if (devices & AudioSystem::DEVICE_OUT_PROXY) {
             devices = devices | (AudioSystem::DEVICE_OUT_PROXY |
                       AudioSystem::DEVICE_IN_PROXY);
