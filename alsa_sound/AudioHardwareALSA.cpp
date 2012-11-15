@@ -81,7 +81,7 @@ AudioHardwareInterface *AudioHardwareALSA::create() {
 
 AudioHardwareALSA::AudioHardwareALSA() :
     mALSADevice(0),mVoipStreamCount(0),mVoipMicMute(false),mVoipBitRate(0)
-    ,mCallState(0)
+    ,mCallState(0),mVoiceSessionId(-1)
 {
     FILE *fp;
     char soundCardInfo[200];
@@ -262,16 +262,17 @@ status_t AudioHardwareALSA::setVoiceVolume(float v)
     // So adjust the volume to get the correct volume index in driver
     vol = 100 - vol;
 
+    ALOGD("setVoiceVolume: mVoiceSessionId:%d", mVoiceSessionId);
     if (mALSADevice) {
         if(newMode == AudioSystem::MODE_IN_COMMUNICATION) {
             mALSADevice->setVoipVolume(vol);
         } else if (newMode == AudioSystem::MODE_IN_CALL){
                if (mCSCallActive == CS_ACTIVE)
-                   mALSADevice->setVoiceVolume(vol);
+                   mALSADevice->setVoiceVolume(vol, mVoiceSessionId);
                else if (mSGLTECallActive == CS_ACTIVE_SESSION2)
-                   mALSADevice->setSGLTEVolume(vol);
+                   mALSADevice->setSGLTEVolume(vol, mVoiceSessionId);
                if (mVolteCallActive == IMS_ACTIVE)
-                   mALSADevice->setVoLTEVolume(vol);
+                   mALSADevice->setVoLTEVolume(vol, mVoiceSessionId);
         }
     }
 
@@ -356,17 +357,17 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         }
         doRouting(0);
     }
-
+    ALOGD("setParameters: mVoiceSessionId:%d", mVoiceSessionId);
 #ifdef QCOM_CSDCLIENT_ENABLED
     if (mFusion3Platform) {
         key = String8(INCALLMUSIC_KEY);
         if (param.get(key, value) == NO_ERROR) {
             if (value == "true") {
                 ALOGV("Enabling Incall Music setting in the setparameter\n");
-                csd_client_start_playback();
+                csd_client_start_playback(mVoiceSessionId);
             } else {
                 ALOGV("Disabling Incall Music setting in the setparameter\n");
-                csd_client_stop_playback();
+                csd_client_stop_playback(mVoiceSessionId);
             }
         }
     }
@@ -416,7 +417,22 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
             flag = true;
         }
         if(mALSADevice) {
-            mALSADevice->enableWideVoice(flag);
+           char buf[30];
+           switch(mVoiceSessionId) {
+           default:
+             strlcpy(buf, ALL_SESSION_NAME, sizeof(ALL_SESSION_NAME));
+             break;
+           case 0:
+             strlcpy(buf, VOICE_SESSION_NAME, sizeof(VOICE_SESSION_NAME));
+             break;
+           case 2:
+             strlcpy(buf, VOLTE_SESSION_NAME, sizeof(VOLTE_SESSION_NAME));
+             break;
+           case 1:
+             strlcpy(buf, VOICE2_SESSION_NAME, sizeof(VOICE2_SESSION_NAME));
+             break;
+           }
+           mALSADevice->enableWideVoice(flag, buf);
         }
         param.remove(key);
     }
@@ -434,7 +450,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
             flag = true;
         }
         if(mALSADevice) {
-            mALSADevice->enableFENS(flag);
+            mALSADevice->enableFENS(flag, mVoiceSessionId);
         }
         param.remove(key);
     }
@@ -457,7 +473,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
             flag = true;
         }
         if(mALSADevice) {
-            mALSADevice->enableSlowTalk(flag);
+            mALSADevice->enableSlowTalk(flag, mVoiceSessionId);
         }
         param.remove(key);
     }
@@ -1525,11 +1541,11 @@ status_t AudioHardwareALSA::setMicMute(bool state)
               ALOGD("setMicMute: mMicMute %d", mMicMute);
               if(mALSADevice) {
                  if(mCSCallActive == CS_ACTIVE)
-                    mALSADevice->setMicMute(state);
+                    mALSADevice->setMicMute(state,mVoiceSessionId);
                  else if(mSGLTECallActive == CS_ACTIVE_SESSION2)
-                    mALSADevice->setSGLTEMicMute(state);
+                    mALSADevice->setSGLTEMicMute(state, mVoiceSessionId);
                  if(mVolteCallActive == IMS_ACTIVE)
-                    mALSADevice->setVoLTEMicMute(state);
+                    mALSADevice->setVoLTEMicMute(state,mVoiceSessionId);
               }
         }
     }
@@ -1672,7 +1688,8 @@ void AudioHardwareALSA::handleFm(int device)
 }
 #endif
 
-void AudioHardwareALSA::disableVoiceCall(char* verb, char* modifier, int mode, int device)
+void AudioHardwareALSA::disableVoiceCall(char* verb, char* modifier, int mode, int device,
+ int sessionid)
 {
     for(ALSAHandleList::iterator it = mDeviceList.begin();
          it != mDeviceList.end(); ++it) {
@@ -1695,7 +1712,8 @@ void AudioHardwareALSA::disableVoiceCall(char* verb, char* modifier, int mode, i
    }
 #endif
 }
-void AudioHardwareALSA::enableVoiceCall(char* verb, char* modifier, int mode, int device)
+void AudioHardwareALSA::enableVoiceCall(char* verb, char* modifier, int mode, int device,
+                                                               int sessionid)
 {
 // Start voice call
 unsigned long bufferSize = DEFAULT_BUFFER_SIZE;
@@ -1720,11 +1738,13 @@ char *use_case;
     alsa_handle.sampleRate = VOICE_SAMPLING_RATE;
     alsa_handle.latency = VOICE_LATENCY;
     alsa_handle.rxHandle = 0;
+    alsa_handle.sessionid = sessionid;
     alsa_handle.ucMgr = mUcMgr;
     mDeviceList.push_back(alsa_handle);
     ALSAHandleList::iterator it = mDeviceList.end();
     it--;
     setInChannels(device);
+    ALOGE("AudioHardware: enable Voice call sessionid:%d", sessionid);
     mALSADevice->route(&(*it), (uint32_t)device, mode);
     if (!strcmp(it->useCase, verb)) {
         snd_use_case_set(mUcMgr, "_verb", verb);
@@ -1750,22 +1770,28 @@ int csCallState = mCallState&0xF;
  switch (csCallState) {
     case CS_INACTIVE:
         if (mCSCallActive != CS_INACTIVE) {
-            ALOGD("doRouting: Disabling voice call");
+            mVoiceSessionId = csd_client_get_sessionid(VOICE_SESSION_NAME);
+            ALOGV("doRouting: Disabling voice call,mVoiceSessionId:%d",
+                                                          mVoiceSessionId);
             disableVoiceCall((char *)SND_USE_CASE_VERB_VOICECALL,
-                (char *)SND_USE_CASE_MOD_PLAY_VOICE, newMode, device);
+                (char *)SND_USE_CASE_MOD_PLAY_VOICE, newMode, device,
+                                                       mVoiceSessionId);
             isRouted = true;
             mCSCallActive = CS_INACTIVE;
         }
     break;
     case CS_ACTIVE:
         if (mCSCallActive == CS_INACTIVE) {
-            ALOGD("doRouting: Enabling CS voice call ");
+            mVoiceSessionId = csd_client_get_sessionid(VOICE_SESSION_NAME);
+            ALOGV("doRouting: Enabling CS voice call mVoiceSessionId:%d ",
+                                                          mVoiceSessionId);
             enableVoiceCall((char *)SND_USE_CASE_VERB_VOICECALL,
-                (char *)SND_USE_CASE_MOD_PLAY_VOICE, newMode, device);
+                (char *)SND_USE_CASE_MOD_PLAY_VOICE, newMode, device,
+                                                       mVoiceSessionId);
             isRouted = true;
             mCSCallActive = CS_ACTIVE;
         } else if (mCSCallActive == CS_HOLD) {
-             ALOGD("doRouting: Resume voice call from hold state");
+             ALOGV("doRouting: Resume voice call from hold state");
              ALSAHandleList::iterator vt_it;
              for(vt_it = mDeviceList.begin();
                  vt_it != mDeviceList.end(); ++vt_it) {
@@ -1775,6 +1801,8 @@ int csCallState = mCallState&0xF;
                      strlen(SND_USE_CASE_MOD_PLAY_VOICE)))) {
                      alsa_handle_t *handle = (alsa_handle_t *)(&(*vt_it));
                      mCSCallActive = CS_ACTIVE;
+                     mVoiceSessionId = csd_client_get_sessionid(VOICE_SESSION_NAME);
+                     mALSADevice->resumeVoiceCall(handle, mVoiceSessionId);
                      if(ioctl((int)handle->handle->fd,SNDRV_PCM_IOCTL_PAUSE,0)<0)
                                    ALOGE("VoLTE resume failed");
                      break;
@@ -1784,7 +1812,7 @@ int csCallState = mCallState&0xF;
     break;
     case CS_HOLD:
         if (mCSCallActive == CS_ACTIVE) {
-            ALOGD("doRouting: Voice call going to Hold");
+            ALOGV("doRouting: Voice call going to Hold");
              ALSAHandleList::iterator vt_it;
              for(vt_it = mDeviceList.begin();
                  vt_it != mDeviceList.end(); ++vt_it) {
@@ -1794,6 +1822,8 @@ int csCallState = mCallState&0xF;
                          strlen(SND_USE_CASE_MOD_PLAY_VOICE)))) {
                          mCSCallActive = CS_HOLD;
                          alsa_handle_t *handle = (alsa_handle_t *)(&(*vt_it));
+                         mVoiceSessionId = csd_client_get_sessionid(VOICE_SESSION_NAME);
+                         mALSADevice->standbyVoiceCall(handle, mVoiceSessionId);
                          if(ioctl((int)handle->handle->fd,SNDRV_PCM_IOCTL_PAUSE,1)<0)
                                    ALOGE("Voice pause failed");
                          break;
@@ -1812,18 +1842,24 @@ int SGLTECallState = mCallState&0xF00;
  switch (SGLTECallState) {
     case CS_INACTIVE_SESSION2:
         if (mSGLTECallActive != CS_INACTIVE_SESSION2) {
-            ALOGV("doRouting: Disabling voice call session2");
+            mVoiceSessionId = csd_client_get_sessionid(VOICE2_SESSION_NAME);
+            ALOGV("doRouting: Disabling voice call session2 mVoiceSessionId:%d",
+                                                               mVoiceSessionId);
             disableVoiceCall((char *)SND_USE_CASE_VERB_SGLTECALL,
-                (char *)SND_USE_CASE_MOD_PLAY_SGLTE, newMode, device);
+                (char *)SND_USE_CASE_MOD_PLAY_SGLTE, newMode, device,
+                                                              mVoiceSessionId);
             isRouted = true;
             mSGLTECallActive = CS_INACTIVE_SESSION2;
         }
     break;
     case CS_ACTIVE_SESSION2:
         if (mSGLTECallActive == CS_INACTIVE_SESSION2) {
-            ALOGV("doRouting: Enabling CS voice call session2 ");
+            mVoiceSessionId = csd_client_get_sessionid(VOICE2_SESSION_NAME);
+            ALOGV("doRouting: Enabling CS voice call session2 mVoiceSessionId:%d",
+                                                                 mVoiceSessionId);
             enableVoiceCall((char *)SND_USE_CASE_VERB_SGLTECALL,
-                (char *)SND_USE_CASE_MOD_PLAY_SGLTE, newMode, device);
+                (char *)SND_USE_CASE_MOD_PLAY_SGLTE, newMode, device,
+                                                              mVoiceSessionId);
             isRouted = true;
             mSGLTECallActive = CS_ACTIVE_SESSION2;
         } else if (mSGLTECallActive == CS_HOLD_SESSION2) {
@@ -1837,6 +1873,8 @@ int SGLTECallState = mCallState&0xF00;
                      strlen(SND_USE_CASE_MOD_PLAY_SGLTE)))) {
                      alsa_handle_t *handle = (alsa_handle_t *)(&(*vt_it));
                      mSGLTECallActive = CS_ACTIVE_SESSION2;
+                     mVoiceSessionId = csd_client_get_sessionid(VOICE2_SESSION_NAME);
+                     mALSADevice->resumeVoiceCall(handle, mVoiceSessionId);
                      if(ioctl((int)handle->handle->fd,SNDRV_PCM_IOCTL_PAUSE,0)<0)
                          ALOGE("SGLTE resume failed");
                      break;
@@ -1856,6 +1894,8 @@ int SGLTECallState = mCallState&0xF00;
                          strlen(SND_USE_CASE_MOD_PLAY_SGLTE)))) {
                          mSGLTECallActive = CS_HOLD_SESSION2;
                          alsa_handle_t *handle = (alsa_handle_t *)(&(*vt_it));
+                         mVoiceSessionId = csd_client_get_sessionid(VOICE2_SESSION_NAME);
+                         mALSADevice->standbyVoiceCall(handle, mVoiceSessionId);
                          if(ioctl((int)handle->handle->fd,SNDRV_PCM_IOCTL_PAUSE,1)<0)
                              ALOGE("Voice session2 pause failed");
                          break;
@@ -1875,18 +1915,24 @@ bool isRouted = false;
 switch (volteCallState) {
     case IMS_INACTIVE:
         if (mVolteCallActive != IMS_INACTIVE) {
-            ALOGD("doRouting: Disabling IMS call");
+            mVoiceSessionId = csd_client_get_sessionid(VOLTE_SESSION_NAME);
+            ALOGV("doRouting: Disabling IMS call mVoiceSessionId:%d",
+                                                          mVoiceSessionId);
             disableVoiceCall((char *)SND_USE_CASE_VERB_VOLTE,
-                (char *)SND_USE_CASE_MOD_PLAY_VOLTE, newMode, device);
+                (char *)SND_USE_CASE_MOD_PLAY_VOLTE, newMode, device,
+                                                            mVoiceSessionId);
             isRouted = true;
             mVolteCallActive = IMS_INACTIVE;
         }
     break;
     case IMS_ACTIVE:
         if (mVolteCallActive == IMS_INACTIVE) {
-            ALOGD("doRouting: Enabling IMS voice call ");
+            ALOGV("doRouting: Enabling IMS voice call, mVoiceSessionId:%d ",
+                                                           mVoiceSessionId);
+            mVoiceSessionId = csd_client_get_sessionid(VOLTE_SESSION_NAME);
             enableVoiceCall((char *)SND_USE_CASE_VERB_VOLTE,
-                (char *)SND_USE_CASE_MOD_PLAY_VOLTE, newMode, device);
+                (char *)SND_USE_CASE_MOD_PLAY_VOLTE, newMode, device,
+                                                            mVoiceSessionId);
             isRouted = true;
             mVolteCallActive = IMS_ACTIVE;
         } else if (mVolteCallActive == IMS_HOLD) {
@@ -1900,6 +1946,8 @@ switch (volteCallState) {
                      strlen(SND_USE_CASE_MOD_PLAY_VOLTE)))) {
                      alsa_handle_t *handle = (alsa_handle_t *)(&(*vt_it));
                      mVolteCallActive = IMS_ACTIVE;
+                     mVoiceSessionId = csd_client_get_sessionid(VOLTE_SESSION_NAME);
+                     mALSADevice->resumeVoiceCall(handle, mVoiceSessionId);
                      if(ioctl((int)handle->handle->fd,SNDRV_PCM_IOCTL_PAUSE,0)<0)
                                    ALOGE("VoLTE resume failed");
                      break;
@@ -1919,6 +1967,8 @@ switch (volteCallState) {
                          strlen(SND_USE_CASE_MOD_PLAY_VOLTE)))) {
                           mVolteCallActive = IMS_HOLD;
                          alsa_handle_t *handle = (alsa_handle_t *)(&(*vt_it));
+                         mVoiceSessionId = csd_client_get_sessionid(VOLTE_SESSION_NAME);
+                         mALSADevice->standbyVoiceCall(handle, mVoiceSessionId);
                          if(ioctl((int)handle->handle->fd,SNDRV_PCM_IOCTL_PAUSE,1)<0)
                                    ALOGE("VoLTE Pause failed");
                     break;
