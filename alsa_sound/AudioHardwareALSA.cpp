@@ -126,8 +126,14 @@ AudioHardwareALSA::AudioHardwareALSA() :
             } else if (strstr(soundCardInfo, "msm8930-sitar-snd-card")) {
                 codec_rev = 3;
                 break;
-            } else if (strstr(soundCardInfo, "msm8974-taiko-snd-card")) {
-                codec_rev = 4;
+            } else if (strstr(soundCardInfo, "msm8974-taiko-mtp-snd-card")) {
+                codec_rev = 40;
+                break;
+            } else if (strstr(soundCardInfo, "msm8974-taiko-cdp-snd-card")) {
+                codec_rev = 41;
+                break;
+            } else if (strstr(soundCardInfo, "msm8974-taiko-fluid-snd-card")) {
+                codec_rev = 42;
                 break;
             }
         }
@@ -152,9 +158,15 @@ AudioHardwareALSA::AudioHardwareALSA() :
     } else if (codec_rev == 3) {
         ALOGV("Detected sitar 1.x sound card");
         snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm_Sitar");
-    } else if (codec_rev == 4) {
+    } else if (codec_rev == 40) {
         ALOGV("Detected taiko sound card");
         snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm_Taiko");
+    } else if (codec_rev == 41) {
+        ALOGV("Detected taiko sound card");
+        snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm_Taiko_CDP");
+    } else if (codec_rev == 42) {
+        ALOGV("Detected taiko sound card");
+        snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm_Taiko_Fluid");
     } else {
         property_get("ro.board.platform", platform, "");
         property_get("ro.baseband", baseband, "");
