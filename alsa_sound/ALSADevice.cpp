@@ -435,6 +435,18 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
     if ((rxDevice != NULL) && (txDevice != NULL)) {
         if (((strncmp(rxDevice, mCurRxUCMDevice, MAX_STR_LEN)) ||
              (strncmp(txDevice, mCurTxUCMDevice, MAX_STR_LEN))) &&
+             (!strncmp(handle->useCase, SND_USE_CASE_VERB_VOICECALL,
+                  MAX_LEN(handle->useCase, SND_USE_CASE_VERB_VOICECALL)) ||
+             !strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOICE,
+                  MAX_LEN(handle->useCase, SND_USE_CASE_MOD_PLAY_VOICE)) ||
+             !strncmp(handle->useCase, SND_USE_CASE_VERB_SGLTECALL,
+                  MAX_LEN(handle->useCase, SND_USE_CASE_VERB_SGLTECALL)) ||
+             !strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_SGLTE,
+                  MAX_LEN(handle->useCase, SND_USE_CASE_MOD_PLAY_SGLTE)) ||
+             !strncmp(handle->useCase, SND_USE_CASE_VERB_VOLTE,
+                  MAX_LEN(handle->useCase, SND_USE_CASE_VERB_VOLTE)) ||
+             !strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOLTE,
+                  MAX_LEN(handle->useCase, SND_USE_CASE_MOD_PLAY_VOLTE))) &&
              ((mode == AudioSystem::MODE_IN_CALL) ||
              (mode == AudioSystem::MODE_IN_COMMUNICATION)))
             inCallDevSwitch = true;
@@ -563,7 +575,6 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
          }
     }
     if (platform_is_Fusion3() && (inCallDevSwitch == true)) {
-
         /* get tx acdb id */
         memset(&ident,0,sizeof(ident));
         strlcpy(ident, "ACDBID/", sizeof(ident));
