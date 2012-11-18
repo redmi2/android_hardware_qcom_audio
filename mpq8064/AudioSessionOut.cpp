@@ -864,7 +864,7 @@ int32_t AudioSessionOutALSA::writeToCompressedDriver(char *buffer, int bytes)
                     local_handle = (struct pcm *)mSecCompreRxHandle->handle;
                     n = pcm_write(local_handle, buf.memBuf, local_handle->period_size);
         }
-        if (bytes && bytes < (local_handle->period_size - mOutputMetadataLength )) {
+        if (bytes < (local_handle->period_size - mOutputMetadataLength )) {
             //TODO : Is this code reqd - start seems to fail?
             if (ioctl(local_handle->fd, SNDRV_PCM_IOCTL_START) < 0)
                 ALOGE("AUDIO Start failed");
@@ -1061,10 +1061,15 @@ void  AudioSessionOutALSA::eventThreadEntry() {
             } while(hw_ptr[1] < mSecCompreRxHandle->handle->sync_ptr->s.status.hw_ptr);
             freeBuffer=false;
 
+            Mutex::Autolock autoLock(mLock);
             if (mInputMemFilledQueue[0].empty() && mInputMemFilledQueue[1].empty() && mReachedExtractorEOS) {
                 ALOGV("Posting the EOS to the MPQ player");
                 //post the EOS To MPQ player
                 if (mObserver) {
+                     if (mPaused) {
+                         ALOGD("Resume the driver before posting for the DRAIN");
+                         resume_l();
+                     }
                      ALOGD("Audio Drain1 DONE ++");
                      if ( ioctl(mCompreRxHandle->handle->fd, SNDRV_COMPRESS_DRAIN) < 0 )
                          ALOGE("Audio Drain1 failed");
