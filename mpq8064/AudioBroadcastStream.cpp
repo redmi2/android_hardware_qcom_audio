@@ -113,6 +113,17 @@ AudioBroadcastStreamALSA::AudioBroadcastStreamALSA(AudioHardwareALSA *parent,
             *status = BAD_VALUE;
             return;
         }
+        if(((format == AudioSystem::AAC) ||
+            (format == AudioSystem::HE_AAC_V1) ||
+            (format == AudioSystem::HE_AAC_V2) ||
+            (format == AudioSystem::AC3) ||
+            (format == AudioSystem::AC3_PLUS) ||
+            (format == AudioSystem::EAC3)) &&
+            (!(dlopen ("libms11.so", RTLD_NOW)))) {
+            ALOGE("MS11 Decoder not available");
+            *status = BAD_VALUE;
+            return;
+        }
     } else {
         if(!(format & AudioSystem::MAIN_FORMAT_MASK)) {
             ALOGE("invalid config");
@@ -837,6 +848,17 @@ status_t AudioBroadcastStreamALSA::openCapturingAndRoutingDevices()
         Mutex::Autolock autolock(mRoutingSetupMutex);
 
         mRoutingSetupCv.wait(mRoutingSetupMutex);
+        if(((mFormat == AudioSystem::AAC) ||
+            (mFormat == AudioSystem::HE_AAC_V1) ||
+            (mFormat == AudioSystem::HE_AAC_V2) ||
+            (mFormat == AudioSystem::AC3) ||
+            (mFormat == AudioSystem::AC3_PLUS) ||
+            (mFormat == AudioSystem::EAC3)) &&
+            (!(dlopen ("libms11.so", RTLD_NOW)))) {
+            ALOGE("MS11 Decoder not available");
+            status = BAD_VALUE;
+            return status;
+        }
     }
     mSignalToSetupRoutingPath = false;
 
