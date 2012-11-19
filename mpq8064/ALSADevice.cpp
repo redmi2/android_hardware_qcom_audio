@@ -1132,7 +1132,11 @@ int  ALSADevice::getUseCaseType(const char *useCase)
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC3,
            strlen(SND_USE_CASE_MOD_PLAY_MUSIC3)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_FM,
-           strlen(SND_USE_CASE_MOD_PLAY_FM))) {
+           strlen(SND_USE_CASE_MOD_PLAY_FM)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL,
+           strlen(SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_TUNNEL,
+           strlen(SND_USE_CASE_MOD_PSEUDO_TUNNEL))) {
         return USECASE_TYPE_RX;
     } else if (!strncmp(useCase, SND_USE_CASE_VERB_HIFI_REC,
            strlen(SND_USE_CASE_VERB_HIFI_REC)) ||
