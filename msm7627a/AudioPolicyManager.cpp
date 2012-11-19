@@ -974,6 +974,7 @@ status_t AudioPolicyManager::checkAndSetVolume(int stream, int index, audio_io_h
         fmVolume = (float)index/(float)mStreams[stream].mIndexMax;
         if (fmVolume >= 0 && output == mPrimaryOutput) {
             mpClientInterface->setFmVolume(fmVolume, delayMs);
+            mLastVoiceVolume = fmVolume;
         }
       }
     return NO_ERROR;
