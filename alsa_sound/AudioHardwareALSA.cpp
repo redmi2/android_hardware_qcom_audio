@@ -135,6 +135,9 @@ AudioHardwareALSA::AudioHardwareALSA() :
             } else if (strstr(soundCardInfo, "msm8974-taiko-fluid-snd-card")) {
                 codec_rev = 42;
                 break;
+            } else if (strstr(soundCardInfo, "msm8974-taiko-liquid-snd-card")) {
+                codec_rev = 43;
+                break;
             }
         }
         fclose(fp);
@@ -167,6 +170,9 @@ AudioHardwareALSA::AudioHardwareALSA() :
     } else if (codec_rev == 42) {
         ALOGV("Detected taiko sound card");
         snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm_Taiko_Fluid");
+    } else if (codec_rev == 43) {
+        ALOGV("Detected taiko liquid sound card");
+        snd_use_case_mgr_open(&mUcMgr, "snd_soc_msm_Taiko_liquid");
     } else {
         property_get("ro.board.platform", platform, "");
         property_get("ro.baseband", baseband, "");
