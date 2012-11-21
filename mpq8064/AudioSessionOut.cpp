@@ -1060,8 +1060,14 @@ void  AudioSessionOutALSA::eventThreadEntry() {
                 ALOGE("hw_ptr2 = %lld status.hw_ptr2 = %lld", hw_ptr[1], mSecCompreRxHandle->handle->sync_ptr->s.status.hw_ptr);
             } while(hw_ptr[1] < mSecCompreRxHandle->handle->sync_ptr->s.status.hw_ptr);
             freeBuffer=false;
+            while(mLock.tryLock()) {
+                if(mKillEventThread)
+                    break;
+                usleep(100);
+            }
 
-            Mutex::Autolock autoLock(mLock);
+            if(mKillEventThread)
+                continue;
             if (mInputMemFilledQueue[0].empty() && mInputMemFilledQueue[1].empty() && mReachedExtractorEOS) {
                 ALOGV("Posting the EOS to the MPQ player");
                 //post the EOS To MPQ player
@@ -1086,6 +1092,7 @@ void  AudioSessionOutALSA::eventThreadEntry() {
             }
             else
                 mWriteCv.signal();
+            mLock.unlock();
          }
     }
     mEventThreadAlive = false;
