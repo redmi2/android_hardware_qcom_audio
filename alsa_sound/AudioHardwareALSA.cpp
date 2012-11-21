@@ -172,6 +172,11 @@ AudioHardwareALSA::AudioHardwareALSA() :
     } else {
         ALOGI("ucm instance opened: %u", (unsigned)mUcMgr);
     }
+#ifdef QCOM_CSDCLIENT_ENABLED
+    if (mFusion3Platform) {
+        csd_client_init();
+    }
+#endif
 
     //set default AudioParameters
     AudioParameter param;
@@ -228,6 +233,11 @@ AudioHardwareALSA::~AudioHardwareALSA()
     }
 #ifdef QCOM_ACDB_ENABLED
     acdb_loader_deallocate_ACDB();
+#endif
+#ifdef QCOM_CSDCLIENT_ENABLED
+    if (mFusion3Platform) {
+        csd_client_deinit();
+    }
 #endif
 #ifdef QCOM_USBAUDIO_ENABLED
     delete mAudioUsbALSA;
@@ -1695,7 +1705,8 @@ void AudioHardwareALSA::disableVoiceCall(char* verb, char* modifier, int mode, i
          it != mDeviceList.end(); ++it) {
         if((!strcmp(it->useCase, verb)) ||
            (!strcmp(it->useCase, modifier))) {
-            ALOGV("Disabling voice call");
+            mALSADevice->setVoiceSessionId(sessionid);
+            ALOGV("Disabling voice call sessionid:%d", sessionid);
             mALSADevice->close(&(*it));
             mALSADevice->route(&(*it), (uint32_t)device, mode);
             mDeviceList.erase(it);
@@ -1738,13 +1749,13 @@ char *use_case;
     alsa_handle.sampleRate = VOICE_SAMPLING_RATE;
     alsa_handle.latency = VOICE_LATENCY;
     alsa_handle.rxHandle = 0;
-    alsa_handle.sessionid = sessionid;
     alsa_handle.ucMgr = mUcMgr;
     mDeviceList.push_back(alsa_handle);
     ALSAHandleList::iterator it = mDeviceList.end();
     it--;
     setInChannels(device);
-    ALOGE("AudioHardware: enable Voice call sessionid:%d", sessionid);
+    mALSADevice->setVoiceSessionId(sessionid);
+    ALOGV("AudioHardware: enable Voice call sessionid:%d", sessionid);
     mALSADevice->route(&(*it), (uint32_t)device, mode);
     if (!strcmp(it->useCase, verb)) {
         snd_use_case_set(mUcMgr, "_verb", verb);

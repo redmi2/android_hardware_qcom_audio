@@ -82,6 +82,7 @@ ALSADevice::ALSADevice() {
     mProxyParams.mCaptureBuffer = NULL;
     mProxyParams.mProxyState = proxy_params::EProxyClosed;
     mProxyParams.mProxyPcmHandle = NULL;
+    mVoiceSessionId = -1;
 
     ALOGD("ALSA module opened");
 }
@@ -435,18 +436,6 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
     if ((rxDevice != NULL) && (txDevice != NULL)) {
         if (((strncmp(rxDevice, mCurRxUCMDevice, MAX_STR_LEN)) ||
              (strncmp(txDevice, mCurTxUCMDevice, MAX_STR_LEN))) &&
-             (!strncmp(handle->useCase, SND_USE_CASE_VERB_VOICECALL,
-                  MAX_LEN(handle->useCase, SND_USE_CASE_VERB_VOICECALL)) ||
-             !strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOICE,
-                  MAX_LEN(handle->useCase, SND_USE_CASE_MOD_PLAY_VOICE)) ||
-             !strncmp(handle->useCase, SND_USE_CASE_VERB_SGLTECALL,
-                  MAX_LEN(handle->useCase, SND_USE_CASE_VERB_SGLTECALL)) ||
-             !strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_SGLTE,
-                  MAX_LEN(handle->useCase, SND_USE_CASE_MOD_PLAY_SGLTE)) ||
-             !strncmp(handle->useCase, SND_USE_CASE_VERB_VOLTE,
-                  MAX_LEN(handle->useCase, SND_USE_CASE_VERB_VOLTE)) ||
-             !strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOLTE,
-                  MAX_LEN(handle->useCase, SND_USE_CASE_MOD_PLAY_VOLTE))) &&
              ((mode == AudioSystem::MODE_IN_CALL) ||
              (mode == AudioSystem::MODE_IN_COMMUNICATION)))
             inCallDevSwitch = true;
@@ -454,7 +443,7 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
 
 #ifdef QCOM_CSDCLIENT_ENABLED
     if (platform_is_Fusion3() && (inCallDevSwitch == true)) {
-        err = csd_client_disable_device(handle->sessionid);
+        err = csd_client_disable_device(mVoiceSessionId);
         if (err < 0)
         {
             ALOGE("csd_client_disable_device, failed, error %d", err);
@@ -593,7 +582,7 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
 
 #ifdef QCOM_CSDCLIENT_ENABLED
         ALOGV("rx_dev_id=%d, tx_dev_id=%d\n", rx_dev_id, tx_dev_id);
-        err = csd_client_enable_device(rx_dev_id, tx_dev_id, mDevSettingsFlag,handle->sessionid);
+        err = csd_client_enable_device(rx_dev_id, tx_dev_id, mDevSettingsFlag,mVoiceSessionId);
         if (err < 0)
         {
             ALOGE("csd_client_disable_device failed, error %d", err);
@@ -835,10 +824,10 @@ status_t ALSADevice::standbyVoiceCall(alsa_handle_t *handle, int sessionid)
 {
      int err = NO_ERROR;
      if (platform_is_Fusion3()) {
-         err = csd_client_standby_voice(handle->sessionid);
+         err = csd_client_standby_voice(sessionid);
          if (err < 0)
              ALOGE("standbyVoice: csd_client error %d sessionid:%d\n", err,
-                                                        handle->sessionid);
+                                                           mVoiceSessionId);
      }
      return err;
 }
@@ -847,10 +836,10 @@ status_t ALSADevice::resumeVoiceCall(alsa_handle_t *handle, int sessionid)
 {
      int err = NO_ERROR;
      if (platform_is_Fusion3()) {
-         err = csd_client_resume_voice(handle->sessionid);
+         err = csd_client_resume_voice(sessionid);
          if (err < 0)
              ALOGE("resumeVoice: csd_client error %d sessionid:%d\n", err,
-                                                       handle->sessionid);
+                                                          mVoiceSessionId);
      }
      return err;
 }
@@ -956,7 +945,7 @@ status_t ALSADevice::startVoiceCall(alsa_handle_t *handle)
 
     if (platform_is_Fusion3()) {
 #ifdef QCOM_CSDCLIENT_ENABLED
-        err = csd_client_start_voice(handle->sessionid);
+        err = csd_client_start_voice(mVoiceSessionId);
         if (err < 0) {
             ALOGE("startVoiceCall: csd_client error %d\n", err);
             goto Error;
@@ -1145,7 +1134,7 @@ status_t ALSADevice::close(alsa_handle_t *handle)
                 !strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_SGLTE))) &&
                 platform_is_Fusion3()) {
 #ifdef QCOM_CSDCLIENT_ENABLED
-            err = csd_client_stop_voice(handle->sessionid);
+            err = csd_client_stop_voice(mVoiceSessionId);
             if (err < 0) {
                 ALOGE("s_close: csd_client error %d\n", err);
             }
@@ -1958,6 +1947,12 @@ status_t ALSADevice::setEcrxDevice(char *device)
     status_t err = NO_ERROR;
     setMixerControl("EC_REF_RX", device);
     return err;
+}
+
+void ALSADevice::setVoiceSessionId(int sessionid)
+{
+    mVoiceSessionId = sessionid;
+    ALOGV("Voice SessionId:%d", mVoiceSessionId);
 }
 
 void ALSADevice::setInChannels(int channels)

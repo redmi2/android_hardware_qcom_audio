@@ -190,7 +190,6 @@ struct alsa_handle_t {
     unsigned int        bufferSize;      // Size of sample buffer
     unsigned int        periodSize;
     bool                isFastOutput;
-    int                 sessionid;       //voice session id
     struct pcm *        rxHandle;
     snd_use_case_mgr_t  *ucMgr;
     AudioSessionOutALSA *session;
@@ -251,6 +250,7 @@ public:
     //TODO:check if this needs to be public
     void     disableDevice(alsa_handle_t *handle);
     char *getUCMDeviceFromAcdbId(int acdb_id);
+    void     setVoiceSessionId(int sessionid);
 
 protected:
     friend class AudioHardwareALSA;
@@ -292,6 +292,7 @@ private:
     int mCallMode;
     struct mixer*  mMixer;
     int mInChannels;
+    int mVoiceSessionId;
     bool mIsSglte;
 //   ALSAHandleList  *mDeviceList;
 
