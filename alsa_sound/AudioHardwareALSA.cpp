@@ -458,6 +458,43 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         param.remove(key);
     }
 
+    key = String8("a2dp_connected");
+    if (param.get(key, value) == NO_ERROR) {
+        if (value == "true") {
+            status_t err = openA2dpOutput();
+            if(err) {
+                ALOGE("openA2DPOutput failed = %d",err);
+                return err;
+            }
+        } else {
+            uint32_t activeUsecase = getA2DPActiveUseCases_l();
+            stopA2dpPlayback(activeUsecase);
+            status_t err = closeA2dpOutput();
+            if(err) {
+                ALOGE("closeA2dpOutput = %d" ,err);
+            }
+        }
+        param.remove(key);
+    }
+
+    key = String8("A2dpSuspended");
+    if (param.get(key, value) == NO_ERROR) {
+        if (value == "true") {
+             if (mA2dpDevice != NULL) {
+                 mA2dpDevice->set_parameters(mA2dpDevice,keyValuePairs);
+             }
+        }
+        param.remove(key);
+    }
+
+    key = String8("a2dp_sink_address");
+    if (param.get(key, value) == NO_ERROR) {
+        if (mA2dpStream != NULL) {
+            mA2dpStream->common.set_parameters(&mA2dpStream->common,keyValuePairs);
+        }
+        param.remove(key);
+    }
+
     key = String8(VOIPRATE_KEY);
     if (param.get(key, value) == NO_ERROR) {
             mVoipBitRate = atoi(value);
@@ -580,6 +617,22 @@ String8 AudioHardwareALSA::getParameters(const String8& keys)
         param.add(key, value);
     }
 #endif
+
+    key = String8("A2dpSuspended");
+    if (param.get(key, value) == NO_ERROR) {
+        if (mA2dpDevice != NULL) {
+            value = mA2dpDevice->get_parameters(mA2dpDevice,key);
+        }
+        param.add(key, value);
+    }
+
+    key = String8("a2dp_sink_address");
+    if (param.get(key, value) == NO_ERROR) {
+        if (mA2dpStream != NULL) {
+            value = mA2dpStream->common.get_parameters(&mA2dpStream->common,key);
+        }
+        param.add(key, value);
+    }
 
     key = String8(VOICE_PATH_ACTIVE);
     if (param.get(key, value) == NO_ERROR) {
@@ -2030,18 +2083,16 @@ status_t AudioHardwareALSA::startA2dpPlayback_l(uint32_t activeUsecase) {
     ALOGV("startA2dpPlayback_l::usecase = %d ", activeUsecase);
     status_t err = NO_ERROR;
 
+    if (!mA2dpStream) {
+        ALOGE("Unable to open A2DP stream");
+        return err;
+    }
     if (activeUsecase != USECASE_NONE && !mIsA2DPEnabled) {
         //setA2DPActiveUseCases_l(activeUsecase);
         Mutex::Autolock autolock1(mA2dpMutex);
         err = mALSADevice->openProxyDevice();
         if(err) {
             ALOGE("openProxyDevice failed = %d", err);
-        }
-
-        err = openA2dpOutput();
-        if(err) {
-            ALOGE("openA2DPOutput failed = %d",err);
-            return err;
         }
 
         mKillA2DPThread = false;
@@ -2095,14 +2146,12 @@ status_t AudioHardwareALSA::stopA2dpPlayback_l(uint32_t activeUsecase) {
              mA2dpMutex.unlock();
              err = stopA2dpThread();
              mA2dpMutex.lock();
-
              if(err) {
                  ALOGE("stopA2dpOutput = %d" ,err);
              }
 
-             err = closeA2dpOutput();
-             if(err) {
-                  ALOGE("closeA2dpOutput = %d" ,err);
+             if (mA2dpStream != NULL) {
+                 mA2dpStream->common.standby(&mA2dpStream->common);
              }
 
              err = mALSADevice->closeProxyDevice();
@@ -2304,7 +2353,6 @@ void AudioHardwareALSA::clearA2DPActiveUseCases_l(uint32_t activeUsecase) {
 
 uint32_t AudioHardwareALSA::useCaseStringToEnum(const char *usecase)
 {
-   ALOGD("useCaseStringToEnum");
    uint32_t activeUsecase = USECASE_NONE;
 
    if ((!strncmp(usecase, SND_USE_CASE_VERB_HIFI_LOW_POWER,
