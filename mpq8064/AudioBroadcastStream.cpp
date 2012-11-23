@@ -2124,7 +2124,7 @@ status_t AudioBroadcastStreamALSA::resume_l()
 {
     if (mRouteAudioToA2dp) {
         ALOGD("startA2dpPlayback - resume - A2DPBroadcast");
-        status_t status = mParent->startA2dpPlayback(
+        status_t status = mParent->startA2dpPlayback_l(
                                        AudioHardwareALSA::A2DPBroadcast);
         if(status) {
             ALOGE("startA2dpPlayback from resume return error = %d", status);
