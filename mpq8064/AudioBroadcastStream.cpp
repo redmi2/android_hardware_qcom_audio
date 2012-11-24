@@ -178,7 +178,7 @@ AudioBroadcastStreamALSA::~AudioBroadcastStreamALSA()
         closeDevice(mCompreTxHandle);
 
     if(mTranscodeHandle) {
-        pcm_close(mTranscodeHandle->handle);
+        closeDevice(mTranscodeHandle);
         free(mTranscodeHandle);
         mTranscodeHandle = NULL;
     }

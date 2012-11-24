@@ -1950,7 +1950,7 @@ void AudioSessionOutALSA::reset() {
     }
 
     if(mTranscodeHandle) {
-        pcm_close(mTranscodeHandle->handle);
+        closeDevice(mTranscodeHandle);
         free(mTranscodeHandle);
         mTranscodeHandle = NULL;
     }
