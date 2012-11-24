@@ -898,7 +898,7 @@ void AudioUsbALSA::PlaybackThreadEntry() {
         pfdProxyPlayback[0].events = (POLLIN);                                 // | POLLERR | POLLNVAL);
         mproxypfdPlayback = eventfd(0,0);
         pfdProxyPlayback[1].fd = mproxypfdPlayback;
-        pfdProxyPlayback[1].events = (POLLIN | POLLOUT| POLLERR | POLLNVAL);
+        pfdProxyPlayback[1].events = (POLLIN | POLLERR | POLLNVAL);
     }
 
     frames = (mproxyPlaybackHandle->flags & PCM_MONO) ? (proxyPeriod / 2) : (proxyPeriod / 4);
