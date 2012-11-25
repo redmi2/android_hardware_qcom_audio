@@ -1154,6 +1154,7 @@ status_t AudioHardwareALSA::startA2dpPlayback_l(uint32_t activeUsecase) {
             err = mALSADevice->openProxyDevice();
             if(err) {
                 ALOGE("openProxyDevice failed = %d", err);
+                return err;
             }
 
             err = openA2dpOutput();
@@ -1171,7 +1172,6 @@ status_t AudioHardwareALSA::startA2dpPlayback_l(uint32_t activeUsecase) {
                 return err;
             }
             mALSADevice->resumeProxy();
-            mA2dpThreadAlive = true;
             mIsA2DPEnabled = true;
 
 #ifdef OUTPUT_BUFFER_LOG
@@ -1343,6 +1343,7 @@ void AudioHardwareALSA::a2dpThreadFunc() {
 
     mALSADevice->resetProxyVariables();
 
+    mA2dpThreadAlive = true;
     ALOGV("mKillA2DPThread = %d", mKillA2DPThread);
     while(!mKillA2DPThread) {
 
