@@ -234,8 +234,8 @@ public:
     void     setVocRecMode(uint8_t mode);
     void     setVoLTEMicMute(int state, int sessionid);
     void     setVoLTEVolume(int vol, int sessionid);
-    void     setSGLTEMicMute(int state, int sessionid);
-    void     setSGLTEVolume(int vol, int sessionid);
+    void     setVoice2MicMute(int state, int sessionid);
+    void     setVoice2Volume(int vol, int sessionid);
     status_t setEcrxDevice(char *device);
     void     setInChannels(int);
     //TODO:check if this needs to be public
@@ -794,7 +794,7 @@ protected:
                                                                            int sessionid);
     bool                routeVoiceCall(int device, int	newMode);
     bool                routeVoLTECall(int device, int newMode);
-    bool                routeSGLTECall(int device, int newMode);
+    bool                routeVoice2Call(int device, int newMode);
     friend class AudioSessionOutALSA;
     friend class AudioStreamOutALSA;
     friend class AudioStreamInALSA;
@@ -825,7 +825,7 @@ protected:
     bool                mMicMute;
     int mCSCallActive;
     int mVolteCallActive;
-    int mSGLTECallActive;
+    int mVoice2CallActive;
     int mCallState;
     int mIsFmActive;
     int mVoiceSessionId;
