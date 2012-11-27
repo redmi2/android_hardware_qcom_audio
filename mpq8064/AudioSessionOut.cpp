@@ -138,6 +138,8 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     mOutputMetadataLength = 0;
     mTranscodeDevices     = 0;
     mFirstBuffer         = true;
+    mFirstAACBuffer      = NULL;
+    mFirstAACBufferLength = 0;
 
     if(devices == 0) {
         ALOGE("No output device specified");
@@ -558,8 +560,12 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
         if(mFormat == AUDIO_FORMAT_AAC || mFormat == AUDIO_FORMAT_HE_AAC_V1 ||
            mFormat == AUDIO_FORMAT_AAC_ADIF || mFormat == AUDIO_FORMAT_HE_AAC_V2) {
             if(mAacConfigDataSet == false) {
-                if(mMS11Decoder->setAACConfig((unsigned char *)buffer, bytes) == true)
+                if(mMS11Decoder->setAACConfig((unsigned char *)buffer, bytes) == true){
                     mAacConfigDataSet = true;
+                    mFirstAACBufferLength = bytes;
+                    mFirstAACBuffer = malloc(mFirstAACBufferLength);
+                    memcpy(mFirstAACBuffer, buffer, mFirstAACBufferLength);
+                  }
                 return bytes;
             }
         }
@@ -1319,25 +1325,34 @@ status_t AudioSessionOutALSA::flush()
     mFrameCount = 0;
     mFrameCountMutex.unlock();
     if(mBitstreamSM)
-        mBitstreamSM->resetBitstreamPtr();
+       mBitstreamSM->resetBitstreamPtr();
     if(mUseMS11Decoder == true) {
-        mMS11Decoder->flush();
-        if (mFormat == AUDIO_FORMAT_AC3 || mFormat == AUDIO_FORMAT_EAC3) {
+      mMS11Decoder->flush();
+      if (mFormat == AUDIO_FORMAT_AC3 || mFormat == AUDIO_FORMAT_EAC3 ||
+            mFormat == AUDIO_FORMAT_AAC || mFormat == AUDIO_FORMAT_AAC_ADIF){
+         delete mMS11Decoder;
+         mMS11Decoder = new SoftMS11;
+         int32_t format_ms11;
+         if(mMS11Decoder->initializeMS11FunctionPointers() == false){
+            ALOGE("Could not resolve all symbols Required for MS11");
             delete mMS11Decoder;
-            mMS11Decoder = new SoftMS11;
-            if(mMS11Decoder->initializeMS11FunctionPointers() == false) {
-                ALOGE("Could not resolve all symbols Required for MS11");
-                delete mMS11Decoder;
-                return -1;
-            }
-            if(mMS11Decoder->setUseCaseAndOpenStream(
-                                     FORMAT_DOLBY_DIGITAL_PLUS_MAIN,
-                                     mChannels, mSampleRate)) {
-                ALOGE("SetUseCaseAndOpen MS11 failed");
-                delete mMS11Decoder;
-                return -1;
-            }
-        }
+            return -1;
+         }
+         if(mFormat == AUDIO_FORMAT_AAC || mFormat == AUDIO_FORMAT_AAC_ADIF){
+            format_ms11 = FORMAT_DOLBY_PULSE_MAIN;
+         } else {
+            format_ms11 = FORMAT_DOLBY_DIGITAL_PLUS_MAIN;
+         }
+         if(mMS11Decoder->setUseCaseAndOpenStream(format_ms11,mChannels, mSampleRate)){
+            ALOGE("SetUseCaseAndOpen MS11 failed");
+            delete mMS11Decoder;
+            return -1;
+         }
+         if(mFirstAACBuffer != NULL && mFirstAACBufferLength != 0 &&
+               format_ms11 == FORMAT_DOLBY_PULSE_MAIN &&
+               mMS11Decoder->setAACConfig((unsigned char *)mFirstAACBuffer, mFirstAACBufferLength) == true)
+         mAacConfigDataSet = true;
+      }
     }
 #ifdef DEBUG
     char debugString[] = "Playback Flushd";
@@ -1979,6 +1994,11 @@ void AudioSessionOutALSA::reset() {
     mUseDualTunnel    = false;
     mBuffPoolInitDone = 0;
     mSecDevices = 0;
+    if(mFirstAACBuffer){
+        free(mFirstAACBuffer);
+        mFirstAACBuffer = NULL;
+    }
+
 
 }
 
