@@ -197,9 +197,9 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
         // Ignore routing if device is 0.
         if(device) {
             ALOGD("setParameters(): keyRouting with device %#x", device);
-            if(device & AudioSystem::DEVICE_OUT_ALL_A2DP) {
-                mParent->mRouteAudioToA2dp = true;
-                ALOGD("setParameters(): A2DP device %#x", device);
+            if (mParent->isExtOutDevice(device)) {
+                mParent->mRouteAudioToExtOut = true;
+                ALOGD("setParameters(): device %#x", device);
             }
             err = mParent->doRouting(device);
             if(err) {
@@ -211,10 +211,6 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
         }
         param.remove(key);
     } else {
-        key = String8("a2dp_sink_address");
-        if (param.get(key, value) == NO_ERROR) {
-            mParent->setParameters(keyValuePairs);
-        }
 #ifdef QCOM_FM_ENABLED
         key = String8(AudioParameter::keyHandleFm);
         if (param.getInt(key, device) == NO_ERROR) {
@@ -224,8 +220,10 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
                 mParent->handleFm(device);
             }
             param.remove(key);
-        }
+        } else {
 #endif
+            mParent->setParameters(keyValuePairs);
+        }
     }
     return err;
 }
