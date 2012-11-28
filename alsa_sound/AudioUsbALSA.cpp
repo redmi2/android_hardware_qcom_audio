@@ -274,7 +274,14 @@ void AudioUsbALSA::exitRecordingThread(uint64_t writeVal)
     // Not a valid assumption to blindly close the thread.
     ALOGD("exitRecordingThread");
     mkillRecordingThread = true;
-    if (writeVal == SIGNAL_EVENT_KILLTHREAD || mRecordingUsb == NULL) {
+
+    if ((pfdProxyRecording[0].fd != -1) && (pfdUsbRecording[0].fd != -1)) {
+        write(pfdProxyRecording[0].fd, &writeVal, sizeof(uint64_t));
+        write(pfdUsbRecording[0].fd, &writeVal, sizeof(uint64_t));
+        pthread_join(mRecordingUsb,NULL);
+        mRecordingUsb = NULL;
+    }
+    if (writeVal == SIGNAL_EVENT_KILLTHREAD ) {
         int err;
         {
             Mutex::Autolock autoLock(mLock);
@@ -418,6 +425,8 @@ void AudioUsbALSA::RecordingThreadEntry() {
     int err;
     const char *fn = "/data/RecordPcm.pcm";
     filed = open(fn, O_WRONLY | O_CREAT | O_TRUNC | O_APPEND, 0664);
+    pfdProxyRecording[0].fd = -1;
+    pfdUsbRecording[0].fd = -1 ;
 
     err = getCap((char *)"Capture:", mchannelsCapture, msampleRateCapture);
     if (err) {
@@ -589,7 +598,7 @@ void AudioUsbALSA::RecordingThreadEntry() {
 
         bytes_written = mproxyRecordingHandle->sync_ptr->c.control.appl_ptr - mproxyRecordingHandle->sync_ptr->s.status.hw_ptr;
         if ((bytes_written >= mproxyRecordingHandle->sw_p->start_threshold) && (!mproxyRecordingHandle->start)) {
-            if (!mkillPlayBackThread) {
+            if (!mkillRecordingThread) {
                 err = startDevice(mproxyRecordingHandle, &mkillRecordingThread);
                 if (err == EPIPE) {
                     continue;
@@ -809,7 +818,7 @@ void AudioUsbALSA::pollForUsbData(){
         return;
     }
 
-    if (pfdUsbPlayback[0].revents & POLLERR || pfdProxyPlayback[0].revents & POLLHUP ||
+    if (pfdUsbPlayback[0].revents & POLLERR || pfdUsbPlayback[0].revents & POLLHUP ||
         pfdUsbPlayback[0].revents & POLLNVAL) {
         ALOGE("Info: usb throwing error");
         mkillPlayBackThread = true;
