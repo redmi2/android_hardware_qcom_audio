@@ -622,8 +622,6 @@ status_t AudioHardwareALSA::doRouting(int device)
                     ALSAHandleList::iterator it = mDeviceList.end();
                     it--;
                     if (device != mCurDevice) {
-                        if(musbRecordingState)
-                            closeUSBRecording();
                         if(musbPlaybackState)
                             closeUSBPlayback();
                     }
