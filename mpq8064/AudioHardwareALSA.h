@@ -300,6 +300,7 @@ public:
     void        setDeviceList(ALSAHandleList *mDeviceList);
     int         setUseCase(alsa_handle_t *handle, bool bIsUseCaseSet);
     void        setUseCase(alsa_handle_t *handle, bool bIsUseCaseSet, char *device);
+    void        removeUseCase(alsa_handle_t *handle, char *device);
     status_t    openCapture(alsa_handle_t *handle, bool isMmapMode,
                             bool isCompressed);
     status_t    configureTranscode(alsa_handle_t *handle);
