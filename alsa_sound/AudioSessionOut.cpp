@@ -502,6 +502,8 @@ void AudioSessionOutALSA::createEventThread() {
 status_t AudioSessionOutALSA::start()
 {
     Mutex::Autolock autoLock(mLock);
+    ALOGV("AudioSessionOutALSA start()");
+    mEosEventReceived = false;
     if (mPaused) {
         status_t err = NO_ERROR;
         if (mSeeking) {
