@@ -171,11 +171,15 @@ AudioBroadcastStreamALSA::~AudioBroadcastStreamALSA()
     alsa_handle_t *compreTxHandle_dup = mCompreTxHandle;
     alsa_handle_t *pcmTxHandle_dup = mPcmTxHandle;
 
-    if(mPcmTxHandle)
+    if(mPcmTxHandle) {
         closeDevice(mPcmTxHandle);
+        mALSADevice->removeUseCase(mPcmTxHandle, "MI2S");
+    }
 
-    if(mCompreTxHandle)
+    if(mCompreTxHandle) {
         closeDevice(mCompreTxHandle);
+        mALSADevice->removeUseCase(mCompreTxHandle, "MI2S");
+    }
 
     if(mTranscodeHandle) {
         closeDevice(mTranscodeHandle);
@@ -449,9 +453,11 @@ status_t AudioBroadcastStreamALSA::standby()
 
     if(mPcmTxHandle) {
         mPcmTxHandle->module->standby(mPcmTxHandle);
+        mALSADevice->removeUseCase(mPcmTxHandle, "MI2S");
     }
     if(mCompreTxHandle) {
         mCompreTxHandle->module->standby(mCompreTxHandle);
+        mALSADevice->removeUseCase(mCompreTxHandle, "MI2S");
     }
     if (mPowerLock) {
         release_wake_lock ("AudioBroadcastLock");
@@ -919,9 +925,8 @@ status_t AudioBroadcastStreamALSA::openPCMCapturePath()
 
     alsa_handle.module = mParent->mALSADevice;
     alsa_handle.periodSize = DEFAULT_IN_BUFFER_SIZE_BROADCAST_COMPRESSED;
-    alsa_handle.devices = AudioSystem::DEVICE_IN_AUX_DIGITAL;
-//NOTE: what is the device ID that has to be set
-    alsa_handle.activeDevice = AudioSystem::DEVICE_IN_AUX_DIGITAL;
+    alsa_handle.devices = 0;
+    alsa_handle.activeDevice = 0;
     alsa_handle.handle = 0;
     alsa_handle.type = PCM_FORMAT;
     alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
@@ -973,9 +978,8 @@ status_t AudioBroadcastStreamALSA::openCompressedCapturePath()
 
     alsa_handle.module = mParent->mALSADevice;
     alsa_handle.periodSize = DEFAULT_IN_BUFFER_SIZE_BROADCAST_COMPRESSED;
-    alsa_handle.devices = AudioSystem::DEVICE_IN_AUX_DIGITAL;
-//NOTE: what is the device ID that has to be set
-    alsa_handle.activeDevice = AudioSystem::DEVICE_IN_AUX_DIGITAL;
+    alsa_handle.devices = 0;
+    alsa_handle.activeDevice = 0;
     alsa_handle.handle = 0;
     alsa_handle.type = COMPRESSED_FORMAT;
     alsa_handle.format = mInputFormat;
