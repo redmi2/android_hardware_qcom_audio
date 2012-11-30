@@ -613,6 +613,8 @@ private:
     void                updateMetaData(size_t bytes);
     uint32_t            channelMapToChannels(uint32_t channelMap);
     bool                mPostedEOS;
+    void*               mFirstAACBuffer;
+    int32_t             mFirstAACBufferLength;
     //Structure to hold mem buffer information
     class BuffersAllocated {
     public:
