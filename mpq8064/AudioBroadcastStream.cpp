@@ -1536,7 +1536,10 @@ ssize_t AudioBroadcastStreamALSA::readFromCapturePath(char *buffer)
 
         if (mAvail < capture_handle->sw_p->avail_min) {
             err_poll = poll(mCapturePfd, NUM_FDS, TIMEOUT_INFINITE);
-
+            if(mCapturePfd[0].revents) {
+                struct snd_timer_tread rbuf[4];
+                read(capture_handle->timer_fd, rbuf, sizeof(struct snd_timer_tread) * 4 );
+            }
             if (mCapturePfd[1].revents & POLLIN) {
                 ALOGV("Event on userspace fd");
                 mCapturePfd[1].revents  = 0;
