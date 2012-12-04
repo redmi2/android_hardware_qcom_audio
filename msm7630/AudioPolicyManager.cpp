@@ -370,6 +370,8 @@ status_t AudioPolicyManager::setDeviceConnectionState(AudioSystem::audio_devices
             else {
                 mOutputs.valueFor(mPrimaryOutput)->changeRefCount(AudioSystem::FM, -1);
             }
+            ALOGD("FM enable/disable: NewDevice:%d", NewDevice);
+            setOutputDevice(mPrimaryOutput, NewDevice);
         }
 
         checkA2dpSuspend();
