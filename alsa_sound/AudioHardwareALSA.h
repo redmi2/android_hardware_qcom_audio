@@ -188,6 +188,13 @@ struct alsa_handle_t {
     AudioSessionOutALSA *session;
 };
 
+struct output_metadata_handle_t {
+    uint32_t            metadataLength;
+    uint32_t            bufferLength;
+    uint64_t            timestamp;
+    uint32_t            reserved[12];
+};
+
 typedef List < alsa_handle_t > ALSAHandleList;
 
 struct use_case_t {
@@ -473,6 +480,8 @@ public:
     status_t            pause_l();
     status_t            resume_l();
 
+    void updateMetaData(size_t bytes);
+
 private:
     Mutex               mLock;
     uint32_t            mFrameCount;
@@ -492,6 +501,8 @@ private:
     ALSADevice *     mAlsaDevice;
     snd_use_case_mgr_t *mUcMgr;
     AudioEventObserver *mObserver;
+    output_metadata_handle_t mOutputMetadataTunnel;
+    uint32_t            mOutputMetadataLength;
 
     uint32_t            mUseCase;
     status_t            openDevice(char *pUseCase, bool bIsUseCase, int devices);
