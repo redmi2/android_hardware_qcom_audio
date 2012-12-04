@@ -28,6 +28,8 @@
 #define BTSCO_RATE_16KHZ 16000
 #define USECASE_TYPE_RX 1
 #define USECASE_TYPE_TX 2
+#define DEVICE_TYPE_RX 1
+#define DEVICE_TYPE_TX 2
 
 #define AFE_PROXY_PERIOD_SIZE 3072
 #define KILL_A2DP_THREAD 1
@@ -368,6 +370,18 @@ status_t ALSADevice::setSoftwareParams(alsa_handle_t *handle)
     return NO_ERROR;
 }
 
+int ALSADevice::getDeviceType(uint32_t devices, uint32_t mode)
+{
+     int ret = 0;
+
+     if(devices & AudioSystem::DEVICE_OUT_ALL)
+       ret = DEVICE_TYPE_RX;
+     if(devices & AudioSystem::DEVICE_IN_ALL)
+       ret |= DEVICE_TYPE_TX;
+
+     return ret;
+
+}
 void ALSADevice::switchDevice(uint32_t devices, uint32_t mode)
 {
     ALOGV("switchDevice devices = %d, mode = %d", devices,mode);
@@ -388,7 +402,8 @@ void ALSADevice::switchDevice(uint32_t devices, uint32_t mode)
                           strlen(SND_USE_CASE_VERB_HIFI3))) &&
            (strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_MUSIC3,
                           strlen(SND_USE_CASE_MOD_PLAY_MUSIC3)))) {
-            switchDeviceUseCase(&(*it),devices,mode);
+            if(getUseCaseType(it->useCase) & getDeviceType(devices, mode))
+                switchDeviceUseCase(&(*it), devices, mode);
         }
     }
 }
@@ -396,104 +411,33 @@ void ALSADevice::switchDevice(uint32_t devices, uint32_t mode)
 void ALSADevice::switchDeviceUseCase(alsa_handle_t *handle,
                                               uint32_t devices, uint32_t mode)
 {
-    unsigned usecase_type = 0;
-    bool inCallDevSwitch = false;
-    char useCase[MAX_STR_LEN] = {'\0'},*use_case = NULL;
-    char *rxDeviceNew=NULL, *txDeviceNew=NULL;
-    char *rxDeviceOld=NULL, *txDeviceOld=NULL;
+    char *use_case = NULL;
+    uint32_t activeDevices = handle->activeDevice;
+    uint32_t switchTodevices = devices;
+    bool bIsUseCaseSet = false;
 
-    ALOGV("switchDeviceUseCase usecase %s devices = %d, mode = %d", handle->useCase, devices,mode);
+    ALOGV("switchDeviceUseCase curdevices = %d usecase %s devices = %d, mode = %d",
+           handle->activeDevice, handle->useCase, devices, mode);
 
-    getDevices(devices, mode, &rxDeviceNew, &txDeviceNew);
-    getDevices(handle->devices, handle->mode, &rxDeviceOld, &txDeviceOld);
-    if ((rxDeviceNew != NULL) && (txDeviceNew != NULL) && (rxDeviceOld != NULL) && (txDeviceOld != NULL)) {
-        if (((strcmp(rxDeviceNew, rxDeviceOld)) || (strcmp(txDeviceNew, txDeviceOld))) &&
-            (mode == AudioSystem::MODE_IN_CALL))
-            inCallDevSwitch = true;
-    }
-
-    snd_use_case_get(handle->ucMgr, "_verb", (const char **)&use_case);
-
-    if ((rxDeviceNew != NULL) && (rxDeviceOld != NULL)) {
-        if ( ((strcmp(rxDeviceNew, rxDeviceOld)) || (inCallDevSwitch == true))) {
-            if ((use_case != NULL) && (strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
-                    strlen(SND_USE_CASE_VERB_INACTIVE)))) {
-                usecase_type = getUseCaseType(handle->useCase);
-                if (usecase_type & USECASE_TYPE_RX) {
-                    strlcpy(useCase, handle->useCase, MAX_STR_LEN);
-                    ALOGD("Deroute use case %s type is %d\n", handle->useCase, usecase_type);
-                    if(!strcmp(use_case,handle->useCase)) {
-                        snd_use_case_set_case(handle->ucMgr, "_verb", SND_USE_CASE_VERB_INACTIVE,rxDeviceOld);
-                    } else {
-                        snd_use_case_set_case(handle->ucMgr, "_dismod",useCase,rxDeviceOld);
-                    }
-                }
-            }
-        }
-    }
-    if ((txDeviceNew != NULL) && (txDeviceOld != NULL)) {
-        if ( ((strcmp(txDeviceNew, txDeviceOld)) || (inCallDevSwitch == true))) {
-            if ((use_case != NULL) && (strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
-                    strlen(SND_USE_CASE_VERB_INACTIVE)))) {
-                usecase_type = getUseCaseType(handle->useCase);
-                if ((usecase_type & USECASE_TYPE_TX)) {
-                    strlcpy(useCase, handle->useCase, MAX_STR_LEN);
-                    ALOGD("Deroute use case %s type is %d\n", handle->useCase, usecase_type);
-                    if(!strcmp(use_case,handle->useCase)) {
-                        snd_use_case_set_case(handle->ucMgr, "_verb", SND_USE_CASE_VERB_INACTIVE,txDeviceOld);
-                    } else {
-                        snd_use_case_set_case(handle->ucMgr, "_dismod",useCase,txDeviceOld);
-                    }
-                }
-            }
-        }
-    }
+    //Update the active devices to the device list which needs to be derouted
+    handle->activeDevice = handle->activeDevice & (~devices);
 
     disableDevice(handle);
 
-    if (rxDeviceNew != NULL) {
-        usecase_type = getUseCaseType(handle->useCase);
-        if (usecase_type & USECASE_TYPE_RX) {
-            if ((use_case != NULL) && (strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
-                strlen(SND_USE_CASE_VERB_INACTIVE))) && (!strncmp(use_case, useCase, MAX_UC_LEN))) {
-                snd_use_case_set_case(handle->ucMgr, "_verb", handle->useCase,rxDeviceNew);
-            } else {
-                snd_use_case_set_case(handle->ucMgr, "_enamod", handle->useCase, rxDeviceNew);
-            }
-            handle->activeDevice = devices;
-            handle->devices = devices;
-        }
-    }
-    if (txDeviceNew != NULL) {
-        usecase_type = getUseCaseType(handle->useCase);
-        if ((usecase_type & USECASE_TYPE_TX)) {
-            if ((use_case != NULL) && (strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
-                 strlen(SND_USE_CASE_VERB_INACTIVE))) && (!strncmp(use_case, handle->useCase, MAX_UC_LEN))) {
-                 snd_use_case_set_case(handle->ucMgr, "_verb", handle->useCase,txDeviceNew);
-            } else {
-                snd_use_case_set_case(handle->ucMgr, "_enamod", handle->useCase, txDeviceNew);
-            }
-            handle->activeDevice = devices;
-            handle->devices = devices;
-        }
-    }
-    ALOGE("After enable device");
-    if(rxDeviceNew != NULL) {
-        free(rxDeviceNew);
-        rxDeviceNew = NULL;
-    }
-    if(rxDeviceOld != NULL) {
-        free(rxDeviceOld);
-        rxDeviceOld = NULL;
-    }
-    if(txDeviceNew != NULL) {
-        free(txDeviceNew);
-        txDeviceNew = NULL;
-    }
-    if(txDeviceOld != NULL) {
-        free(txDeviceOld);
-        txDeviceOld = NULL;
-    }
+    //List of the devices to be enabled
+    devices = devices & (~activeDevices);
+
+    handle->activeDevice = devices;
+
+    snd_use_case_get(handle->ucMgr, "_verb", (const char **)&use_case);
+    bIsUseCaseSet = ((use_case == NULL) ||
+        (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
+            strlen(SND_USE_CASE_VERB_INACTIVE))));
+
+    enableDevice(handle, bIsUseCaseSet);
+
+    handle->devices = handle->activeDevice = switchTodevices;
+
     if (use_case != NULL) {
         free(use_case);
         use_case = NULL;
@@ -1184,56 +1128,102 @@ int  ALSADevice::getUseCaseType(const char *useCase)
 
 void ALSADevice::disableDevice(alsa_handle_t *handle)
 {
-    bool disableRxDevice = true;
-    bool disableTxDevice = true;
+    char *rxDevice = NULL, *txDevice = NULL;
+    uint32_t devices = handle->activeDevice;
+    bool disableRxDevice = true, disableTxDevice = true;
+    char *use_case = NULL;
+    unsigned usecase_type = 0;
 
-    char *rxDeviceToDisable=NULL, *txDeviceToDisable=NULL;
-    char *rxDevice=NULL, *txDevice=NULL;
+    snd_use_case_get(handle->ucMgr, "_verb", (const char **)&use_case);
+    ALOGD("disableDevice device = %d verb  %s mode %d use case %s",
+          devices, (use_case == NULL) ? "NULL" : use_case, handle->mode, handle->useCase);
 
-    getDevices(handle->activeDevice, handle->mode, &rxDeviceToDisable, &txDeviceToDisable);
-    for(ALSAHandleList::iterator it = mDeviceList->begin(); it != mDeviceList->end(); ++it) {
-        if(it->useCase != NULL) {
-            if(strcmp(it->useCase,handle->useCase)) {
-                if((&(*it)) != handle && handle->activeDevice && it->activeDevice && (it->activeDevice & handle->activeDevice)) {
-                   ALOGD("disableRxDevice - false ");
-                   disableRxDevice = false;
-                   disableTxDevice = false;
+    {
+        while (devices != 0) {
+            int deviceToDisable = devices & (-devices);
+            int actualDevices = getDevices(deviceToDisable, handle->mode, &rxDevice, &txDevice);
+
+            for (ALSAHandleList::iterator it = mDeviceList->begin(); it != mDeviceList->end(); ++it) {
+                if (it->useCase != NULL) {
+                    if (strcmp(it->useCase, handle->useCase)) {
+                        if ((&(*it)) != handle && handle->activeDevice && it->activeDevice && (it->activeDevice & actualDevices)) {
+                            ALOGD("disableRxDevice - false use case %s active Device %d deviceToDisable %d",
+                                  it->useCase, it->activeDevice, deviceToDisable);
+                            if(getDeviceType(it->activeDevice & actualDevices, 0) & DEVICE_TYPE_RX)
+                                disableRxDevice = false;
+                            if(getDeviceType(it->activeDevice & actualDevices, 0) & DEVICE_TYPE_TX)
+                                disableTxDevice = false;
+                        }
+                    }
                 }
             }
-        }
-    }
 
-    if(disableRxDevice && rxDeviceToDisable) {
-        if(handle->devices & AudioSystem::DEVICE_OUT_SPDIF) {
-            char *tempRxDevice = NULL;
-            tempRxDevice = getUCMDevice(handle->devices & ~AudioSystem::DEVICE_OUT_SPDIF,0);
-            if(tempRxDevice != NULL) {
-                snd_use_case_set_case(handle->ucMgr, "_disdev",tempRxDevice,handle->useCase);
-                free(tempRxDevice);
+            if(rxDevice) {
+                usecase_type = getUseCaseType(handle->useCase);
+                if (usecase_type & DEVICE_TYPE_RX) {
+                    if(disableRxDevice)
+                        snd_use_case_set_case(handle->ucMgr, "_disdev", rxDevice, handle->useCase);
+                    else
+                        snd_use_case_set_case(handle->ucMgr, "_dismod", handle->useCase, rxDevice);
+                }
+                free(rxDevice);
+                rxDevice = NULL;
             }
+
+            if(txDevice) {
+                usecase_type = getUseCaseType(handle->useCase);
+                if (usecase_type & USECASE_TYPE_TX) {
+                    if(disableTxDevice)
+                        snd_use_case_set_case(handle->ucMgr, "_disdev", txDevice, handle->useCase);
+                    else
+                        snd_use_case_set_case(handle->ucMgr, "_dismod", handle->useCase, txDevice);
+                }
+                free(txDevice);
+                txDevice = NULL;
+            }
+            devices = devices & (~deviceToDisable);
         }
-        snd_use_case_set_case(handle->ucMgr, "_disdev",rxDeviceToDisable,handle->useCase);
-    }
-    if(disableTxDevice && txDeviceToDisable) {
-        snd_use_case_set_case(handle->ucMgr, "_disdev",txDeviceToDisable,handle->useCase);
     }
     handle->activeDevice = 0;
+}
 
-    if(rxDeviceToDisable != NULL) {
-        free(rxDeviceToDisable);
-        rxDeviceToDisable = NULL;
-    }
-    if(txDeviceToDisable != NULL) {
-        free(txDeviceToDisable);
-        txDeviceToDisable = NULL;
-    }
-    if(rxDevice != NULL) {
-        free(rxDevice);
-        rxDevice = NULL;
-    }
-    if(txDevice != NULL) {
-        free(txDevice);
-        txDevice = NULL;
+void ALSADevice::enableDevice(alsa_handle_t *handle, bool bIsUseCaseSet)
+{
+    char *rxDevice = NULL, *txDevice = NULL;
+    uint32_t devices = handle->activeDevice;
+    unsigned usecase_type = 0;
+
+    ALOGD("enableDevice %d bIsUseCaseSet %d", handle->activeDevice, bIsUseCaseSet);
+    while (devices != 0) {
+        int deviceToEnable = devices & (-devices);
+        getDevices(deviceToEnable, handle->mode, &rxDevice, &txDevice);
+        if(rxDevice != NULL) {
+            usecase_type = getUseCaseType(handle->useCase);
+            if (usecase_type & USECASE_TYPE_RX) {
+                if(bIsUseCaseSet) {
+                    snd_use_case_set_case(handle->ucMgr, "_verb", handle->useCase, rxDevice);
+                    bIsUseCaseSet = false;
+                } else {
+                    snd_use_case_set_case(handle->ucMgr, "_enamod", handle->useCase, rxDevice);
+                }
+            }
+            free(rxDevice);
+            rxDevice = NULL;
+        }
+        if(txDevice != NULL) {
+            usecase_type = getUseCaseType(handle->useCase);
+            if (usecase_type & USECASE_TYPE_TX) {
+                if(bIsUseCaseSet) {
+                    snd_use_case_set_case(handle->ucMgr, "_verb", handle->useCase, txDevice);
+                    bIsUseCaseSet = false;
+                } else {
+                    snd_use_case_set_case(handle->ucMgr, "_enamod", handle->useCase, txDevice);
+                }
+            }
+            free(txDevice);
+            txDevice = NULL;
+        }
+        devices = devices & (~deviceToEnable);
     }
 }
 
@@ -1253,128 +1243,42 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input)
              } else if (mDevSettingsFlag & TTY_HCO) {
                  return strdup(SND_USE_CASE_DEV_EARPIECE); /* HANDSET RX */
              }
-        } else if( (devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
-                   (devices & AudioSystem::DEVICE_OUT_SPDIF) &&
-                   ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
-                    (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE) ) ) {
-            if (mDevSettingsFlag & ANC_FLAG) {
-                return strdup(SND_USE_CASE_DEV_SPDIF_SPEAKER_ANC_HEADSET);
-            } else {
-                return strdup(SND_USE_CASE_DEV_SPDIF_SPEAKER_HEADSET);
-            }
-        } else if( (devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
-                   (devices & AudioSystem::DEVICE_OUT_SPDIF) &&
-                   ((devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)) ) {
-            return strdup(SND_USE_CASE_DEV_HDMI_SPDIF_SPEAKER);
-        } else if( (devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
-                   (devices & AudioSystem::DEVICE_OUT_PROXY) &&
-                   ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
-                    (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE) ) ) {
-            if (mDevSettingsFlag & ANC_FLAG) {
-                return strdup(SND_USE_CASE_DEV_PROXY_RX_SPEAKER_ANC_HEADSET);
-            } else {
-                return strdup(SND_USE_CASE_DEV_PROXY_RX_SPEAKER_HEADSET);
-            }
-        } else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
-            ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
-            (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE))) {
-            if (mDevSettingsFlag & ANC_FLAG) {
-                return strdup(SND_USE_CASE_DEV_SPEAKER_ANC_HEADSET); /* COMBO SPEAKER+ANC HEADSET RX */
-            } else {
-                return strdup(SND_USE_CASE_DEV_SPEAKER_HEADSET); /* COMBO SPEAKER+HEADSET RX */
-            }
-        } else if ((devices & AudioSystem::DEVICE_OUT_SPDIF) &&
-                   ((devices & AudioSystem::DEVICE_OUT_ANC_HEADSET)||
-                    (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE)) ) {
-            return strdup(SND_USE_CASE_DEV_SPDIF_ANC_HEADSET);
-        } else if ((devices & AudioSystem::DEVICE_OUT_PROXY) &&
-                   ((devices & AudioSystem::DEVICE_OUT_ANC_HEADSET)||
-                    (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE)) ) {
-            return strdup(SND_USE_CASE_DEV_PROXY_RX_ANC_HEADSET);
-        } else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
-            ((devices & AudioSystem::DEVICE_OUT_ANC_HEADSET) ||
-            (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE))) {
-            return strdup(SND_USE_CASE_DEV_SPEAKER_ANC_HEADSET); /* COMBO SPEAKER+ANC HEADSET RX */
-        } else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
-                 (devices & AudioSystem::DEVICE_OUT_FM_TX)) {
-            return strdup(SND_USE_CASE_DEV_SPEAKER_FM_TX); /* COMBO SPEAKER+FM_TX RX */
-        } else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
-                 (devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)) {
-            return strdup(SND_USE_CASE_DEV_HDMI_SPEAKER); /* COMBO SPEAKER+ HDMI */
-        } else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
-                 (devices & AudioSystem::DEVICE_OUT_SPDIF)) {
-            return strdup(SND_USE_CASE_DEV_SPDIF_SPEAKER); /* COMBO SPEAKER+ SPDIF */
-        } else if ((devices & AudioSystem::DEVICE_OUT_EARPIECE) &&
-                 (devices & AudioSystem::DEVICE_OUT_SPDIF)) {
-            return strdup(SND_USE_CASE_DEV_SPDIF_HANDSET); /* COMBO EARPIECE + SPDIF */
-        } else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
-                 (devices & AudioSystem::DEVICE_OUT_PROXY)) {
-            return strdup(SND_USE_CASE_DEV_PROXY_RX_SPEAKER); /* COMBO SPEAKER + PROXY RX */
-        } else if ((devices & AudioSystem::DEVICE_OUT_EARPIECE) &&
-                 (devices & AudioSystem::DEVICE_OUT_PROXY)) {
-            return strdup(SND_USE_CASE_DEV_PROXY_RX_HANDSET); /* COMBO EARPIECE + PROXY RX */
         } else if (devices & AudioSystem::DEVICE_OUT_EARPIECE) {
-            return strdup(SND_USE_CASE_DEV_EARPIECE); /* HANDSET RX */
+                return strdup(SND_USE_CASE_DEV_EARPIECE); /* HANDSET RX */
+        } else if (devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET ||
+                   devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE) {
+                if (mDevSettingsFlag & ANC_FLAG)
+                    return strdup(SND_USE_CASE_DEV_ANC_HEADSET); /* ANC HEADSET RX */
+                else
+                    return strdup(SND_USE_CASE_DEV_HEADPHONES); /* HEADSET RX */
         } else if (devices & AudioSystem::DEVICE_OUT_SPEAKER) {
-            return strdup(SND_USE_CASE_DEV_SPEAKER); /* SPEAKER RX */
-        } else if ((devices & AudioSystem::DEVICE_OUT_SPDIF) &&
-                   ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
-                    (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE))) {
-            if (mDevSettingsFlag & ANC_FLAG) {
-                return strdup(SND_USE_CASE_DEV_SPDIF_ANC_HEADSET);
-            } else {
-                return strdup(SND_USE_CASE_DEV_SPDIF_HEADSET);
-            }
-        } else if ((devices & AudioSystem::DEVICE_OUT_PROXY) &&
-                   ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
-                    (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE))) {
-            if (mDevSettingsFlag & ANC_FLAG) {
-                return strdup(SND_USE_CASE_DEV_PROXY_RX_ANC_HEADSET);
-            } else {
-                return strdup(SND_USE_CASE_DEV_PROXY_RX_HEADSET);
-            }
-        } else if ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
-                   (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE)) {
-            if (mDevSettingsFlag & ANC_FLAG) {
+                return strdup(SND_USE_CASE_DEV_SPEAKER); /* SPEAKER RX */
+        } else if (devices & AudioSystem::DEVICE_OUT_ANC_HEADSET ||
+                   devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE) {
                 return strdup(SND_USE_CASE_DEV_ANC_HEADSET); /* ANC HEADSET RX */
-            } else {
-                return strdup(SND_USE_CASE_DEV_HEADPHONES); /* HEADSET RX */
-            }
-        } else if ((devices & AudioSystem::DEVICE_OUT_ANC_HEADSET) ||
-                   (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE)) {
-            return strdup(SND_USE_CASE_DEV_ANC_HEADSET); /* ANC HEADSET RX */
-        } else if ((devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO) ||
-                  (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_HEADSET) ||
-                  (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_CARKIT)) {
-            if (btsco_samplerate == BTSCO_RATE_16KHZ)
-                return strdup(SND_USE_CASE_DEV_BTSCO_WB_RX); /* BTSCO RX*/
-            else
-                return strdup(SND_USE_CASE_DEV_BTSCO_NB_RX); /* BTSCO RX*/
-        } else if ((devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP) ||
-                   (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES) ||
-                   (devices & AudioSystem::DEVICE_OUT_DIRECTOUTPUT) ||
-                   (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER)) {
-            /* Nothing to be done, use current active device */
-            return strdup(curRxUCMDevice);
-        } else if ((devices & AudioSystem::DEVICE_OUT_SPDIF) &&
-                   (devices & AudioSystem::DEVICE_OUT_SPEAKER)) {
-            return strdup(SND_USE_CASE_DEV_SPDIF_SPEAKER);
-        } else if ((devices & AudioSystem::DEVICE_OUT_SPDIF) &&
-                   (devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)) {
-            return strdup(SND_USE_CASE_DEV_HDMI_SPDIF);
+        } else if (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO ||
+                   devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_HEADSET ||
+                   devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_CARKIT) {
+                if (btsco_samplerate == BTSCO_RATE_16KHZ)
+                    return strdup(SND_USE_CASE_DEV_BTSCO_WB_RX); /* BTSCO RX*/
+                else
+                    return strdup(SND_USE_CASE_DEV_BTSCO_NB_RX); /* BTSCO RX*/
+        } else if (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP ||
+            devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES ||
+            devices &  AudioSystem::DEVICE_OUT_DIRECTOUTPUT ||
+            devices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER) {
+                /* Nothing to be done, use current active device */
+                return strdup(curRxUCMDevice);
         } else if (devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
-            return strdup(SND_USE_CASE_DEV_HDMI); /* HDMI RX */
+                return strdup(SND_USE_CASE_DEV_HDMI); /* HDMI RX */
         } else if (devices & AudioSystem::DEVICE_OUT_PROXY) {
-            return strdup(SND_USE_CASE_DEV_PROXY_RX); /* PROXY RX */
+                return strdup(SND_USE_CASE_DEV_PROXY_RX); /* PROXY RX */
         } else if (devices & AudioSystem::DEVICE_OUT_FM_TX) {
-            return strdup(SND_USE_CASE_DEV_FM_TX); /* FM Tx */
+                return strdup(SND_USE_CASE_DEV_FM_TX); /* FM Tx */
         } else if (devices & AudioSystem::DEVICE_OUT_SPDIF) {
-            return strdup(SND_USE_CASE_DEV_SPDIF);
-        } else if (devices & AudioSystem::DEVICE_OUT_DEFAULT) {
-            return strdup(SND_USE_CASE_DEV_SPEAKER); /* SPEAKER RX */
-        } else {
-            ALOGD("No valid output device: %u", devices);
+                return strdup(SND_USE_CASE_DEV_SPDIF);
         }
+        ALOGD("No valid output device: %u", devices);
     } else {
         if (!(mDevSettingsFlag & TTY_OFF) &&
             (callMode == AudioSystem::MODE_IN_CALL) &&
@@ -1803,7 +1707,7 @@ status_t ALSADevice::setHDMIChannelCount(int channels)
     return err;
 }
 
-void ALSADevice::getDevices(uint32_t devices, uint32_t mode, char **rxDevice, char **txDevice)
+int ALSADevice::getDevices(uint32_t devices, uint32_t mode, char **rxDevice, char **txDevice)
 {
     ALOGV("%s: device %d", __FUNCTION__, devices);
 
@@ -1836,7 +1740,7 @@ void ALSADevice::getDevices(uint32_t devices, uint32_t mode, char **rxDevice, ch
                       AudioSystem::DEVICE_IN_BUILTIN_MIC);
         } else if (devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
             devices = devices | (AudioSystem::DEVICE_OUT_AUX_DIGITAL |
-                      AudioSystem::DEVICE_IN_WIRED_HEADSET);
+                      AudioSystem::DEVICE_IN_AUX_DIGITAL);
         } else if (devices & AudioSystem::DEVICE_OUT_PROXY) {
             devices = devices | (AudioSystem::DEVICE_OUT_PROXY |
                       AudioSystem::DEVICE_IN_PROXY);
@@ -1848,7 +1752,7 @@ void ALSADevice::getDevices(uint32_t devices, uint32_t mode, char **rxDevice, ch
     *rxDevice = getUCMDevice(devices & AudioSystem::DEVICE_OUT_ALL, 0);
     *txDevice = getUCMDevice(devices & AudioSystem::DEVICE_IN_ALL, 1);
 
-    return;
+    return devices;
 }
 
 /**
@@ -1955,12 +1859,11 @@ int ALSADevice::checkAndGetAvailableUseCase(alsa_handle_t *handle, char altUseca
 
 int ALSADevice::setUseCase(alsa_handle_t *handle, bool bIsUseCaseSet)
 {
-    char *rxDevice = NULL, *txDevice = NULL;
     char altUseCase[MAX_STR_LEN] = "";
     int ret = 0;
-    unsigned usecase_type = 0;
 
     // check for Conflicts if usecase is already set
+    ALOGD("setUseCase device = %d", handle->activeDevice);
     if (!bIsUseCaseSet) {
         ret = checkAndGetAvailableUseCase(handle, altUseCase);
         if (ret > 0 && altUseCase[0] != '\0'){
@@ -1970,36 +1873,9 @@ int ALSADevice::setUseCase(alsa_handle_t *handle, bool bIsUseCaseSet)
             return -1;
         }
     }
+    enableDevice(handle, bIsUseCaseSet);
 
-    getDevices(handle->devices, handle->mode, &rxDevice, &txDevice);
-
-    if(rxDevice != NULL) {
-        usecase_type = getUseCaseType(handle->useCase);
-        if (usecase_type & USECASE_TYPE_RX) {
-            if(bIsUseCaseSet)
-                snd_use_case_set_case(handle->ucMgr, "_verb", handle->useCase, rxDevice);
-            else
-                snd_use_case_set_case(handle->ucMgr, "_enamod", handle->useCase, rxDevice);
-        }
-        if(rxDevice) {
-            free(rxDevice);
-            rxDevice = NULL;
-        }
-    }
-    if(txDevice != NULL) {
-        usecase_type = getUseCaseType(handle->useCase);
-        if (usecase_type & USECASE_TYPE_TX) {
-            if(bIsUseCaseSet)
-                snd_use_case_set_case(handle->ucMgr, "_verb", handle->useCase, txDevice);
-            else
-                snd_use_case_set_case(handle->ucMgr, "_enamod", handle->useCase, txDevice);
-        }
-        if(txDevice) {
-           free(txDevice);
-           txDevice = NULL;
-        }
-    }
-    return 0;
+   return 0;
 }
 
 status_t ALSADevice::exitReadFromProxy()

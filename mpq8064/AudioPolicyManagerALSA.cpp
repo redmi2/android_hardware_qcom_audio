@@ -810,7 +810,11 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
             if (device2 == 0) {
                 device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_SPEAKER;
             }
-
+            if (device2 & (AudioSystem::DEVICE_OUT_WIRED_HEADPHONE | AudioSystem::DEVICE_OUT_WIRED_HEADSET |
+                          AudioSystem::DEVICE_OUT_ANC_HEADPHONE | AudioSystem::DEVICE_OUT_ANC_HEADSET |
+                          AudioSystem::DEVICE_OUT_AUX_DIGITAL)) {
+                device &= ~(AudioSystem::DEVICE_OUT_SPEAKER);
+            }
             // device is DEVICE_OUT_SPEAKER if we come from case STRATEGY_SONIFICATION or
             // STRATEGY_ENFORCED_AUDIBLE, 0 otherwise
             device |= device2;

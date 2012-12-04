@@ -329,8 +329,10 @@ private:
     status_t    getMixerControl(const char *name, unsigned int &value, int index);
     status_t    setMixerControl(const char *name, unsigned int value, int index);
     status_t    setMixerControl(const char *name, const char *value);
-    void        getDevices(uint32_t devices, uint32_t mode,
+    int         getDevices(uint32_t devices, uint32_t mode,
                                     char **rxDevice, char **txDevice);
+    int         getDeviceType(uint32_t devices, uint32_t mode);
+    void        enableDevice(alsa_handle_t *handle, bool bIsUseCaseSet);
     status_t    setCaptureHardwareParams(alsa_handle_t *handle, bool isCompressed);
     status_t    setCaptureSoftwareParams(alsa_handle_t *handle, bool isCompressed);
 
