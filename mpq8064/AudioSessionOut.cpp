@@ -1886,8 +1886,8 @@ void AudioSessionOutALSA::setSpdifHdmiRoutingFlags(int devices)
             else
                 mSpdifFormat = COMPRESSED_FORCED_PCM_FORMAT;
         // 44.1, 22.05 and 11.025K are not supported on Spdif for Passthrough
-            if (mSampleRate == 44100 || mSampleRate == 22050 ||
-                mSampleRate == 11025)
+            if ((mSampleRate == 44100 || mSampleRate == 22050 ||
+                mSampleRate == 11025) && !mDtsTranscode)
                 mSpdifFormat = COMPRESSED_FORCED_PCM_FORMAT;
         }
     }
