@@ -181,13 +181,11 @@ status_t AudioPolicyManager::setDeviceConnectionState(AudioSystem::audio_devices
             if (state == AudioSystem::DEVICE_STATE_AVAILABLE) {
                 ALOGV("setDeviceConnectionState() changeRefCount Inc");
                 mOutputs.valueFor(mPrimaryOutput)->changeRefCount(AudioSystem::FM, 1);
+                newDevice = (audio_devices_t)(AudioPolicyManagerBase::getNewDevice(mPrimaryOutput, false) | AudioSystem::DEVICE_OUT_FM);
             }
             else {
                 ALOGV("setDeviceConnectionState() changeRefCount Dec");
                 mOutputs.valueFor(mPrimaryOutput)->changeRefCount(AudioSystem::FM, -1);
-            }
-            if(newDevice == 0){
-                newDevice = getDeviceForStrategy(STRATEGY_MEDIA, false);
             }
             AudioParameter param = AudioParameter();
             param.addInt(String8(AudioParameter::keyHandleFm), (int)newDevice);
@@ -766,7 +764,6 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
             break;
         }
         if (mAvailableOutputDevices & AudioSystem::DEVICE_OUT_FM) {
-            device |= AudioSystem::DEVICE_OUT_FM;
             if (mForceUse[AudioSystem::FOR_MEDIA] == AudioSystem::FORCE_SPEAKER) {
                 device &= ~(AudioSystem::DEVICE_OUT_WIRED_HEADSET);
                 device &= ~(AudioSystem::DEVICE_OUT_WIRED_HEADPHONE);
@@ -883,9 +880,6 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
             device = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_SPEAKER;
         }
 
-        if (mAvailableOutputDevices & AudioSystem::DEVICE_OUT_FM) {
-            device |= AudioSystem::DEVICE_OUT_FM;
-        }
 
         } break;
 
