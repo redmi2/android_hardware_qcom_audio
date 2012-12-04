@@ -300,10 +300,12 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
     ALOGV("PCM write complete");
     if (bytes < (mAlsaHandle->handle->period_size - mOutputMetadataLength)) {
         ALOGV("Last buffer case");
-        if ( ioctl(mAlsaHandle->handle->fd, SNDRV_PCM_IOCTL_START) < 0 ) {
-            ALOGE("Audio Start failed");
-        } else {
-            mAlsaHandle->handle->start = 1;
+        if(!mAlsaHandle->handle->start) {
+            if ( ioctl(mAlsaHandle->handle->fd, SNDRV_PCM_IOCTL_START) < 0 ) {
+                ALOGE("Audio Start failed");
+            } else {
+                mAlsaHandle->handle->start = 1;
+            }
         }
         mReachedEOS = true;
     }
@@ -507,13 +509,13 @@ status_t AudioSessionOutALSA::start()
             }
         }
         mPaused = false;
-    }
-    else {
+    } else if (!mAlsaHandle->handle->start) {
         //Signal the driver to start rendering data
         if (ioctl(mAlsaHandle->handle->fd, SNDRV_PCM_IOCTL_START)) {
             ALOGE("start:SNDRV_PCM_IOCTL_START failed\n");
             return UNKNOWN_ERROR;
         }
+        mAlsaHandle->handle->start = 1;
     }
     return NO_ERROR;
 }
@@ -610,14 +612,16 @@ status_t AudioSessionOutALSA::flush()
     //    If its in paused state,
     //          Set the seek flag, Resume will take care of flushing the
     //          driver
-    if (!mPaused && !mEosEventReceived) {
-        if ((err = ioctl(mAlsaHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE,1)) < 0) {
-            ALOGE("Audio Pause failed");
-            return UNKNOWN_ERROR;
+    if (!mPaused) {
+        if (!mEosEventReceived) {
+            if ((err = ioctl(mAlsaHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE,1)) < 0) {
+                ALOGE("Audio Pause failed");
+                return UNKNOWN_ERROR;
+            }
+            //mReachedEOS = false;
+            if ((err = drain()) != OK)
+                return err;
         }
-        //mReachedEOS = false;
-        if ((err = drain()) != OK)
-            return err;
     } else {
         mSeeking = true;
     }
@@ -738,8 +742,11 @@ status_t AudioSessionOutALSA::isBufferAvailable(int *isAvail) {
     ALOGV("isBufferAvailable Empty Queue size() = %d, Filled Queue size() = %d ",
           mEmptyQueue.size(),mFilledQueue.size());
     *isAvail = false;
-    // 1.) Wait till a empty buffer is available in the Empty buffer queue
     mEmptyQueueMutex.lock();
+    if (mSkipWrite && (mEmptyQueue.size() == BUFFER_COUNT)) {
+        mSkipWrite = false;
+    }
+    // 1.) Wait till a empty buffer is available in the Empty buffer queue
     if (mEmptyQueue.empty()) {
         ALOGV("Write: waiting on mWriteCv");
         mLock.unlock();
