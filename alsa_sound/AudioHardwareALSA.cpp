@@ -665,7 +665,7 @@ status_t AudioHardwareALSA::doRouting(int device)
         ALOGV("Ignoring routing for FM/INCALL/VOIP recording");
         return NO_ERROR;
     }
-    ALOGV("device = 0x%x,mCurDevice 0x%x", device, mCurDevice);
+    ALOGV("device = 0x%x,mCurDevice 0x%x mCurRxDevice 0x%x", device, mCurDevice,mCurRxDevice);
     if (device == 0)
         device = mCurDevice;
     ALOGV("doRouting: device %d newMode %d mCSCallActive %d mVolteCallActive %d"
@@ -731,7 +731,7 @@ status_t AudioHardwareALSA::doRouting(int device)
 #endif
         if ((isExtOutDevice(device)) && mRouteAudioToExtOut == true)  {
             ALOGV(" External Output Enabled - Routing everything to proxy now");
-            if (device != mCurDevice) {
+            if (device != mCurRxDevice) {
                 switchExtOut(device);
             }
             ALSAHandleList::iterator it = mDeviceList.end();
@@ -739,11 +739,11 @@ status_t AudioHardwareALSA::doRouting(int device)
             status_t err = NO_ERROR;
             uint32_t activeUsecase = useCaseStringToEnum(it->useCase);
             if (!((device & AudioSystem::DEVICE_OUT_ALL_A2DP) &&
-                  (mCurDevice & AudioSystem::DEVICE_OUT_ALL_USB))) {
+                  (mCurRxDevice & AudioSystem::DEVICE_OUT_ALL_USB))) {
                 if ((activeUsecase == USECASE_HIFI_LOW_POWER) ||
                     (activeUsecase == USECASE_HIFI_TUNNEL)) {
-                    if (device != mCurDevice) {
-                        if((isExtOutDevice(mCurDevice)) &&
+                    if (device != mCurRxDevice) {
+                        if((isExtOutDevice(mCurRxDevice)) &&
                            (isExtOutDevice(device))) {
                             activeUsecase = getExtOutActiveUseCases_l();
                             stopPlaybackOnExtOut_l(activeUsecase);
@@ -754,8 +754,8 @@ status_t AudioHardwareALSA::doRouting(int device)
                     err = startPlaybackOnExtOut_l(activeUsecase);
                 } else {
                     //WHY NO check for prev device here?
-                    if (device != mCurDevice) {
-                        if((isExtOutDevice(mCurDevice)) &&
+                    if (device != mCurRxDevice) {
+                        if((isExtOutDevice(mCurRxDevice)) &&
                             (isExtOutDevice(device))) {
                             activeUsecase = getExtOutActiveUseCases_l();
                             stopPlaybackOnExtOut_l(activeUsecase);
@@ -773,7 +773,7 @@ status_t AudioHardwareALSA::doRouting(int device)
                 if(err) {
                     ALOGW("startPlaybackOnExtOut_l for hardware output failed err = %d", err);
                     stopPlaybackOnExtOut_l(activeUsecase);
-                    mALSADevice->route(&(*it),(uint32_t)mCurDevice, newMode);
+                    mALSADevice->route(&(*it),(uint32_t)mCurRxDevice, newMode);
                     return err;
                 }
             }
@@ -790,7 +790,7 @@ status_t AudioHardwareALSA::doRouting(int device)
                 ALOGW("stopPlaybackOnExtOut_l failed = %d", err);
                 return err;
             }
-            if (device != mCurDevice) {
+            if (device != mCurRxDevice) {
                 mALSADevice->route(&(*it),(uint32_t)device, newMode);
             }
         } else if((((mCurDevice & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
@@ -821,6 +821,9 @@ status_t AudioHardwareALSA::doRouting(int device)
         }
     }
     mCurDevice = device;
+    if (device & AudioSystem::DEVICE_OUT_ALL) {
+        mCurRxDevice = device;
+    }
     return NO_ERROR;
 }
 
