@@ -318,12 +318,12 @@ uint32_t AudioPolicyManager::checkDeviceMuteStrategies(AudioOutputDescriptor *ou
                 audio_io_handle_t curOutput = mOutputs.keyAt(j);
                 ALOGVV("checkDeviceMuteStrategies() %s strategy %d (curDevice %04x) on output %d",
                       mute ? "muting" : "unmuting", i, curDevice, curOutput);
-                setStrategyMute((routing_strategy)i, mute, curOutput, mute ? 0 : delayMs);
+                setStrategyMute((routing_strategy)i, mute, curOutput, mute ? 0 : delayMs * 4);
                 if (desc->strategyRefCount((routing_strategy)i) != 0) {
                     if (tempMute) {
                         setStrategyMute((routing_strategy)i, true, curOutput);
                         setStrategyMute((routing_strategy)i, false, curOutput,
-                                            desc->latency() * 2, device);
+                                            desc->latency() * 4, device);
                     }
                     if (tempMute || mute) {
                         if (muteWaitMs < desc->latency()) {
