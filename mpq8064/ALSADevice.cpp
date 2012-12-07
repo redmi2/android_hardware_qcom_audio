@@ -2238,6 +2238,11 @@ void ALSADevice::setUseCase(alsa_handle_t *handle, bool bIsUseCaseSet, char *dev
         snd_use_case_set_case(handle->ucMgr, "_enamod", handle->useCase, device);
 }
 
+void ALSADevice::removeUseCase(alsa_handle_t *handle, char *device)
+{
+    snd_use_case_set_case(handle->ucMgr, "_disdev", device, handle->useCase);
+}
+
 status_t ALSADevice::openCapture(alsa_handle_t *handle,
                                  bool isMmapMode,
                                  bool isCompressed)
