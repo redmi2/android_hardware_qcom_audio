@@ -304,7 +304,7 @@ AudioSessionOutALSA::~AudioSessionOutALSA()
 
 status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
 {
-    Mutex::Autolock autoLock(mLock);
+    Mutex::Autolock autoLock(mControlLock);
     AudioParameter param = AudioParameter(keyValuePairs);
     String8 key = String8(AudioParameter::keyRouting);
     int device;
@@ -322,7 +322,7 @@ status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
 
 String8 AudioSessionOutALSA::getParameters(const String8& keys)
 {
-    Mutex::Autolock autoLock(mLock);
+    Mutex::Autolock autoLock(mControlLock);
     AudioParameter param = AudioParameter(keys);
     String8 value;
     String8 key = String8(AudioParameter::keyRouting);
@@ -337,7 +337,7 @@ String8 AudioSessionOutALSA::getParameters(const String8& keys)
 
 status_t AudioSessionOutALSA::setVolume(float left, float right)
 {
-    Mutex::Autolock autoLock(mLock);
+    Mutex::Autolock autoLock(mControlLock);
     float volume;
     status_t status = NO_ERROR;
 

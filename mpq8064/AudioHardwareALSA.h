@@ -538,6 +538,7 @@ public:
 
 private:
     Mutex               mLock;
+    Mutex               mControlLock;
     uint32_t            mFrameCount;
     uint32_t            mSampleRate;
     uint32_t            mChannels;
