@@ -870,7 +870,8 @@ uint32_t AudioPolicyManager::setOutputDevice(audio_io_handle_t output,
     if (device != 0) {
         outputDesc->mDevice = device;
     }
-    muteWaitMs = checkDeviceMuteStrategies(outputDesc, device, delayMs);
+    // mute media streams if speaker + headset + FM are selected
+    muteWaitMs = checkDeviceMuteStrategies(outputDesc, prevDevice, delayMs);
 
     // Do not change the routing if:
     //  - the requested device is 0
@@ -889,7 +890,9 @@ uint32_t AudioPolicyManager::setOutputDevice(audio_io_handle_t output,
     // update stream volumes according to new device
     applyStreamVolumes(output, device, delayMs);
 
-    muteWaitMs = checkDeviceMuteStrategies(outputDesc, prevDevice, delayMs);
+    //if changing from a combined headset + speaker + FM  route, unmute media streams
+    if (mAvailableOutputDevices & AudioSystem::DEVICE_OUT_FM)
+        muteWaitMs = checkDeviceMuteStrategies(outputDesc, prevDevice, delayMs);
 
     return muteWaitMs;
 }
