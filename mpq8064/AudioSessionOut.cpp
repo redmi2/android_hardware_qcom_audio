@@ -952,7 +952,7 @@ void  AudioSessionOutALSA::eventThreadEntry() {
     int err_poll = 0;
     int avail = 0;
     int i = 0;
-    struct pollfd pfd[NUM_FDS];
+    struct pollfd pfd[NUM_AUDIOSESSION_FDS];
     struct pcm * local_handle = NULL;
     struct pcm * local_handle2 = NULL;
     mEventMutex.lock();
@@ -993,7 +993,7 @@ void  AudioSessionOutALSA::eventThreadEntry() {
                 ALOGV("poll fd2 set to -1");
         }
     }
-    while(!mKillEventThread && ((err_poll = poll(pfd, NUM_FDS, timeout)) >=0)) {
+    while(!mKillEventThread && ((err_poll = poll(pfd, NUM_AUDIOSESSION_FDS, timeout)) >=0)) {
         ALOGV("pfd[0].revents =%d ", pfd[0].revents);
         ALOGV("pfd[1].revents =%d ", pfd[1].revents);
         ALOGV("pfd[2].revents =%d ", pfd[2].revents);
