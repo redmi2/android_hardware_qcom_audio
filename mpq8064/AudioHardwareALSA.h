@@ -142,7 +142,8 @@ class AudioBitstreamSM;
 #define KILL_EVENT_THREAD 1
 #define KILL_PLAYBACK_THREAD 1
 #define KILL_CAPTURE_THREAD 1
-#define NUM_FDS 3
+#define NUM_FDS 2
+#define NUM_AUDIOSESSION_FDS 3
 #define AFE_PROXY_SAMPLE_RATE 48000
 #define AFE_PROXY_CHANNEL_COUNT 2
 
@@ -364,7 +365,6 @@ private:
         };
 
         uint32_t mProxyState;
-        struct snd_xferi mX;
         unsigned mAvail;
         struct pollfd mPfdProxy[NUM_FDS];
         long mFrames;
@@ -805,7 +805,6 @@ private:
     Mutex               mCaptureMutex;
     Condition           mCaptureCv;
     struct              pollfd mCapturePfd[NUM_FDS];
-    struct              snd_xferi mX;
     unsigned            mAvail;
     long                mFrames;
     int                 mCapturefd;
