@@ -326,9 +326,14 @@ String8 AudioSessionOutALSA::getParameters(const String8& keys)
     AudioParameter param = AudioParameter(keys);
     String8 value;
     String8 key = String8(AudioParameter::keyRouting);
-
+    int devices = mDevices;
+    ALOGV("getParameters mDevices %d mRouteAudioToA2dp %d", mDevices, mRouteAudioToA2dp);
     if (param.get(key, value) == NO_ERROR) {
-        param.addInt(key, (int)mDevices);
+        if((mDevices & AudioSystem::DEVICE_OUT_PROXY) && mRouteAudioToA2dp) {
+            devices |= AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP;
+            devices &= ~AudioSystem::DEVICE_OUT_PROXY;
+        }
+        param.addInt(key, (int)devices);
     }
 
     ALOGV("getParameters() %s", param.toString().string());

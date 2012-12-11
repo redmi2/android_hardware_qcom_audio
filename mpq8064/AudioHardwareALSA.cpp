@@ -400,7 +400,13 @@ String8 AudioHardwareALSA::getParameters(const String8& keys)
 
     key = String8(AudioParameter::keyRouting);
     if (param.getInt(key, device) == NO_ERROR) {
-        param.addInt(key, mCurDevice);
+        int devices = mCurDevice;
+        ALOGV("mCurDevice %d A2DPEnabled %d", mCurDevice, mIsA2DPEnabled);
+        if((mCurDevice & AudioSystem::DEVICE_OUT_PROXY) && (mIsA2DPEnabled == true)) {
+            devices |= AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP;
+            devices &= ~AudioSystem::DEVICE_OUT_PROXY;
+        }
+        param.addInt(key, devices);
     }
 
     ALOGV("AudioHardwareALSA::getParameters() %s", param.toString().string());
@@ -1212,7 +1218,6 @@ status_t AudioHardwareALSA::stopA2dpPlayback_l(uint32_t activeUsecase) {
                  mIsA2DPEnabled);
 
          if(!getA2DPActiveUseCases_l()) {
-             mIsA2DPEnabled = false;
 
              mA2dpMutex.unlock();
              err = stopA2dpThread();
@@ -1233,6 +1238,7 @@ status_t AudioHardwareALSA::stopA2dpPlayback_l(uint32_t activeUsecase) {
 
              mA2DPActiveUseCases = 0x0;
              mRouteAudioToA2dp = false;
+             mIsA2DPEnabled = false;
 
 #ifdef OUTPUT_BUFFER_LOG
     ALOGV("close file output");
