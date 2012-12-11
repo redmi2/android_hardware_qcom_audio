@@ -17,7 +17,7 @@
  */
 
 #define LOG_TAG "ALSADevice"
-#define LOG_NDEBUG 0
+//#define LOG_NDEBUG 0
 #define LOG_NDDEBUG 0
 #include <utils/Log.h>
 #include <cutils/properties.h>
@@ -75,6 +75,7 @@ ALSADevice::ALSADevice() {
     mProxyParams.mCaptureBuffer = NULL;
     mProxyParams.mProxyState = proxy_params::EProxyClosed;
     mProxyParams.mProxyPcmHandle = NULL;
+    mVoiceSessionId = -1;
 
     ALOGD("ALSA module opened");
 }
@@ -379,7 +380,7 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
 
 #ifdef QCOM_CSDCLIENT_ENABLED
     if (platform_is_Fusion3() && (inCallDevSwitch == true)) {
-        err = csd_client_disable_device();
+        err = csd_client_disable_device(mVoiceSessionId);
         if (err < 0)
         {
             ALOGE("csd_client_disable_device, failed, error %d", err);
@@ -519,7 +520,7 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
 
 #ifdef QCOM_CSDCLIENT_ENABLED
         ALOGV("rx_dev_id=%d, tx_dev_id=%d\n", rx_dev_id, tx_dev_id);
-        err = csd_client_enable_device(rx_dev_id, tx_dev_id, mDevSettingsFlag);
+        err = csd_client_enable_device(rx_dev_id, tx_dev_id, mDevSettingsFlag, mVoiceSessionId);
         if (err < 0)
         {
             ALOGE("csd_client_disable_device failed, error %d", err);
@@ -860,7 +861,7 @@ status_t ALSADevice::startVoiceCall(alsa_handle_t *handle)
 
     if (platform_is_Fusion3()) {
 #ifdef QCOM_CSDCLIENT_ENABLED
-        err = csd_client_start_voice();
+        err = csd_client_start_voice(mVoiceSessionId);
         if (err < 0) {
             ALOGE("startVoiceCall: csd_client error %d\n", err);
             goto Error;
@@ -1041,11 +1042,15 @@ status_t ALSADevice::close(alsa_handle_t *handle)
     handle->rxHandle = 0;
     ALOGD("close: handle %p h %p", handle, h);
     if (h) {
-        if ((!strcmp(handle->useCase, SND_USE_CASE_VERB_VOICECALL) ||
-             !strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOICE)) &&
-            platform_is_Fusion3()) {
+            if (((!strcmp(handle->useCase, SND_USE_CASE_VERB_VOICECALL) ||
+                !strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOICE)) ||
+                (!strcmp(handle->useCase, SND_USE_CASE_VERB_VOLTE) ||
+                !strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOLTE)) ||
+                (!strcmp(handle->useCase, SND_USE_CASE_VERB_VOICE2) ||
+                !strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOICE2))) &&
+                platform_is_Fusion3()) {
 #ifdef QCOM_CSDCLIENT_ENABLED
-            err = csd_client_stop_voice();
+            err = csd_client_stop_voice(mVoiceSessionId);
             if (err < 0) {
                 ALOGE("s_close: csd_client error %d\n", err);
             }
@@ -1178,10 +1183,10 @@ int ALSADevice::getUseCaseType(const char *useCase)
             MAX_LEN(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE,
             MAX_LEN(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE)) ||
-        !strncmp(useCase, SND_USE_CASE_VERB_SGLTECALL,
-            MAX_LEN(useCase, SND_USE_CASE_VERB_SGLTECALL)) ||
-        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_SGLTE,
-            MAX_LEN(useCase, SND_USE_CASE_MOD_PLAY_SGLTE)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_VOICE2,
+            MAX_LEN(useCase, SND_USE_CASE_VERB_VOICE2)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_VOICE2,
+            MAX_LEN(useCase, SND_USE_CASE_MOD_PLAY_VOICE2)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_VOLTE,
             MAX_LEN(useCase, SND_USE_CASE_VERB_VOLTE)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_VOLTE,
@@ -1501,40 +1506,48 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
     return NULL;
 }
 
-void ALSADevice::setVoiceVolume(int vol)
+void ALSADevice::setVoiceVolume(int vol, int sessionid)
 {
     int err = 0;
-    ALOGD("setVoiceVolume: volume %d", vol);
+    ALOGD("setVoiceVolume: volume %d sessionid:%d", vol, sessionid);
     setMixerControl("Voice Rx Volume", vol, 0);
 
     if (platform_is_Fusion3()) {
 #ifdef QCOM_CSDCLIENT_ENABLED
-        err = csd_client_volume(vol);
+        err = csd_client_volume(vol, sessionid);
         if (err < 0) {
             ALOGE("setVoiceVolume: csd_client error %d", err);
-        } 
+        }
 #endif
     }
 }
 
-void ALSADevice::setSGLTEVolume(int vol)
+void ALSADevice::setVoice2Volume(int vol, int sessionid)
 {
     int err = 0;
-    ALOGD("setSGLTEVolume: volume %d", vol);
-    setMixerControl("SGLTE Rx Volume", vol, 0);
+
+    ALOGD("setVoice2Volume: volume %d sessionid:%d", vol, sessionid);
+    setMixerControl("Voice2 Rx Volume", vol, 0);
 
     if (platform_is_Fusion3()) {
-        err = csd_client_volume(vol);
+        err = csd_client_volume(vol, sessionid);
         if (err < 0) {
-            ALOGE("setSGLTEVolume: csd_client error %d", err);
+            ALOGE("setVoice2Volume: csd_client error %d", err);
         }
     }
 }
 
-void ALSADevice::setVoLTEVolume(int vol)
+void ALSADevice::setVoLTEVolume(int vol, int sessionid)
 {
-    ALOGD("setVoLTEVolume: volume %d", vol);
+    int err;
+    ALOGD("setVoLTEVolume: volume %d sessionid:%d", vol, sessionid);
     setMixerControl("VoLTE Rx Volume", vol, 0);
+    if (platform_is_Fusion3()) {
+        err = csd_client_volume(vol, sessionid);
+        if (err < 0) {
+            ALOGE("setVoLTEVolume: csd_client error %d", err);
+        }
+    }
 }
 
 
@@ -1544,15 +1557,15 @@ void ALSADevice::setVoipVolume(int vol)
     setMixerControl("Voip Rx Volume", vol, 0);
 }
 
-void ALSADevice::setMicMute(int state)
+void ALSADevice::setMicMute(int state, int sessionid)
 {
     int err = 0;
-    ALOGD("setMicMute: state %d", state);
+    ALOGD("setMicMute: state %d sessionid:%d", state, sessionid);
     setMixerControl("Voice Tx Mute", state, 0);
 
     if (platform_is_Fusion3()) {
 #ifdef QCOM_CSDCLIENT_ENABLED
-        err = csd_client_mic_mute(state);
+        err = csd_client_mic_mute(state, sessionid);
         if (err < 0) {
             ALOGE("setMicMute: csd_client error %d", err);
         }
@@ -1560,24 +1573,32 @@ void ALSADevice::setMicMute(int state)
     }
 }
 
-void ALSADevice::setSGLTEMicMute(int state)
+void ALSADevice::setVoice2MicMute(int state, int sessionid)
 {
     int err = 0;
-    ALOGD("setSGLTEMicMute: state %d", state);
-    setMixerControl("SGLTE Tx Mute", state, 0);
+
+    ALOGD("setVoice2MicMute: state %d sessionid:%d", state, sessionid);
+    setMixerControl("Voice2 Tx Mute", state, 0);
 
     if (platform_is_Fusion3()) {
-        err = csd_client_mic_mute(state);
+        err = csd_client_mic_mute(state, sessionid);
         if (err < 0) {
-            ALOGE("setSGLTEMicMute: csd_client error %d", err);
+            ALOGE("setVoice2MicMute: csd_client error %d", err);
         }
     }
 }
 
-void ALSADevice::setVoLTEMicMute(int state)
+void ALSADevice::setVoLTEMicMute(int state, int sessionid)
 {
-    ALOGD("setVolteMicMute: state %d", state);
+    int err;
+    ALOGD("setVolteMicMute: state %d sessionid:%d", state, sessionid);
     setMixerControl("VoLTE Tx Mute", state, 0);
+    if (platform_is_Fusion3()) {
+        err = csd_client_mic_mute(state, sessionid);
+        if (err < 0) {
+            ALOGE("setVoLTEMicMute: csd_client error %d", err);
+        }
+    }
 }
 
 void ALSADevice::setVoipMicMute(int state)
@@ -1622,20 +1643,21 @@ void ALSADevice::setBtscoRate(int rate)
     mBtscoSamplerate = rate;
 }
 
-void ALSADevice::enableWideVoice(bool flag)
+void ALSADevice::enableWideVoice(bool flag, char *buf)
 {
     int err = 0;
 
-    ALOGD("enableWideVoice: flag %d", flag);
+    ALOGE("enableWideVoice: flag %d", flag);
     if(flag == true) {
         setMixerControl("Widevoice Enable", 1, 0);
     } else {
         setMixerControl("Widevoice Enable", 0, 0);
     }
 
-    if (platform_is_Fusion3()) {
+    if (platform_is_Fusion3() && (buf != NULL)) {
 #ifdef QCOM_CSDCLIENT_ENABLED
-        err == csd_client_wide_voice(flag);
+
+        err == csd_client_wide_voice(flag, buf);
         if (err < 0) {
             ALOGE("enableWideVoice: csd_client error %d", err);
         }
@@ -1649,11 +1671,11 @@ void ALSADevice::setVocRecMode(uint8_t mode)
     setMixerControl("Incall Rec Mode", mode, 0);
 }
 
-void ALSADevice::enableFENS(bool flag)
+void ALSADevice::enableFENS(bool flag, int sessionid)
 {
     int err = 0;
 
-    ALOGD("enableFENS: flag %d", flag);
+    ALOGE("enableFENS: flag %d sessionid:%d", flag, sessionid);
     if(flag == true) {
         setMixerControl("FENS Enable", 1, 0);
     } else {
@@ -1662,7 +1684,7 @@ void ALSADevice::enableFENS(bool flag)
 
     if (platform_is_Fusion3()) {
 #ifdef QCOM_CSDCLIENT_ENABLED
-        err = csd_client_fens(flag);
+        err = csd_client_fens(flag, sessionid);
         if (err < 0) {
             ALOGE("enableFENS: csd_client error %d", err);
         }
@@ -1670,11 +1692,11 @@ void ALSADevice::enableFENS(bool flag)
     }
 }
 
-void ALSADevice::enableSlowTalk(bool flag)
+void ALSADevice::enableSlowTalk(bool flag, int sessionid)
 {
     int err = 0;
 
-    ALOGD("enableSlowTalk: flag %d", flag);
+    ALOGE("enableSlowTalk: flag %d sessionid:%d", flag, sessionid);
     if(flag == true) {
         setMixerControl("Slowtalk Enable", 1, 0);
     } else {
@@ -1683,7 +1705,7 @@ void ALSADevice::enableSlowTalk(bool flag)
 
     if (platform_is_Fusion3()) {
 #ifdef QCOM_CSDCLIENT_ENABLED
-        err = csd_client_slow_talk(flag);
+        err = csd_client_slow_talk(flag, sessionid);
         if (err < 0) {
             ALOGE("enableSlowTalk: csd_client error %d", err);
         }
@@ -1788,6 +1810,12 @@ status_t ALSADevice::setEcrxDevice(char *device)
     status_t err = NO_ERROR;
     setMixerControl("EC_REF_RX", device);
     return err;
+}
+
+void ALSADevice::setVoiceSessionId(int sessionid)
+{
+    mVoiceSessionId = sessionid;
+    ALOGV("Voice SessionId:%d", mVoiceSessionId);
 }
 
 void ALSADevice::setInChannels(int channels)

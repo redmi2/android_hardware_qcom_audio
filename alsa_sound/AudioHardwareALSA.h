@@ -210,29 +210,30 @@ public:
     status_t startVoiceCall(alsa_handle_t *handle);
     status_t startVoipCall(alsa_handle_t *handle);
     status_t startFm(alsa_handle_t *handle);
-    void     setVoiceVolume(int volume);
+    void     setVoiceVolume(int volume, int sessionid);
     void     setVoipVolume(int volume);
-    void     setMicMute(int state);
+    void     setMicMute(int state, int sessionid);
     void     setVoipMicMute(int state);
     void     setVoipConfig(int mode, int rate);
     status_t setFmVolume(int vol);
     void     setBtscoRate(int rate);
     status_t setLpaVolume(int vol);
-    void     enableWideVoice(bool flag);
-    void     enableFENS(bool flag);
+    void     enableWideVoice(bool flag, char *sessioname);
+    void     enableFENS(bool flag, int sessionid);
     void     setFlags(uint32_t flag);
     status_t setCompressedVolume(int vol);
-    void     enableSlowTalk(bool flag);
+    void     enableSlowTalk(bool flag, int sessionid);
     void     setVocRecMode(uint8_t mode);
-    void     setVoLTEMicMute(int state);
-    void     setVoLTEVolume(int vol);
-    void     setSGLTEMicMute(int state);
-    void     setSGLTEVolume(int vol);
+    void     setVoLTEMicMute(int state, int sessionid);
+    void     setVoLTEVolume(int vol, int sessionid);
+    void     setVoice2MicMute(int state, int sessionid);
+    void     setVoice2Volume(int vol, int sessionid);
     status_t setEcrxDevice(char *device);
     void     setInChannels(int);
     //TODO:check if this needs to be public
     void     disableDevice(alsa_handle_t *handle);
     char *getUCMDeviceFromAcdbId(int acdb_id);
+    void     setVoiceSessionId(int sessionid);
 
 protected:
     friend class AudioHardwareALSA;
@@ -275,6 +276,7 @@ private:
     int mCallMode;
     struct mixer*  mMixer;
     int mInChannels;
+    int mVoiceSessionId;
 //   ALSAHandleList  *mDeviceList;
 
     struct proxy_params {
@@ -760,11 +762,13 @@ protected:
 #endif
     void                setInChannels(int device);
 
-    void                disableVoiceCall(char* verb, char* modifier, int mode, int device);
-    void                enableVoiceCall(char* verb, char* modifier, int mode, int device);
+    void                disableVoiceCall(char* verb, char* modifier, int mode, int device,
+                                                                           int sessionid);
+    void                enableVoiceCall(char* verb, char* modifier, int mode, int device,
+                                                                           int sessionid);
     bool                routeVoiceCall(int device, int	newMode);
     bool                routeVoLTECall(int device, int newMode);
-    bool                routeSGLTECall(int device, int newMode);
+    bool                routeVoice2Call(int device, int newMode);
     friend class AudioSessionOutALSA;
     friend class AudioStreamOutALSA;
     friend class AudioStreamInALSA;
@@ -794,9 +798,10 @@ protected:
     bool                mMicMute;
     int mCSCallActive;
     int mVolteCallActive;
-    int mSGLTECallActive;
+    int mVoice2CallActive;
     int mCallState;
     int mIsFmActive;
+    int mVoiceSessionId;
     bool mBluetoothVGS;
     bool mFusion3Platform;
 #ifdef QCOM_USBAUDIO_ENABLED
