@@ -459,6 +459,7 @@ String8 AudioHardwareALSA::getParameters(const String8& keys)
 {
     AudioParameter param = AudioParameter(keys);
     String8 value;
+    int device;
 
     String8 key = String8(DUALMIC_KEY);
     if (param.get(key, value) == NO_ERROR) {
@@ -523,6 +524,12 @@ String8 AudioHardwareALSA::getParameters(const String8& keys)
     }
 #endif
 
+
+
+    key = String8(AudioParameter::keyRouting);
+    if (param.getInt(key, device) == NO_ERROR) {
+        param.addInt(key, mCurDevice);
+    }
 
     ALOGV("AudioHardwareALSA::getParameters() %s", param.toString().string());
     return param.toString();
