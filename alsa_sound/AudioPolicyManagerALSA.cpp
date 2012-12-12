@@ -155,6 +155,13 @@ status_t AudioPolicyManager::setDeviceConnectionState(AudioSystem::audio_devices
 
         updateDeviceForStrategy();
 
+        if (state == AudioSystem::DEVICE_STATE_AVAILABLE &&
+                AudioSystem::isA2dpDevice(device) &&
+                (mAvailableOutputDevices & AudioSystem::DEVICE_OUT_PROXY)) {
+            ALOGV("Delay the proxy device open");
+            return NO_ERROR;
+        }
+
         audio_devices_t newDevice = AudioPolicyManagerBase::getNewDevice(mPrimaryOutput, false /*fromCache*/);
         if(device == AudioSystem::DEVICE_OUT_FM) {
             if (state == AudioSystem::DEVICE_STATE_AVAILABLE) {
