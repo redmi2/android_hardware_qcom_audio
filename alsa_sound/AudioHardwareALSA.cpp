@@ -443,11 +443,9 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
 
     key = String8("A2dpSuspended");
     if (param.get(key, value) == NO_ERROR) {
-        if (value == "true") {
-             if (mA2dpDevice != NULL) {
-                 mA2dpDevice->set_parameters(mA2dpDevice,keyValuePairs);
-             }
-        }
+         if (mA2dpDevice != NULL) {
+             mA2dpDevice->set_parameters(mA2dpDevice,keyValuePairs);
+         }
         param.remove(key);
     }
 
