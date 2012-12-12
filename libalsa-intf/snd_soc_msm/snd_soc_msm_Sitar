@@ -3336,7 +3336,6 @@ SectionModifier
 EndSection
 
 SectionModifier
-<<<<<<< HEAD
 	Name "Play TunnelUSB PROXY Rx"
 
 	EnableSequence
@@ -3349,7 +3348,10 @@ SectionModifier
 
 	# ALSA PCMs
 	PlaybackPCM 9
-=======
+
+EndSection
+
+SectionModifier
 	Name "Play Lowlatency Music"
 	Comment "Modifier for Lowlatency music playback"
 
@@ -3627,7 +3629,6 @@ SectionModifier
 	# ALSA PCMs
 	CapturePCM 14
         PlaybackPCM 14
->>>>>>> eb20126... libalsa-intf: Add support for low latency playback
 
 EndSection
 # End of master file
