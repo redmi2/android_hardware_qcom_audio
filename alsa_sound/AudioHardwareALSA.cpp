@@ -2234,12 +2234,14 @@ status_t AudioHardwareALSA::stopExtOutThread()
         ALOGD("Return - thread not live");
         return NO_ERROR;
     }
+    mExtOutMutex.lock();
     mKillExtOutThread = true;
     err = mALSADevice->exitReadFromProxy();
     if(err) {
         ALOGE("exitReadFromProxy failed = %d", err);
     }
     mExtOutCv.signal();
+    mExtOutMutex.unlock();
     int ret = pthread_join(mExtOutThread,NULL);
     ALOGD("ExtOut thread killed = %d", ret);
     return err;
@@ -2298,6 +2300,9 @@ void AudioHardwareALSA::extOutThreadFunc() {
 
         {
             Mutex::Autolock autolock1(mExtOutMutex);
+            if (mKillExtOutThread) {
+                break;
+            }
             if (!mExtOutStream || !mIsExtOutEnabled ||
                 !mALSADevice->isProxyDeviceOpened() ||
                 (mALSADevice->isProxyDeviceSuspended()) ||
