@@ -568,9 +568,6 @@ void AudioBroadcastStreamALSA::initialization()
     mCapturefd               = -1;
     mAvail                   = 0;
     mFrames                  = 0;
-    mX.buf                   = NULL;
-    mX.frames                = 0;
-    mX.result                = 0;
 
     mPlaybackThread          = false;
     mKillPlaybackThread      = false;
@@ -1342,22 +1339,16 @@ void AudioBroadcastStreamALSA::allocateCapturePollFd()
         mCapturePfd[1].fd     = mCapturefd;
         mCapturePfd[1].events = POLLIN | POLLERR | POLLNVAL;
 
-        if (flags & PCM_MONO) {
+        if (flags & PCM_MONO)
             mFrames   = pcm->period_size/2;
-            mX.frames = pcm->period_size/2;
-        } else if (flags & PCM_QUAD) {
+        else if (flags & PCM_QUAD)
             mFrames   = pcm->period_size/8;
-            mX.frames = pcm->period_size/8;
-        } else if (flags & PCM_5POINT1) {
+        else if (flags & PCM_5POINT1)
             mFrames   = pcm->period_size/12;
-            mX.frames = pcm->period_size/12;
-        } else if (flags & PCM_7POINT1) {
+        else if (flags & PCM_7POINT1)
             mFrames   = pcm->period_size/16;
-            mX.frames = pcm->period_size/16;
-        } else {
+        else
             mFrames   = pcm->period_size/4;
-            mX.frames = pcm->period_size/4;
-        }
     }
 }
 
@@ -1391,7 +1382,7 @@ status_t AudioBroadcastStreamALSA::startCapturePath()
                     capture_handle->start = 0;
                     continue;
                 } else {
-                    ALOGE("IOCTL_START failed for proxy err: %d \n", errno);
+                    ALOGE("IOCTL_START failed for Capture, err: %d \n", errno);
                     return status;
                 }
            } else {
@@ -1571,15 +1562,12 @@ ssize_t AudioBroadcastStreamALSA::readFromCapturePath(char *buffer)
         ALOGE("Reading from Capture path failed = err = %d", status);
         return status;
     }
-    if (mX.frames > mAvail)
-        mFrames = mAvail;
 
     void *data  = dst_address(capture_handle);
 
     if(data != NULL)
         memcpy(buffer, (char *)data, capture_handle->period_size);
 
-    mX.frames -= mFrames;
     capture_handle->sync_ptr->c.control.appl_ptr += mFrames;
     capture_handle->sync_ptr->flags = 0;
 
@@ -1744,7 +1732,6 @@ void AudioBroadcastStreamALSA::resetCapturePathVariables()
     ALOGV("resetCapturePathVariables");
     mAvail = 0;
     mFrames = 0;
-    mX.frames = 0;
     if(mCapturefd != -1) {
         sys_broadcast::lib_close(mCapturefd);
         mCapturefd = -1;
