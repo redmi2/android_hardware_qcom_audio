@@ -506,20 +506,20 @@ SectionVerb
 	Name "Voice2"
 
 	EnableSequence
-		'STUB_RX Mixer Voice Stub':1:1
-		'Voice Stub Tx Mixer STUB_TX_HL':1:1
-		'Voice Stub Tx Mixer STUB_1_TX_HL':1:1
+		'STUB_RX Mixer Voice2 Stub':1:1
+		'Voice2 Stub Tx Mixer STUB_TX_HL':1:1
+		'Voice2 Stub Tx Mixer STUB_1_TX_HL':1:1
 	EndSequence
 
 	DisableSequence
-		'STUB_RX Mixer Voice Stub':1:0
-		'Voice Stub Tx Mixer STUB_TX_HL':1:0
-		'Voice Stub Tx Mixer STUB_1_TX_HL':1:0
+		'STUB_RX Mixer Voice2 Stub':1:0
+		'Voice2 Stub Tx Mixer STUB_TX_HL':1:0
+		'Voice2 Stub Tx Mixer STUB_1_TX_HL':1:0
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 12
-	CapturePCM 12
+	PlaybackPCM 15
+	CapturePCM 15
 
 EndSection
 
@@ -527,18 +527,18 @@ SectionVerb
 	Name "Voice2HDMI"
 
 	EnableSequence
-		'Voice Stub Tx Mixer SLIM_3_TX':1:0
-		'HDMI_RX_Voice Mixer Voice Stub':1:0
+		'Voice2 Stub Tx Mixer SLIM_3_TX':1:0
+		'HDMI_RX_Voice Mixer Voice2 Stub':1:0
 		'HDMI_RX Port Mixer SLIM_3_TX':1:0
-		'Voice Stub Tx Mixer STUB_TX_HL':1:0
+		'Voice2 Stub Tx Mixer STUB_TX_HL':1:0
 	EndSequence
 
 	DisableSequence
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 12
-	CapturePCM 12
+	PlaybackPCM 15
+	CapturePCM 15
 
 EndSection
 
@@ -546,18 +546,18 @@ SectionVerb
 	Name "Voice2HDMI Tx"
 
 	EnableSequence
-		'Voice Stub Tx Mixer SLIM_3_TX':1:1
-		'HDMI_RX_Voice Mixer Voice Stub':1:1
+		'Voice2 Stub Tx Mixer SLIM_3_TX':1:1
+		'HDMI_RX_Voice Mixer Voice2 Stub':1:1
 		'HDMI_RX Port Mixer SLIM_3_TX':1:1
-		'Voice Stub Tx Mixer STUB_TX_HL':1:1
+		'Voice2 Stub Tx Mixer STUB_TX_HL':1:1
 	EndSequence
 
 	DisableSequence
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 12
-	CapturePCM 12
+	PlaybackPCM 15
+	CapturePCM 15
 
 EndSection
 
@@ -569,19 +569,19 @@ SectionVerb
 
 	DisableSequence
 		'Internal BTSCO SampleRate':0:8000
-		'Voice Stub Tx Mixer INTERNAL_BT_SCO_TX':1:0
-		'SLIMBUS_1_RX Mixer Voice Stub':1:0
-		'Voice Stub Tx Mixer SLIM_1_TX':1:0
-		'INTERNAL_BT_SCO_RX_Voice Mixer Voice Stub':1:0
+		'Voice2 Stub Tx Mixer INTERNAL_BT_SCO_TX':1:0
+		'SLIMBUS_1_RX Mixer Voice2 Stub':1:0
+		'Voice2 Stub Tx Mixer SLIM_1_TX':1:0
+		'INTERNAL_BT_SCO_RX_Voice Mixer Voice2 Stub':1:0
 		'SLIMBUS_1_RX Port Mixer INTERNAL_BT_SCO_TX':1:0
 		'INTERNAL_BT_SCO_RX Port Mixer SLIM_1_TX':1:0
-		'SLIMBUS_3_RX_Voice Mixer Voice Stub':1:0
+		'SLIMBUS_3_RX_Voice Mixer Voice2 Stub':1:0
 		'SLIMBUS_3_RX Port Mixer INTERNAL_BT_SCO_RX':1:0
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 12
-	CapturePCM 12
+	PlaybackPCM 15
+	CapturePCM 15
 
 EndSection
 
@@ -590,14 +590,14 @@ SectionVerb
 
 	EnableSequence
 		'Internal BTSCO SampleRate':0:8000
-		'Voice Stub Tx Mixer INTERNAL_BT_SCO_TX':1:1
-		'SLIMBUS_1_RX Mixer Voice Stub':1:1
-		'Voice Stub Tx Mixer SLIM_1_TX':1:1
-		'INTERNAL_BT_SCO_RX_Voice Mixer Voice Stub':1:1
+		'Voice2 Stub Tx Mixer INTERNAL_BT_SCO_TX':1:1
+		'SLIMBUS_1_RX Mixer Voice2 Stub':1:1
+		'Voice2 Stub Tx Mixer SLIM_1_TX':1:1
+		'INTERNAL_BT_SCO_RX_Voice Mixer Voice2 Stub':1:1
 		'SLIMBUS_1_RX Port Mixer INTERNAL_BT_SCO_TX':1:1
 		'INTERNAL_BT_SCO_RX Port Mixer SLIM_1_TX':1:1
 		'SLIM_3_RX Channels':0:One
-		'SLIMBUS_3_RX_Voice Mixer Voice Stub':1:1
+		'SLIMBUS_3_RX_Voice Mixer Voice2 Stub':1:1
 		'SLIMBUS_3_RX Port Mixer INTERNAL_BT_SCO_RX':1:1
 	EndSequence
 
@@ -605,8 +605,8 @@ SectionVerb
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 12
-	CapturePCM 12
+	PlaybackPCM 15
+	CapturePCM 15
 
 EndSection
 
@@ -618,19 +618,19 @@ SectionVerb
 
 	DisableSequence
 		'Internal BTSCO SampleRate':0:8000
-		'Voice Stub Tx Mixer INTERNAL_BT_SCO_TX':1:0
-		'SLIMBUS_1_RX Mixer Voice Stub':1:0
-		'Voice Stub Tx Mixer SLIM_1_TX':1:0
-		'INTERNAL_BT_SCO_RX_Voice Mixer Voice Stub':1:0
+		'Voice2 Stub Tx Mixer INTERNAL_BT_SCO_TX':1:0
+		'SLIMBUS_1_RX Mixer Voice2 Stub':1:0
+		'Voice2 Stub Tx Mixer SLIM_1_TX':1:0
+		'INTERNAL_BT_SCO_RX_Voice Mixer Voice2 Stub':1:0
 		'SLIMBUS_1_RX Port Mixer INTERNAL_BT_SCO_TX':1:0
 		'INTERNAL_BT_SCO_RX Port Mixer SLIM_1_TX':1:0
-		'SLIMBUS_3_RX_Voice Mixer Voice Stub':1:0
+		'SLIMBUS_3_RX_Voice Mixer Voice2 Stub':1:0
 		'SLIMBUS_3_RX Port Mixer INTERNAL_BT_SCO_RX':1:0
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 12
-	CapturePCM 12
+	PlaybackPCM 15
+	CapturePCM 15
 
 EndSection
 
@@ -639,14 +639,14 @@ SectionVerb
 
 	EnableSequence
 		'Internal BTSCO SampleRate':0:16000
-		'Voice Stub Tx Mixer INTERNAL_BT_SCO_TX':1:1
-		'SLIMBUS_1_RX Mixer Voice Stub':1:1
-		'Voice Stub Tx Mixer SLIM_1_TX':1:1
-		'INTERNAL_BT_SCO_RX_Voice Mixer Voice Stub':1:1
+		'Voice2 Stub Tx Mixer INTERNAL_BT_SCO_TX':1:1
+		'SLIMBUS_1_RX Mixer Voice2 Stub':1:1
+		'Voice2 Stub Tx Mixer SLIM_1_TX':1:1
+		'INTERNAL_BT_SCO_RX_Voice Mixer Voice2 Stub':1:1
 		'SLIMBUS_1_RX Port Mixer INTERNAL_BT_SCO_TX':1:1
 		'INTERNAL_BT_SCO_RX Port Mixer SLIM_1_TX':1:1
 		'SLIM_3_RX Channels':0:One
-		'SLIMBUS_3_RX_Voice Mixer Voice Stub':1:1
+		'SLIMBUS_3_RX_Voice Mixer Voice2 Stub':1:1
 		'SLIMBUS_3_RX Port Mixer INTERNAL_BT_SCO_RX':1:1
 	EndSequence
 
@@ -654,8 +654,8 @@ SectionVerb
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 12
-	CapturePCM 12
+	PlaybackPCM 15
+	CapturePCM 15
 
 EndSection
 
@@ -666,19 +666,19 @@ SectionVerb
 	EndSequence
 
 	DisableSequence
-                'Voice Stub Tx Mixer AFE_PCM_TX':1:0
-                'SLIMBUS_1_RX Mixer Voice Stub':1:0
-                'Voice Stub Tx Mixer SLIM_1_TX':1:0
-                'AFE_PCM_RX_Voice Mixer Voice Stub':1:0
+                'Voice2 Stub Tx Mixer AFE_PCM_TX':1:0
+                'SLIMBUS_1_RX Mixer Voice2 Stub':1:0
+                'Voice2 Stub Tx Mixer SLIM_1_TX':1:0
+                'AFE_PCM_RX_Voice Mixer Voice2 Stub':1:0
                 'SLIMBUS_1_RX Port Mixer AFE_PCM_TX':1:0
                 'AFE_PCM_RX Port Mixer SLIM_1_TX':1:0
-                'SLIMBUS_3_RX_Voice Mixer Voice Stub':1:0
+                'SLIMBUS_3_RX_Voice Mixer Voice2 Stub':1:0
                 'SLIMBUS_3_RX Port Mixer AFE_PCM_RX':1:0
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 12
-	CapturePCM 12
+	PlaybackPCM 15
+	CapturePCM 15
 
 EndSection
 
@@ -686,13 +686,13 @@ SectionVerb
 	Name "Voice2USB PROXY Tx"
 
 	EnableSequence
-                'Voice Stub Tx Mixer AFE_PCM_TX':1:1
-                'SLIMBUS_1_RX Mixer Voice Stub':1:1
-                'Voice Stub Tx Mixer SLIM_1_TX':1:1
-                'AFE_PCM_RX_Voice Mixer Voice Stub':1:1
+                'Voice2 Stub Tx Mixer AFE_PCM_TX':1:1
+                'SLIMBUS_1_RX Mixer Voice2 Stub':1:1
+                'Voice2 Stub Tx Mixer SLIM_1_TX':1:1
+                'AFE_PCM_RX_Voice Mixer Voice2 Stub':1:1
                 'SLIMBUS_1_RX Port Mixer AFE_PCM_TX':1:1
                 'AFE_PCM_RX Port Mixer SLIM_1_TX':1:1
-                'SLIMBUS_3_RX_Voice Mixer Voice Stub':1:1
+                'SLIMBUS_3_RX_Voice Mixer Voice2 Stub':1:1
                 'SLIMBUS_3_RX Port Mixer AFE_PCM_RX':1:1
 	EndSequence
 
@@ -700,8 +700,8 @@ SectionVerb
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 12
-	CapturePCM 12
+	PlaybackPCM 15
+	CapturePCM 15
 
 EndSection
 
@@ -4413,20 +4413,20 @@ SectionModifier
 	Name "Play Voice2"
 
 	EnableSequence
-		'STUB_RX Mixer Voice Stub':1:1
-		'Voice Stub Tx Mixer STUB_TX_HL':1:1
-		'Voice Stub Tx Mixer STUB_1_TX_HL':1:1
+		'STUB_RX Mixer Voice2 Stub':1:1
+		'Voice2 Stub Tx Mixer STUB_TX_HL':1:1
+		'Voice2 Stub Tx Mixer STUB_1_TX_HL':1:1
 	EndSequence
 
 	DisableSequence
-		'STUB_RX Mixer Voice Stub':1:0
-		'Voice Stub Tx Mixer STUB_TX_HL':1:0
-		'Voice Stub Tx Mixer STUB_1_TX_HL':1:0
+		'STUB_RX Mixer Voice2 Stub':1:0
+		'Voice2 Stub Tx Mixer STUB_TX_HL':1:0
+		'Voice2 Stub Tx Mixer STUB_1_TX_HL':1:0
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 12
-	CapturePCM 12
+	PlaybackPCM 15
+	CapturePCM 15
 
 EndSection
 
@@ -4437,15 +4437,15 @@ SectionModifier
 	EndSequence
 
 	DisableSequence
-		'Voice Stub Tx Mixer SLIM_3_TX':1:0
-		'HDMI_RX_Voice Mixer Voice Stub':1:0
+		'Voice2 Stub Tx Mixer SLIM_3_TX':1:0
+		'HDMI_RX_Voice Mixer Voice2 Stub':1:0
 		'HDMI_RX Port Mixer SLIM_3_TX':1:0
-		'Voice Stub Tx Mixer STUB_TX_HL':1:0
+		'Voice2 Stub Tx Mixer STUB_TX_HL':1:0
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 12
-	CapturePCM 12
+	PlaybackPCM 15
+	CapturePCM 15
 
 EndSection
 
@@ -4453,18 +4453,18 @@ SectionModifier
 	Name "Play Voice2HDMI Tx"
 
 	EnableSequence
-		'Voice Stub Tx Mixer SLIM_3_TX':1:1
-		'HDMI_RX_Voice Mixer Voice Stub':1:1
+		'Voice2 Stub Tx Mixer SLIM_3_TX':1:1
+		'HDMI_RX_Voice Mixer Voice2 Stub':1:1
 		'HDMI_RX Port Mixer SLIM_3_TX':1:1
-		'Voice Stub Tx Mixer STUB_TX_HL':1:1
+		'Voice2 Stub Tx Mixer STUB_TX_HL':1:1
 	EndSequence
 
 	DisableSequence
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 12
-	CapturePCM 12
+	PlaybackPCM 15
+	CapturePCM 15
 
 EndSection
 
@@ -4475,15 +4475,15 @@ SectionModifier
 	EndSequence
 
 	DisableSequence
-		'Voice Stub Tx Mixer SLIM_3_TX':1:0
-		'HDMI_RX_Voice Mixer Voice Stub':1:0
+		'Voice2 Stub Tx Mixer SLIM_3_TX':1:0
+		'HDMI_RX_Voice Mixer Voice2 Stub':1:0
 		'HDMI_RX Port Mixer SLIM_3_TX':1:0
-		'Voice Stub Tx Mixer STUB_TX_HL':1:0
+		'Voice2 Stub Tx Mixer STUB_TX_HL':1:0
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 12
-	CapturePCM 12
+	PlaybackPCM 15
+	CapturePCM 15
 
 EndSection
 
@@ -4491,18 +4491,18 @@ SectionModifier
 	Name "Play Voice2HDMI Tx"
 
 	EnableSequence
-		'Voice Stub Tx Mixer SLIM_3_TX':1:1
-		'HDMI_RX_Voice Mixer Voice Stub':1:1
+		'Voice2 Stub Tx Mixer SLIM_3_TX':1:1
+		'HDMI_RX_Voice Mixer Voice2 Stub':1:1
 		'HDMI_RX Port Mixer SLIM_3_TX':1:1
-		'Voice Stub Tx Mixer STUB_TX_HL':1:1
+		'Voice2 Stub Tx Mixer STUB_TX_HL':1:1
 	EndSequence
 
 	DisableSequence
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 12
-	CapturePCM 12
+	PlaybackPCM 15
+	CapturePCM 15
 
 EndSection
 
@@ -4514,19 +4514,19 @@ SectionModifier
 
 	DisableSequence
 		'Internal BTSCO SampleRate':0:8000
-		'Voice Stub Tx Mixer INTERNAL_BT_SCO_TX':1:0
-		'SLIMBUS_1_RX Mixer Voice Stub':1:0
-		'Voice Stub Tx Mixer SLIM_1_TX':1:0
-		'INTERNAL_BT_SCO_RX_Voice Mixer Voice Stub':1:0
+		'Voice2 Stub Tx Mixer INTERNAL_BT_SCO_TX':1:0
+		'SLIMBUS_1_RX Mixer Voice2 Stub':1:0
+		'Voice2 Stub Tx Mixer SLIM_1_TX':1:0
+		'INTERNAL_BT_SCO_RX_Voice Mixer Voice2 Stub':1:0
 		'SLIMBUS_1_RX Port Mixer INTERNAL_BT_SCO_TX':1:0
 		'INTERNAL_BT_SCO_RX Port Mixer SLIM_1_TX':1:0
-		'SLIMBUS_3_RX_Voice Mixer Voice Stub':1:0
+		'SLIMBUS_3_RX_Voice Mixer Voice2 Stub':1:0
 		'SLIMBUS_3_RX Port Mixer INTERNAL_BT_SCO_RX':1:0
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 12
-	CapturePCM 12
+	PlaybackPCM 15
+	CapturePCM 15
 
 EndSection
 
@@ -4535,14 +4535,14 @@ SectionModifier
 
 	EnableSequence
 		'Internal BTSCO SampleRate':0:8000
-		'Voice Stub Tx Mixer INTERNAL_BT_SCO_TX':1:1
-		'SLIMBUS_1_RX Mixer Voice Stub':1:1
-		'Voice Stub Tx Mixer SLIM_1_TX':1:1
-		'INTERNAL_BT_SCO_RX_Voice Mixer Voice Stub':1:1
+		'Voice2 Stub Tx Mixer INTERNAL_BT_SCO_TX':1:1
+		'SLIMBUS_1_RX Mixer Voice2 Stub':1:1
+		'Voice2 Stub Tx Mixer SLIM_1_TX':1:1
+		'INTERNAL_BT_SCO_RX_Voice Mixer Voice2 Stub':1:1
 		'SLIMBUS_1_RX Port Mixer INTERNAL_BT_SCO_TX':1:1
 		'INTERNAL_BT_SCO_RX Port Mixer SLIM_1_TX':1:1
 		'SLIM_3_RX Channels':0:One
-		'SLIMBUS_3_RX_Voice Mixer Voice Stub':1:1
+		'SLIMBUS_3_RX_Voice Mixer Voice2 Stub':1:1
 		'SLIMBUS_3_RX Port Mixer INTERNAL_BT_SCO_RX':1:1
 	EndSequence
 
@@ -4550,8 +4550,8 @@ SectionModifier
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 12
-	CapturePCM 12
+	PlaybackPCM 15
+	CapturePCM 15
 
 EndSection
 
@@ -4563,19 +4563,19 @@ SectionModifier
 
 	DisableSequence
 		'Internal BTSCO SampleRate':0:8000
-		'Voice Stub Tx Mixer INTERNAL_BT_SCO_TX':1:0
-		'SLIMBUS_1_RX Mixer Voice Stub':1:0
-		'Voice Stub Tx Mixer SLIM_1_TX':1:0
-		'INTERNAL_BT_SCO_RX_Voice Mixer Voice Stub':1:0
+		'Voice2 Stub Tx Mixer INTERNAL_BT_SCO_TX':1:0
+		'SLIMBUS_1_RX Mixer Voice2 Stub':1:0
+		'Voice2 Stub Tx Mixer SLIM_1_TX':1:0
+		'INTERNAL_BT_SCO_RX_Voice Mixer Voice2 Stub':1:0
 		'SLIMBUS_1_RX Port Mixer INTERNAL_BT_SCO_TX':1:0
 		'INTERNAL_BT_SCO_RX Port Mixer SLIM_1_TX':1:0
-		'SLIMBUS_3_RX_Voice Mixer Voice Stub':1:0
+		'SLIMBUS_3_RX_Voice Mixer Voice2 Stub':1:0
 		'SLIMBUS_3_RX Port Mixer INTERNAL_BT_SCO_RX':1:0
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 12
-	CapturePCM 12
+	PlaybackPCM 15
+	CapturePCM 15
 
 EndSection
 
@@ -4584,14 +4584,14 @@ SectionModifier
 
 	EnableSequence
 		'Internal BTSCO SampleRate':0:16000
-		'Voice Stub Tx Mixer INTERNAL_BT_SCO_TX':1:1
-		'SLIMBUS_1_RX Mixer Voice Stub':1:1
-		'Voice Stub Tx Mixer SLIM_1_TX':1:1
-		'INTERNAL_BT_SCO_RX_Voice Mixer Voice Stub':1:1
+		'Voice2 Stub Tx Mixer INTERNAL_BT_SCO_TX':1:1
+		'SLIMBUS_1_RX Mixer Voice2 Stub':1:1
+		'Voice2 Stub Tx Mixer SLIM_1_TX':1:1
+		'INTERNAL_BT_SCO_RX_Voice Mixer Voice2 Stub':1:1
 		'SLIMBUS_1_RX Port Mixer INTERNAL_BT_SCO_TX':1:1
 		'INTERNAL_BT_SCO_RX Port Mixer SLIM_1_TX':1:1
 		'SLIM_3_RX Channels':0:One
-		'SLIMBUS_3_RX_Voice Mixer Voice Stub':1:1
+		'SLIMBUS_3_RX_Voice Mixer Voice2 Stub':1:1
 		'SLIMBUS_3_RX Port Mixer INTERNAL_BT_SCO_RX':1:1
 	EndSequence
 
@@ -4599,8 +4599,8 @@ SectionModifier
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 12
-	CapturePCM 12
+	PlaybackPCM 15
+	CapturePCM 15
 
 EndSection
 
@@ -4611,19 +4611,19 @@ SectionModifier
 	EndSequence
 
 	DisableSequence
-                'Voice Stub Tx Mixer AFE_PCM_TX':1:0
-                'SLIMBUS_1_RX Mixer Voice Stub':1:0
-                'Voice Stub Tx Mixer SLIM_1_TX':1:0
-                'AFE_PCM_RX_Voice Mixer Voice Stub':1:0
+                'Voice2 Stub Tx Mixer AFE_PCM_TX':1:0
+                'SLIMBUS_1_RX Mixer Voice2 Stub':1:0
+                'Voice2 Stub Tx Mixer SLIM_1_TX':1:0
+                'AFE_PCM_RX_Voice Mixer Voice2 Stub':1:0
                 'SLIMBUS_1_RX Port Mixer AFE_PCM_TX':1:0
                 'AFE_PCM_RX Port Mixer SLIM_1_TX':1:0
-                'SLIMBUS_3_RX_Voice Mixer Voice Stub':1:0
+                'SLIMBUS_3_RX_Voice Mixer Voice2 Stub':1:0
                 'SLIMBUS_3_RX Port Mixer AFE_PCM_RX':1:0
 	EndSequence
 
 	# ALSA PCMs
-	PlaybackPCM 12
-	CapturePCM 12
+	PlaybackPCM 15
+	CapturePCM 15
 
 EndSection
 # End of master file
