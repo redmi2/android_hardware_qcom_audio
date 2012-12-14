@@ -1894,7 +1894,6 @@ void ALSADevice::resetProxyVariables() {
 
     mProxyParams.mAvail = 0;
     mProxyParams.mFrames = 0;
-    mProxyParams.mX.frames = 0;
     if(mProxyParams.mPfdProxy[1].fd != -1) {
         sys_close::lib_close(mProxyParams.mPfdProxy[1].fd);
         mProxyParams.mPfdProxy[1].fd = -1;
@@ -1966,15 +1965,12 @@ ssize_t  ALSADevice::readFromProxy(void **captureBuffer , ssize_t *bufferSize) {
         *bufferSize = 0;
         return err;
     }
-    if (mProxyParams.mX.frames > mProxyParams.mAvail)
-        mProxyParams.mFrames = mProxyParams.mAvail;
     void *data  = dst_address(capture_handle);
     //TODO: Return a pointer to AudioHardware
     if(mProxyParams.mCaptureBuffer == NULL)
         mProxyParams.mCaptureBuffer =  malloc(mProxyParams.mCaptureBufferSize);
     memcpy(mProxyParams.mCaptureBuffer, (char *)data,
              mProxyParams.mCaptureBufferSize);
-    mProxyParams.mX.frames -= mProxyParams.mFrames;
     capture_handle->sync_ptr->c.control.appl_ptr += mProxyParams.mFrames;
     capture_handle->sync_ptr->flags = 0;
     ALOGV("Calling sync_ptr for proxy after sync");
@@ -2007,8 +2003,6 @@ void ALSADevice::initProxyParams() {
         mProxyParams.mPfdProxy[1].events = (POLLIN | POLLERR | POLLNVAL);
         mProxyParams.mPfdProxy[1].revents = 0;
         mProxyParams.mFrames =
-            (mProxyParams.mProxyPcmHandle->period_size / (2*channels));
-        mProxyParams.mX.frames =
             (mProxyParams.mProxyPcmHandle->period_size / (2*channels));
     }
 }
