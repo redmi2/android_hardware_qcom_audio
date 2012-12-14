@@ -865,7 +865,10 @@ int32_t AudioSessionOutALSA::writeToCompressedDriver(char *buffer, int bytes)
                 mReachedExtractorEOS = true;
             }
         }
-        n = pcm_write(local_handle, buf.memBuf, local_handle->period_size);
+        {
+            Mutex::Autolock autoLock(mSyncLock);
+            n = pcm_write(local_handle, buf.memBuf, local_handle->period_size);
+        }
         // write to second handle if present
         if (mSecCompreRxHandle) {
                 mInputMemRequestMutex.lock();
@@ -1036,52 +1039,73 @@ void  AudioSessionOutALSA::eventThreadEntry() {
             if (mTunnelPaused || mPostedEOS)
                 continue;
             ALOGV("After an event occurs");
-            if (mCompreCBk)
-            do{
-                mCompreCBk=false;
-                mInputMemResponseMutex.lock();
-                if (mInputMemFilledQueue[0].empty()) {
-                    ALOGV("Filled queue1 is empty");
-                    mInputMemResponseMutex.unlock();
-                    break;
+            if (mCompreCBk) {
+                {
+                    Mutex::Autolock autoLock(mSyncLock);
+                    mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN | SNDRV_PCM_SYNC_PTR_HWSYNC);
+                    sync_ptr(mCompreRxHandle->handle);
                 }
-                BuffersAllocated buf = *(mInputMemFilledQueue[0].begin());
-                mInputMemFilledQueue[0].erase(mInputMemFilledQueue[0].begin());
-                ALOGV("mInputMemFilledQueue1 %d", mInputMemFilledQueue[0].size());
-                mInputMemResponseMutex.unlock();
+                while(hw_ptr[0] < mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr) {
+                    mCompreCBk=false;
+                    mInputMemResponseMutex.lock();
+                    mInputMemRequestMutex.lock();
+                    if (mInputMemFilledQueue[0].empty()) {
+                        ALOGV("Filled queue1 is empty");
+                        mInputMemResponseMutex.unlock();
+                        break;
+                    }
+                    BuffersAllocated buf = *(mInputMemFilledQueue[0].begin());
+                    mInputMemFilledQueue[0].erase(mInputMemFilledQueue[0].begin());
+                    ALOGV("mInputMemFilledQueue1 %d", mInputMemFilledQueue[0].size());
 
-                mInputMemRequestMutex.lock();
-                mInputMemEmptyQueue[0].push_back(buf);
-                mInputMemRequestMutex.unlock();
-                hw_ptr[0] += mCompreRxHandle->bufferSize/(2*mCompreRxHandle->channels);
-                mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_APPL |
-                                         SNDRV_PCM_SYNC_PTR_AVAIL_MIN);
-                sync_ptr(mCompreRxHandle->handle);
-                ALOGE("hw_ptr1 = %lld status.hw_ptr1 = %lld", hw_ptr[0], mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr);
-            } while(hw_ptr[0] < mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr);
-            if (mSecCompreCBk)
-            do{
-                mSecCompreCBk=false;
-                mInputMemResponseMutex.lock();
-                if (mInputMemFilledQueue[1].empty()) {
-                    ALOGV("Filled queue2 is empty");
+                    mInputMemEmptyQueue[0].push_back(buf);
+                    mInputMemRequestMutex.unlock();
                     mInputMemResponseMutex.unlock();
-                    break;
-                }
-                BuffersAllocated buf = *(mInputMemFilledQueue[1].begin());
-                mInputMemFilledQueue[1].erase(mInputMemFilledQueue[1].begin());
-                ALOGV("mInputMemFilledQueue2 %d", mInputMemFilledQueue[1].size());
-                mInputMemResponseMutex.unlock();
+                    hw_ptr[0] += mCompreRxHandle->bufferSize/(2*mCompreRxHandle->channels);
 
-                mInputMemRequestMutex.lock();
-                mInputMemEmptyQueue[1].push_back(buf);
-                mInputMemRequestMutex.unlock();
-                hw_ptr[1] += mSecCompreRxHandle->bufferSize/(2*mSecCompreRxHandle->channels);
-                mSecCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_APPL |
-                                         SNDRV_PCM_SYNC_PTR_AVAIL_MIN);
-                sync_ptr(mSecCompreRxHandle->handle);
-                ALOGE("hw_ptr2 = %lld status.hw_ptr2 = %lld", hw_ptr[1], mSecCompreRxHandle->handle->sync_ptr->s.status.hw_ptr);
-            } while(hw_ptr[1] < mSecCompreRxHandle->handle->sync_ptr->s.status.hw_ptr);
+                    {
+                        Mutex::Autolock autoLock(mSyncLock);
+                        mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN | SNDRV_PCM_SYNC_PTR_HWSYNC);
+                        sync_ptr(mCompreRxHandle->handle);
+                    }
+                    ALOGE("hw_ptr1 = %lld status.hw_ptr1 = %ld appl_ptr = %ld", hw_ptr[0], mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,
+                        mCompreRxHandle->handle->sync_ptr->c.control.appl_ptr);
+                }
+            }
+
+            if (mSecCompreCBk) {
+                {
+                    Mutex::Autolock autoLock(mLock);
+                    mSecCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN | SNDRV_PCM_SYNC_PTR_HWSYNC);
+                    sync_ptr(mSecCompreRxHandle->handle);
+                }
+                while (hw_ptr[1] < mSecCompreRxHandle->handle->sync_ptr->s.status.hw_ptr) {
+                    mSecCompreCBk=false;
+                    mInputMemResponseMutex.lock();
+                    mInputMemRequestMutex.lock();
+                    if (mInputMemFilledQueue[1].empty()) {
+                        ALOGV("Filled queue2 is empty");
+                        mInputMemResponseMutex.unlock();
+                        break;
+                    }
+                    BuffersAllocated buf = *(mInputMemFilledQueue[1].begin());
+                    mInputMemFilledQueue[1].erase(mInputMemFilledQueue[1].begin());
+                    ALOGV("mInputMemFilledQueue2 %d", mInputMemFilledQueue[1].size());
+
+                   mInputMemEmptyQueue[1].push_back(buf);
+                   mInputMemResponseMutex.unlock();
+                   mInputMemRequestMutex.unlock();
+                   hw_ptr[1] += mSecCompreRxHandle->bufferSize/(2*mSecCompreRxHandle->channels);
+                   {
+                        Mutex::Autolock autoLock(mLock);
+                        mSecCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN | SNDRV_PCM_SYNC_PTR_HWSYNC);
+                        sync_ptr(mSecCompreRxHandle->handle);
+                   }
+                   ALOGE("hw_ptr2 = %lld status.hw_ptr2 = %ld appl_ptr = %ld", hw_ptr[1], mSecCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,
+                        mSecCompreRxHandle->handle->sync_ptr->c.control.appl_ptr);
+                }
+            }
+
             freeBuffer=false;
             while(mLock.tryLock()) {
                 if(mKillEventThread)
@@ -1271,9 +1295,11 @@ status_t AudioSessionOutALSA::drainTunnel()
        " Filled Queue1 size() = %d ",\
         mInputMemEmptyQueue[0].size(),\
         mInputMemFilledQueue[0].size());
-    mCompreRxHandle->handle->sync_ptr->flags =
-        SNDRV_PCM_SYNC_PTR_APPL | SNDRV_PCM_SYNC_PTR_AVAIL_MIN;
-    sync_ptr(mCompreRxHandle->handle);
+    {
+        Mutex::Autolock autoLock(mSyncLock);
+        mCompreRxHandle->handle->sync_ptr->flags = SNDRV_PCM_SYNC_PTR_APPL | SNDRV_PCM_SYNC_PTR_AVAIL_MIN;
+        sync_ptr(mCompreRxHandle->handle);
+    }
     hw_ptr[0] = 0;
     ALOGV("appl_ptr1= %d",\
         (int)mCompreRxHandle->handle->sync_ptr->c.control.appl_ptr);
@@ -1291,9 +1317,12 @@ status_t AudioSessionOutALSA::drainTunnel()
                " Filled Queue2 size() = %d ",\
                 mInputMemEmptyQueue[1].size(),\
                 mInputMemFilledQueue[1].size());
-        mSecCompreRxHandle->handle->sync_ptr->flags =
+        {
+            Mutex::Autolock autoLock(mSyncLock);
+            mSecCompreRxHandle->handle->sync_ptr->flags =
                 SNDRV_PCM_SYNC_PTR_APPL | SNDRV_PCM_SYNC_PTR_AVAIL_MIN;
-        sync_ptr(mSecCompreRxHandle->handle);
+           sync_ptr(mSecCompreRxHandle->handle);
+        }
         hw_ptr[1] = 0;
         ALOGV("appl_ptr2= %d",\
         (int)mSecCompreRxHandle->handle->sync_ptr->c.control.appl_ptr);
