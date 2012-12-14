@@ -1637,12 +1637,19 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
             if (isSessionPaused)
                 continue;
             ALOGV("After an event occurs");
-            do {
+            {
+                Mutex::Autolock autoLock(mSyncLock);
+                mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_APPL |
+                                    SNDRV_PCM_SYNC_PTR_AVAIL_MIN);
+                sync_ptr(mCompreRxHandle->handle);
+            }
+            while(hw_ptr < mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr) {
                 if (mInputMemFilledQueue.empty()) {
                     ALOGV("Filled queue is empty");
                     continue;
                 }
                 mInputMemResponseMutex.lock();
+                mInputMemRequestMutex.lock();
                 BuffersAllocated buf = *(mInputMemFilledQueue.begin());
                 mInputMemFilledQueue.erase(mInputMemFilledQueue.begin());
                 ALOGV("mInputMemFilledQueue %d", mInputMemFilledQueue.size());
@@ -1659,21 +1666,22 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
                     if (mObserver)
                         mObserver->postEOS(0);
                 }
-                mInputMemResponseMutex.unlock();
-
-                mInputMemRequestMutex.lock();
 
                 mInputMemEmptyQueue.push_back(buf);
 
                 mInputMemRequestMutex.unlock();
+                mInputMemResponseMutex.unlock();
                 mWriteCv.signal();
                 hw_ptr += mCompreRxHandle->bufferSize/(2*mCompreRxHandle->channels);
-                mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_APPL |
+                {
+                    Mutex::Autolock autoLock(mSyncLock);
+                    mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_APPL |
                                         SNDRV_PCM_SYNC_PTR_AVAIL_MIN);
-                sync_ptr(mCompreRxHandle->handle);
-                ALOGE("hw_ptr = %d status.hw_ptr = %lld", hw_ptr, mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr);
-
-            } while(hw_ptr < mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr);
+                    sync_ptr(mCompreRxHandle->handle);
+                }
+                ALOGE("hw_ptr = %d status.hw_ptr = %ld appl_ptr = %ld", hw_ptr, mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,
+                       mCompreRxHandle->handle->sync_ptr->c.control.appl_ptr);
+           }
         } else {
             ALOGD("No event");
             mPlaybackPfd[0].revents = 0;
@@ -1868,7 +1876,10 @@ int32_t AudioBroadcastStreamALSA::writeToCompressedDriver(char *buffer, int byte
 
     pcm * local_handle = (struct pcm *)mCompreRxHandle->handle;
     ALOGV("PCM write start");
-    n = pcm_write(local_handle, buf.memBuf, local_handle->period_size);
+    {
+        Mutex::Autolock autoLock(mSyncLock);
+        n = pcm_write(local_handle, buf.memBuf, local_handle->period_size);
+    }
     ALOGV("PCM write complete");
     if (bytes < local_handle->period_size) {
         ALOGD("Last buffer case");
