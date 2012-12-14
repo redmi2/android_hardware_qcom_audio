@@ -817,6 +817,7 @@ protected:
     snd_use_case_mgr_t *mUcMgr;
 
     int32_t            mCurDevice;
+    int32_t            mCurRxDevice;
     /* The flag holds all the audio related device settings from
      * Settings and Qualcomm Settings applications */
     uint32_t            mDevSettingsFlag;
