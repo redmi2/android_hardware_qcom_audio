@@ -423,8 +423,6 @@ void  AudioSessionOutALSA::eventThreadEntry() {
             struct snd_timer_tread rbuf[4];
             read(mAlsaHandle->handle->timer_fd, rbuf, sizeof(struct snd_timer_tread) * 4 );
             pfd[0].revents = 0;
-            if (mPaused)
-                continue;
             ALOGV("After an event occurs");
 
             mFilledQueueMutex.lock();
