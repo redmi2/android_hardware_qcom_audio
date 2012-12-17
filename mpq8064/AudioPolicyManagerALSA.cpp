@@ -1,6 +1,8 @@
 /*
  * Copyright (C) 2009 The Android Open Source Project
- * Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2011-2013, The Linux Foundation. All rights reserved
+ * Not a Contribution, Apache license notifications and license are retained
+ * for attribution purposes only.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -85,6 +87,11 @@ status_t AudioPolicyManager::setDeviceConnectionState(AudioSystem::audio_devices
                   outputs.size());
             // register new device as available
             mAvailableOutputDevices = (audio_devices_t)(mAvailableOutputDevices | device);
+            if (AudioSystem::isA2dpDevice(device)) {
+                AudioParameter param;
+                param.add(String8("a2dp_connected"), String8("true"));
+                mpClientInterface->setParameters(0, param.toString());
+            }
 
             if (!outputs.isEmpty()) {
                 String8 paramStr;
@@ -126,6 +133,9 @@ status_t AudioPolicyManager::setDeviceConnectionState(AudioSystem::audio_devices
                 // handle A2DP device disconnection
                 mA2dpDeviceAddress = "";
                 mA2dpSuspended = false;
+                AudioParameter param;
+                param.add(String8("a2dp_connected"), String8("false"));
+                mpClientInterface->setParameters(0, param.toString());
             } else if (AudioSystem::isBluetoothScoDevice(device)) {
                 // handle SCO device disconnection
                 mScoDeviceAddress = "";

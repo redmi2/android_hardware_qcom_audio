@@ -336,6 +336,9 @@ status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
             doRouting(device);
         }
         param.remove(key);
+    }else {
+        mControlLock.unlock();
+        mParent->setParameters(keyValuePairs);
     }
     return NO_ERROR;
 }

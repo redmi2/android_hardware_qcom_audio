@@ -276,6 +276,9 @@ status_t AudioBroadcastStreamALSA::setParameters(const String8& keyValuePairs)
             doRouting(device);
         }
         param.remove(key);
+    } else {
+        mLock.unlock();
+        mParent->setParameters(keyValuePairs);
     }
 
     return status;
