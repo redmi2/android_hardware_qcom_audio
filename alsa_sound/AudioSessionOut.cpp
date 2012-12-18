@@ -421,6 +421,12 @@ void  AudioSessionOutALSA::eventThreadEntry() {
         //Pollin event on Driver's timer fd
         if (pfd[0].revents & POLLIN && !mKillEventThread) {
             struct snd_timer_tread rbuf[4];
+            ALOGV("mAlsaHandle->handle = %p", mAlsaHandle->handle);
+            if( !mAlsaHandle->handle ) {
+                ALOGD(" mAlsaHandle->handle is NULL, breaking from while loop in eventthread");
+                pfd[0].revents = 0;
+                break;
+            }
             read(mAlsaHandle->handle->timer_fd, rbuf, sizeof(struct snd_timer_tread) * 4 );
             pfd[0].revents = 0;
             ALOGV("After an event occurs");
