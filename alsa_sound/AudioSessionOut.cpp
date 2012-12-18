@@ -146,6 +146,11 @@ AudioSessionOutALSA::~AudioSessionOutALSA()
 
     mSkipWrite = true;
     mWriteCv.signal();
+    // trying to acquire mDecoderLock, make sure that, the waiting decoder thread
+    // receives the signal before the conditional variable "mWriteCv" is
+    // destroyed in ~AudioSessionOut(). Decoder thread acquires this lock
+    // before it waits for the signal.
+    Mutex::Autolock autoDecoderLock(mDecoderLock);
     //TODO: This might need to be Locked using Parent lock
     reset();
     if (mParent->mRouteAudioToExtOut) {
@@ -741,6 +746,13 @@ status_t AudioSessionOutALSA::getBufferInfo(buf_info **buf) {
 status_t AudioSessionOutALSA::isBufferAvailable(int *isAvail) {
 
     Mutex::Autolock autoLock(mLock);
+    // this lock is required to synchronize between decoder thread and control thread.
+    // if this thread is waiting for a signal on the conditional ariable "mWriteCv"
+    // and the ~AudioSessionOut() signals but the mWriteCv is destroyed, before the
+    // signal reaches the waiting thread, it can lead to an indefinite wait resulting
+    // in deadlock.
+    ALOGV("acquiring mDecoderLock in isBufferAvailable()");
+    Mutex::Autolock autoDecoderLock(mDecoderLock);
     ALOGV("isBufferAvailable Empty Queue size() = %d, Filled Queue size() = %d ",
           mEmptyQueue.size(),mFilledQueue.size());
     *isAvail = false;

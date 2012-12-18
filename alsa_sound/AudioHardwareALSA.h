@@ -543,6 +543,9 @@ private:
     Mutex mEmptyQueueMutex;
     Mutex mFilledQueueMutex;
 
+    //Mutex for sync between decoderthread and control thread
+    Mutex mDecoderLock;
+
     Condition mWriteCv;
     Condition mEventCv;
     bool mKillEventThread;
