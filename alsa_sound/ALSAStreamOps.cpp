@@ -190,16 +190,16 @@ status_t ALSAStreamOps::set(int      *format,
 status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
 {
     AudioParameter param = AudioParameter(keyValuePairs);
-    String8 key = String8(AudioParameter::keyRouting);
+    String8 key = String8(AudioParameter::keyRouting),value;
     int device;
     status_t err = NO_ERROR;
     if (param.getInt(key, device) == NO_ERROR) {
         // Ignore routing if device is 0.
         if(device) {
             ALOGD("setParameters(): keyRouting with device %#x", device);
-            if(device & AudioSystem::DEVICE_OUT_ALL_A2DP) {
-                mParent->mRouteAudioToA2dp = true;
-                ALOGD("setParameters(): A2DP device %#x", device);
+            if (mParent->isExtOutDevice(device)) {
+                mParent->mRouteAudioToExtOut = true;
+                ALOGD("setParameters(): device %#x", device);
             }
             err = mParent->doRouting(device);
             if(err) {
@@ -210,21 +210,21 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
             }
         }
         param.remove(key);
-    }
+    } else {
 #ifdef QCOM_FM_ENABLED
-    else {
         key = String8(AudioParameter::keyHandleFm);
         if (param.getInt(key, device) == NO_ERROR) {
-        ALOGD("setParameters(): handleFm with device %d", device);
+            ALOGD("setParameters(): handleFm with device %d", device);
             if(device) {
                 mDevices = device;
                 mParent->handleFm(device);
             }
             param.remove(key);
+        } else {
+#endif
+            mParent->setParameters(keyValuePairs);
         }
     }
-#endif
-
     return err;
 }
 
