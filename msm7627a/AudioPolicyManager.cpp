@@ -1110,6 +1110,9 @@ status_t AudioPolicyManager::checkAndSetVolume(int stream, int index, audio_io_h
             mpClientInterface->setFmVolume(fmVolume, delayMs);
             mLastVoiceVolume = fmVolume;
         }
+        for (size_t i = 0; i < mStreams[stream].mIndexCur.size(); i++) {
+            mStreams[stream].mIndexCur.replaceValueAt(i, index);
+        }
       }
     return NO_ERROR;
 }
