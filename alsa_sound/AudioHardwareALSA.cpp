@@ -2123,6 +2123,7 @@ status_t AudioHardwareALSA::startPlaybackOnExtOut_l(uint32_t activeUsecase) {
     setExtOutActiveUseCases_l(activeUsecase);
     mALSADevice->resumeProxy();
 
+    Mutex::Autolock autolock1(mExtOutMutex);
     ALOGV("ExtOut signal");
     mExtOutCv.signal();
     return err;
