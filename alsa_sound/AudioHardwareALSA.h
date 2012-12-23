@@ -850,8 +850,8 @@ protected:
     audio_hw_device_t  *mUsbDevice;
     audio_stream_out   *mExtOutStream;
 
-    bool                mKillExtOutThread;
-    bool                mExtOutThreadAlive;
+    volatile bool       mKillExtOutThread;
+    volatile bool       mExtOutThreadAlive;
     pthread_t           mExtOutThread;
     Mutex               mExtOutMutex;
     Condition           mExtOutCv;
