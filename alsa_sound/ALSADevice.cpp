@@ -53,6 +53,7 @@ ALSADevice::ALSADevice() {
     mBtscoSamplerate = 8000;
     mCallMode = AudioSystem::MODE_NORMAL;
     mInChannels = 0;
+    mIsFmEnabled = false;
     char value[128], platform[128], baseband[128];
 
     property_get("persist.audio.handset.mic",value,"0");
@@ -536,8 +537,7 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
     }
 #ifdef QCOM_FM_ENABLED
     if (rxDevice != NULL) {
-        if (devices & AudioSystem::DEVICE_OUT_FM)
-            setFmVolume(mFmVolume);
+        setFmVolume(mFmVolume);
     }
 #endif
     ALOGD("switchDevice: mCurTxUCMDevivce %s mCurRxDevDevice %s", mCurTxUCMDevice, mCurRxUCMDevice);
@@ -1045,7 +1045,7 @@ status_t ALSADevice::startFm(alsa_handle_t *handle)
         goto Error;
     }
 
-
+    mIsFmEnabled = true;
     setFmVolume(mFmVolume);
     if (devName) {
         free(devName);
@@ -1065,7 +1065,9 @@ Error:
 status_t ALSADevice::setFmVolume(int value)
 {
     status_t err = NO_ERROR;
-
+    if (!mIsFmEnabled){
+        return INVALID_OPERATION;
+    }
     setMixerControl("Internal FM RX Volume",value,0);
     mFmVolume = value;
 
@@ -1113,6 +1115,10 @@ status_t ALSADevice::close(alsa_handle_t *handle)
                 ALOGE("s_close: csd_client error %d\n", err);
             }
 #endif
+        }
+        if ((!strcmp(handle->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO)) ||
+           (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_FM))) {
+            mIsFmEnabled = false;
         }
         ALOGV("close rxHandle\n");
         err = pcm_close(h);
