@@ -969,6 +969,33 @@ status_t AudioPolicyManager::stopOutput(audio_io_handle_t output,
     }
 }
 
+status_t AudioPolicyManager::stopInput(audio_io_handle_t input)
+{
+    ALOGV("stopInput() input %d", input);
+    ssize_t index = mInputs.indexOfKey(input);
+    if (index < 0) {
+        ALOGW("stopInput() unknow input %d", input);
+        return BAD_VALUE;
+    }
+    AudioInputDescriptor *inputDesc = mInputs.valueAt(index);
+
+    if (inputDesc->mRefCount == 0) {
+        ALOGW("stopInput() input %d already stopped", input);
+        return INVALID_OPERATION;
+    } else {
+        AudioParameter param = AudioParameter();
+        param.addInt(String8(AudioParameter::keyRouting), 0);
+        mpClientInterface->setParameters(input, param.toString());
+        if (mAvailableOutputDevices & AudioSystem::DEVICE_OUT_FM) {
+            ALOGD("Calling applyStreamVOlume from stopInput, device no: %x",
+                  (audio_devices_t)(AudioSystem::DEVICE_OUT_FM));
+            applyStreamVolumes(mPrimaryOutput, (audio_devices_t)(AudioSystem::DEVICE_OUT_FM), 0, true);
+        }
+        inputDesc->mRefCount = 0;
+        return NO_ERROR;
+    }
+}
+
 
 uint32_t AudioPolicyManager::setOutputDevice(audio_io_handle_t output, audio_devices_t device, bool force, int delayMs)
 {
@@ -1107,6 +1134,7 @@ status_t AudioPolicyManager::checkAndSetVolume(int stream, int index, audio_io_h
         float fmVolume = -1.0;
         fmVolume = (float)index/(float)mStreams[stream].mIndexMax;
         if (fmVolume >= 0 && output == mPrimaryOutput) {
+            ALOGV("Index = %d fmVolume = %f\n", index, fmVolume);
             mpClientInterface->setFmVolume(fmVolume, delayMs);
             mLastVoiceVolume = fmVolume;
         }
