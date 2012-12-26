@@ -143,12 +143,15 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
 
     if(devices == 0) {
         ALOGE("No output device specified");
+        *status = BAD_VALUE;
         return;
     }
     if((format == AUDIO_FORMAT_PCM_16_BIT) && (channels <= 0 || channels > 8)) {
         ALOGE("Invalid number of channels %d", channels);
+        *status = BAD_VALUE;
         return;
     }
+
 
     if(mDevices & AudioSystem::DEVICE_OUT_ALL_A2DP) {
         ALOGE("Set Capture from proxy true");
@@ -162,6 +165,11 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     if(format == AUDIO_FORMAT_AAC || format == AUDIO_FORMAT_HE_AAC_V1 ||
        format == AUDIO_FORMAT_HE_AAC_V2 || format == AUDIO_FORMAT_AAC_ADIF ||
        format == AUDIO_FORMAT_AC3 || format == AUDIO_FORMAT_EAC3) {
+        if(!(dlopen("libms11.so", RTLD_NOW))) {
+            ALOGE("MS11 library is not available to decode");
+            *status = BAD_VALUE;
+            return;
+        }
         // Instantiate MS11 decoder for single decode use case
         int32_t format_ms11;
         mMS11Decoder = new SoftMS11;
