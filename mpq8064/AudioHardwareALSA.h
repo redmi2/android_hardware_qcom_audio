@@ -798,8 +798,6 @@ private:
     snd_use_case_mgr_t *mUcMgr;
     AudioEventObserver *mObserver;
 
-    Mutex               mRoutingSetupMutex;
-    Condition           mRoutingSetupCv;
 
     //Declare all the threads
     //Capture
@@ -846,6 +844,7 @@ private:
     static void *       captureThreadWrapper(void *me);
     void                allocateCapturePollFd();
     status_t            startCapturePath();
+    status_t            doRoutingSetup();
     ssize_t             readFromCapturePath(char *buffer);
     void                resetCapturePathVariables();
     void                exitFromCaptureThread();

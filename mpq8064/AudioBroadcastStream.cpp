@@ -148,15 +148,6 @@ AudioBroadcastStreamALSA::AudioBroadcastStreamALSA(AudioHardwareALSA *parent,
         *status = BAD_VALUE;
          return;
     }
-    ALOGV("mRouteAudioToA2dp = %d", mRouteAudioToA2dp);
-    if (mRouteAudioToA2dp) {
-        *status = mParent->startA2dpPlayback_l(
-                                AudioHardwareALSA::A2DPBroadcast);
-        ALOGV("startA2dpPlayback for broadcast returned = %d", *status);
-        if(*status != NO_ERROR)
-            *status = BAD_VALUE;
-    }
-
     return;
 }
 
@@ -661,6 +652,8 @@ void AudioBroadcastStreamALSA::setCaptureFlagsBasedOnConfig()
            // using MS11 decoder?
         }
     }
+    if(mCapturePCMFromDSP || mCaptureCompressedFromDSP)
+        mSignalToSetupRoutingPath = true;
 }
 
 void AudioBroadcastStreamALSA::setRoutingFlagsBasedOnConfig()
@@ -832,107 +825,12 @@ status_t AudioBroadcastStreamALSA::openCapturingAndRoutingDevices()
     } else {
         ALOGD("Capture path not enabled");
     }
-    if(mCaptureHandle) {
+    if(mCaptureHandle)
         status = createCaptureThread();
-        if(status != NO_ERROR) {
-            ALOGE("create captured thread failed");
-            return status;
-        }
-        mCaptureCv.signal();
-        ALOGD("Capture path setup successful");
-    }
 
-    /*-------------------------------------------------------------------------
-                wait till first read event to setup the routing path
-    -------------------------------------------------------------------------*/
-    if(mCapturePCMFromDSP || mCaptureCompressedFromDSP) {
-        mSignalToSetupRoutingPath = true;
-
-        Mutex::Autolock autolock(mRoutingSetupMutex);
-
-        mRoutingSetupCv.wait(mRoutingSetupMutex);
-        if(((mFormat == AudioSystem::AAC) ||
-            (mFormat == AudioSystem::HE_AAC_V1) ||
-            (mFormat == AudioSystem::HE_AAC_V2) ||
-            (mFormat == AudioSystem::AC3) ||
-            (mFormat == AudioSystem::AC3_PLUS) ||
-            (mFormat == AudioSystem::EAC3)) &&
-            (!(dlopen ("libms11.so", RTLD_NOW)))) {
-            ALOGE("MS11 Decoder not available");
-            status = BAD_VALUE;
-            return status;
-        }
-    }
-    mSignalToSetupRoutingPath = false;
-
-    /* ------------------------------------------------------------------------
-    Description: Set appropriate Routing flags based on the configuration
-                 parameters
-    -------------------------------------------------------------------------*/
-    setRoutingFlagsBasedOnConfig();
-
-    /* ------------------------------------------------------------------------
-    Description: update sample rate and channel info based on format
-    -------------------------------------------------------------------------*/
-    updateSampleRateChannelMode();
-
-    if(mTimeStampModeSet)
-        mOutputMetadataLength = sizeof(output_metadata_handle_t);
-
-    /*-------------------------------------------------------------------------
-                           open routing device
-    -------------------------------------------------------------------------*/
-    if(mRoutePcmAudio) {
-        status = openPcmDevice(mDevices);
-        if(status != NO_ERROR) {
-            ALOGE("PCM device open failure");
-            return status;
-        }
-    }
-    if((mUseTunnelDecoder) ||
-       ((mSpdifFormat == COMPRESSED_FORMAT) && (mDevices & (AudioSystem::DEVICE_OUT_SPDIF))) ||
-       ((mHdmiFormat == COMPRESSED_FORMAT) && (mDevices & (AudioSystem::DEVICE_OUT_AUX_DIGITAL)))) {
-        if((mSpdifFormat == COMPRESSED_FORMAT) &&
-           (mHdmiFormat == COMPRESSED_FORMAT))
-            devices = AudioSystem::DEVICE_OUT_SPDIF |
-                         AudioSystem::DEVICE_OUT_AUX_DIGITAL;
-        else if(mSpdifFormat == COMPRESSED_FORMAT)
-            devices = AudioSystem::DEVICE_OUT_SPDIF;
-        else if(mHdmiFormat == COMPRESSED_FORMAT)
-            devices = AudioSystem::DEVICE_OUT_AUX_DIGITAL;
-        else
-            devices = mDevices;
-
-        if(mCaptureFromProxy)
-            devices |= AudioSystem::DEVICE_OUT_PROXY;
-
-        if(mFormat != AUDIO_FORMAT_WMA && mFormat != AUDIO_FORMAT_WMA_PRO) {
-            status = openTunnelDevice(devices);
-            if(status != NO_ERROR) {
-                ALOGE("Tunnel device open failure");
-                return status;
-            }
-        }
-        createPlaybackThread();
-    }
-    mBitstreamSM = new AudioBitstreamSM;
-    if(false == mBitstreamSM->initBitstreamPtr()) {
-        ALOGE("Unable to allocate Memory for i/p and o/p buffering for MS11");
-        delete mBitstreamSM;
-        return BAD_VALUE;
-    }
-    if(mUseMS11Decoder) {
-        status = openMS11Instance();
-        if(status != NO_ERROR) {
-            ALOGE("Unable to open MS11 instance succesfully- exiting");
-            mUseMS11Decoder = false;
-            delete mBitstreamSM;
-            return status;
-        }
-    }
-    mRoutingSetupDone = true;
-    return NO_ERROR;
+    return status;
 }
+
 
 status_t AudioBroadcastStreamALSA::openPCMCapturePath()
 {
@@ -1473,12 +1371,21 @@ void AudioBroadcastStreamALSA::captureThreadEntry()
                             break;
                        default:
                             ALOGE("Invalid supported format");
+                             /* If the first buffer does not contain any valid format then
+                             this buffer is not correct and need to ignored so continu
+                              the while loop and check for next buffer.*/
+                            continue;
                             break;
                      }
                      ALOGV("format: %d, frameSize: %d", mReadMetaData.formatId,
                                          frameSize);
                 }
-                mRoutingSetupCv.signal();
+                if(NO_ERROR != doRoutingSetup()){
+                  /*If there is some failure while doing the routing setup then break the while loop
+                    and kill the capture thread. This can not be communicated to TvPlayer as
+                    OpenBroadCast call has returned after creating the capture thread*/
+                    break;
+                 }
                 mSignalToSetupRoutingPath = false;
             } else if(mRoutingSetupDone == false) {
                 ALOGD("Routing Setup is not ready. Dropping the samples");
@@ -1515,7 +1422,90 @@ void AudioBroadcastStreamALSA::captureThreadEntry()
     mCaptureThreadAlive = false;
     ALOGD("Capture Thread is dying");
 }
+status_t AudioBroadcastStreamALSA::doRoutingSetup()
+{
+    int32_t devices = mDevices;
+    status_t status = NO_ERROR;
+    bool bIsUseCaseSet = false;
+    ALOGD("doRoutingSetup");
+    if(mCapturePCMFromDSP || mCaptureCompressedFromDSP){
 
+        if(((mFormat == AudioSystem::AAC) ||
+            (mFormat == AudioSystem::HE_AAC_V1) ||
+            (mFormat == AudioSystem::HE_AAC_V2) ||
+            (mFormat == AudioSystem::AC3) ||
+            (mFormat == AudioSystem::AC3_PLUS) ||
+            (mFormat == AudioSystem::EAC3)) &&
+            (!(dlopen ("libms11.so", RTLD_NOW)))) {
+            ALOGE("MS11 Decoder not available");
+            status = BAD_VALUE;
+            return status;
+        }
+    }
+    mSignalToSetupRoutingPath = false;
+    setRoutingFlagsBasedOnConfig();
+    updateSampleRateChannelMode();
+    if(mTimeStampModeSet)
+        mOutputMetadataLength = sizeof(output_metadata_handle_t);
+    if(mRoutePcmAudio) {
+        status = openPcmDevice(mDevices);
+        if(status != NO_ERROR) {
+            ALOGE("PCM device open failure");
+            return status;
+        }
+    }
+    if((mUseTunnelDecoder) ||
+       ((mSpdifFormat == COMPRESSED_FORMAT) && (mDevices & (AudioSystem::DEVICE_OUT_SPDIF))) ||
+       ((mHdmiFormat == COMPRESSED_FORMAT) && (mDevices & (AudioSystem::DEVICE_OUT_AUX_DIGITAL)))) {
+        if((mSpdifFormat == COMPRESSED_FORMAT) &&
+           (mHdmiFormat == COMPRESSED_FORMAT))
+            devices = AudioSystem::DEVICE_OUT_SPDIF |
+                         AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+        else if(mSpdifFormat == COMPRESSED_FORMAT)
+            devices = AudioSystem::DEVICE_OUT_SPDIF;
+        else if(mHdmiFormat == COMPRESSED_FORMAT)
+            devices = AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+        else
+            devices = mDevices;
+        if(mCaptureFromProxy)
+            devices |= AudioSystem::DEVICE_OUT_PROXY;
+        if(mFormat != AUDIO_FORMAT_WMA && mFormat != AUDIO_FORMAT_WMA_PRO) {
+            status = openTunnelDevice(devices);
+            if(status != NO_ERROR) {
+                ALOGE("Tunnel device open failure");
+                return status;
+            }
+        }
+        createPlaybackThread();
+    }
+    mBitstreamSM = new AudioBitstreamSM;
+    if(false == mBitstreamSM->initBitstreamPtr()) {
+        ALOGE("Unable to allocate Memory for i/p and o/p buffering for MS11");
+        delete mBitstreamSM;
+        return BAD_VALUE;
+    }
+    if(mUseMS11Decoder) {
+        status = openMS11Instance();
+        if(status != NO_ERROR) {
+            ALOGE("Unable to open MS11 instance succesfully- exiting");
+            mUseMS11Decoder = false;
+            delete mBitstreamSM;
+            return status;
+        }
+    }
+    ALOGV("mRouteAudioToA2dp = %d", mRouteAudioToA2dp);
+    if (mRouteAudioToA2dp) {
+        status = mParent->startA2dpPlayback_l(
+                                AudioHardwareALSA::A2DPBroadcast);
+        ALOGV("startA2dpPlayback for broadcast returned = %d", status);
+        if(status != NO_ERROR)
+            status = BAD_VALUE;
+    }
+    mRoutingSetupDone = true;
+
+    ALOGV("Routing setup done returning");
+    return status;
+}
 ssize_t AudioBroadcastStreamALSA::readFromCapturePath(char *buffer)
 {
     ALOGV("readFromCapturePath");
