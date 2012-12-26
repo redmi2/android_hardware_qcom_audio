@@ -96,6 +96,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     mSkipWrite          = false;
 
     mAlsaHandle         = NULL;
+    mUseCase            = AudioHardwareALSA::USECASE_NONE;
 
     mInputBufferSize    = type ? TUNNEL_BUFFER_SIZE : LPA_BUFFER_SIZE;
     mInputBufferCount   = BUFFER_COUNT;
@@ -130,9 +131,8 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     ALOGV("mParent->mRouteAudioToA2dp = %d", mParent->mRouteAudioToA2dp);
     if (mParent->mRouteAudioToA2dp) {
         status_t err = NO_ERROR;
-        ALOGD("startA2dpPlayback_l - A2DPDirectOutput");
-
-        err = mParent->startA2dpPlayback_l(AudioHardwareALSA::A2DPDirectOutput);
+        mUseCase = mParent->useCaseStringToEnum(mAlsaHandle->useCase);
+        err = mParent->startA2dpPlayback_l(mUseCase);
         *status = err;
     }
 
@@ -141,11 +141,16 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
 
 AudioSessionOutALSA::~AudioSessionOutALSA()
 {
-    ALOGV("~AudioSessionOutALSA");
+    ALOGD("~AudioSessionOutALSA");
 
     mSkipWrite = true;
     mWriteCv.signal();
-
+    if (mParent->mRouteAudioToA2dp) {
+         status_t err = mParent->stopA2dpPlayback(mUseCase);
+         if(err){
+             ALOGE("stopA2dpPlayback return err  %d", err);
+         }
+    }
     //TODO: This might need to be Locked using Parent lock
     reset();
 }
@@ -478,8 +483,7 @@ status_t AudioSessionOutALSA::start()
         }
         mPaused = false;
         if (mParent->mRouteAudioToA2dp) {
-            ALOGD("start - startA2dpPlayback - A2DPDirectOutput");
-            err = mParent->startA2dpPlayback_l(AudioHardwareALSA::A2DPDirectOutput);
+            err = mParent->startA2dpPlayback_l(mUseCase);
             if(err != NO_ERROR) {
                 ALOGE("start Proxy from start returned error = %d",err);
                 return err;
@@ -500,7 +504,7 @@ status_t AudioSessionOutALSA::pause()
 {
     Mutex::Autolock autoLock(mLock);
     status_t err = NO_ERROR;
-    ALOGV("Pausing the driver");
+    ALOGD("Pausing the driver");
     //Signal the driver to pause rendering data
     if (ioctl(mAlsaHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE,1) < 0) {
         ALOGE("PAUSE failed on use case %s", mAlsaHandle->useCase);
@@ -513,8 +517,7 @@ status_t AudioSessionOutALSA::pause()
         return err;
     }
     if (mParent->mRouteAudioToA2dp) {
-        ALOGD("Pause - suspendA2dpPlayback - A2DPDirectOutput");
-        err = mParent->suspendA2dpPlayback(AudioHardwareALSA::A2DPDirectOutput);
+        err = mParent->suspendA2dpPlayback(mUseCase);
         if(err != NO_ERROR) {
             ALOGE("Suspend Proxy from Pause returned error = %d",err);
             return err;
@@ -629,10 +632,9 @@ status_t AudioSessionOutALSA::stop()
     mWriteCv.signal();
 
     if (mParent->mRouteAudioToA2dp) {
-        ALOGD("stop - suspendA2dpPlayback - A2DPDirectOutput");
-        status_t err = mParent->suspendA2dpPlayback(AudioHardwareALSA::A2DPDirectOutput);
+        status_t err = mParent->suspendA2dpPlayback(mUseCase);
         if(err) {
-            ALOGE("stop-suspendA2dpPlayback-A2DPDirectOutput return err = %d", err);
+            ALOGE("stop-suspendA2dpPlayback- return err = %d", err);
             return err;
         }
     }
@@ -647,9 +649,11 @@ status_t AudioSessionOutALSA::standby()
     Mutex::Autolock autoLock(mParent->mLock);
     status_t err = NO_ERROR;
     if (mParent->mRouteAudioToA2dp) {
-         ALOGD("Standby - stopA2dpPlayback_l - A2DPDirectOutput");
-         err = mParent->stopA2dpPlayback_l(AudioHardwareALSA::A2DPDirectOutput);
-         ALOGV("stopA2dpPlayback return err  %d", err);
+         ALOGD("Standby - stopA2dpPlayback_l - mUseCase = %d",mUseCase);
+         err = mParent->stopA2dpPlayback_l(mUseCase);
+         if(err){
+             ALOGE("stopA2dpPlayback return err  %d", err);
+         }
     }
     return err;
 }
