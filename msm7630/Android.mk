@@ -1,5 +1,5 @@
 ifneq ($(BUILD_TINY_ANDROID),true)
-#ifeq ($(strip $(QC_PROP)),true)
+ifeq ($(strip $(TARGET_USES_QCOM_MM_AUDIO)),true)
 
 #AUDIO_POLICY_TEST := true
 #ENABLE_AUDIO_DUMP := true
@@ -105,5 +105,5 @@ LOCAL_SRC_FILES    := audio_policy.conf
 include $(BUILD_PREBUILT)
 
 
-#endif #QC_PROP
+endif # TARGET_USES_QCOM_MM_AUDIO
 endif # not BUILD_TINY_ANDROID
