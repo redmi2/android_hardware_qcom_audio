@@ -368,7 +368,6 @@ status_t AudioUsbALSA::setHardwareParams(pcm *txHandle, uint32_t sampleRate, uin
          txHandle->buffer_size, txHandle->period_size,
          txHandle->period_cnt);
 
-    free(params);
     return NO_ERROR;
 }
 
@@ -407,7 +406,6 @@ status_t AudioUsbALSA::setSoftwareParams(pcm *pcm, bool playback)
         free(params);
         return NO_INIT;
     }
-    free(params);
     return NO_ERROR;
 }
 

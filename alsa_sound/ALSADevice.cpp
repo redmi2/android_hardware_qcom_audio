@@ -53,6 +53,7 @@ ALSADevice::ALSADevice() {
     mBtscoSamplerate = 8000;
     mCallMode = AudioSystem::MODE_NORMAL;
     mInChannels = 0;
+    mIsFmEnabled = false;
     char value[128], platform[128], baseband[128];
 
     property_get("persist.audio.handset.mic",value,"0");
@@ -413,8 +414,10 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
             devices = devices | (AudioSystem::DEVICE_OUT_PROXY |
                       AudioSystem::DEVICE_IN_PROXY);
 #endif
+        } else if (devices & AudioSystem::DEVICE_OUT_ALL_USB) {
+            devices = devices | AudioSystem::DEVICE_IN_BUILTIN_MIC;
         } else if (devices & AudioSystem::DEVICE_OUT_ALL_A2DP) {
-            devices = devices | (AudioSystem::DEVICE_IN_PROXY);
+            ALOGE("SwitchDevice:: Invalid A2DP Combination for mode %d", mode);
         }
     }
 #ifdef QCOM_SSR_ENABLED
@@ -534,8 +537,7 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
     }
 #ifdef QCOM_FM_ENABLED
     if (rxDevice != NULL) {
-        if (devices & AudioSystem::DEVICE_OUT_FM)
-            setFmVolume(mFmVolume);
+        setFmVolume(mFmVolume);
     }
 #endif
     ALOGD("switchDevice: mCurTxUCMDevivce %s mCurRxDevDevice %s", mCurTxUCMDevice, mCurRxUCMDevice);
@@ -1043,7 +1045,7 @@ status_t ALSADevice::startFm(alsa_handle_t *handle)
         goto Error;
     }
 
-
+    mIsFmEnabled = true;
     setFmVolume(mFmVolume);
     if (devName) {
         free(devName);
@@ -1063,7 +1065,9 @@ Error:
 status_t ALSADevice::setFmVolume(int value)
 {
     status_t err = NO_ERROR;
-
+    if (!mIsFmEnabled){
+        return INVALID_OPERATION;
+    }
     setMixerControl("Internal FM RX Volume",value,0);
     mFmVolume = value;
 
@@ -1111,6 +1115,10 @@ status_t ALSADevice::close(alsa_handle_t *handle)
                 ALOGE("s_close: csd_client error %d\n", err);
             }
 #endif
+        }
+        if ((!strcmp(handle->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO)) ||
+           (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_FM))) {
+            mIsFmEnabled = false;
         }
         ALOGV("close rxHandle\n");
         err = pcm_close(h);
@@ -1337,6 +1345,11 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
                    devices & AudioSystem::DEVICE_OUT_SPEAKER) {
             return strdup(SND_USE_CASE_DEV_PROXY_RX_SPEAKER);
         } else if (devices & AudioSystem::DEVICE_OUT_ALL_A2DP) {
+            return strdup(SND_USE_CASE_DEV_PROXY_RX);
+        } else if (devices & AudioSystem::DEVICE_OUT_ALL_USB &&
+                   devices & AudioSystem::DEVICE_OUT_SPEAKER) {
+            return strdup(SND_USE_CASE_DEV_PROXY_RX_SPEAKER);
+        } else if (devices & AudioSystem::DEVICE_OUT_ALL_USB) {
             return strdup(SND_USE_CASE_DEV_PROXY_RX);
         } else if ((devices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET ||
                     devices & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET) &&
@@ -2098,6 +2111,7 @@ status_t ALSADevice::openProxyDevice()
     mProxyParams.mProxyPcmHandle->rate     = AFE_PROXY_SAMPLE_RATE;
     mProxyParams.mProxyPcmHandle->flags    = flags;
     mProxyParams.mProxyPcmHandle->period_size = AFE_PROXY_PERIOD_SIZE;
+    mProxyParams.mBufferTime = (AFE_PROXY_PERIOD_SIZE*1000)/(AFE_PROXY_CHANNEL_COUNT*AFE_PROXY_SAMPLE_RATE*2);
 
     params = (struct snd_pcm_hw_params*) calloc(1,sizeof(struct snd_pcm_hw_params));
     if (!params) {
