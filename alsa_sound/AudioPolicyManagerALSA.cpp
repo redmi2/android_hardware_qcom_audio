@@ -169,18 +169,23 @@ status_t AudioPolicyManager::setDeviceConnectionState(AudioSystem::audio_devices
             }
         }
         updateDeviceForStrategy();
+        if (state == AudioSystem::DEVICE_STATE_AVAILABLE &&
+                AudioSystem::isA2dpDevice(device) &&
+                (mAvailableOutputDevices & AudioSystem::DEVICE_OUT_PROXY)) {
+            ALOGV("Delay the proxy device open");
+            return NO_ERROR;
+        }
+
         audio_devices_t newDevice = AudioPolicyManagerBase::getNewDevice(mPrimaryOutput, false /*fromCache*/);
         if(device == AudioSystem::DEVICE_OUT_FM) {
             if (state == AudioSystem::DEVICE_STATE_AVAILABLE) {
                 ALOGV("setDeviceConnectionState() changeRefCount Inc");
                 mOutputs.valueFor(mPrimaryOutput)->changeRefCount(AudioSystem::FM, 1);
+                newDevice = (audio_devices_t)(AudioPolicyManagerBase::getNewDevice(mPrimaryOutput, false) | AudioSystem::DEVICE_OUT_FM);
             }
             else {
                 ALOGV("setDeviceConnectionState() changeRefCount Dec");
                 mOutputs.valueFor(mPrimaryOutput)->changeRefCount(AudioSystem::FM, -1);
-            }
-            if(newDevice == 0){
-                newDevice = getDeviceForStrategy(STRATEGY_MEDIA, false);
             }
             AudioParameter param = AudioParameter();
             param.addInt(String8(AudioParameter::keyHandleFm), (int)newDevice);
@@ -759,7 +764,6 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
             break;
         }
         if (mAvailableOutputDevices & AudioSystem::DEVICE_OUT_FM) {
-            device |= AudioSystem::DEVICE_OUT_FM;
             if (mForceUse[AudioSystem::FOR_MEDIA] == AudioSystem::FORCE_SPEAKER) {
                 device &= ~(AudioSystem::DEVICE_OUT_WIRED_HEADSET);
                 device &= ~(AudioSystem::DEVICE_OUT_WIRED_HEADPHONE);
@@ -876,9 +880,6 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
             device = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_SPEAKER;
         }
 
-        if (mAvailableOutputDevices & AudioSystem::DEVICE_OUT_FM) {
-            device |= AudioSystem::DEVICE_OUT_FM;
-        }
 
         } break;
 
@@ -928,8 +929,12 @@ uint32_t AudioPolicyManager::setOutputDevice(audio_io_handle_t output,
         ALOGV("setOutputDevice() setting same device %04x or null device for output %d", device, output);
         return muteWaitMs;
     }
+    if (device == prevDevice) {
+        ALOGV("setOutputDevice() Call routing with same device with zero delay ");
+        delayMs = 0;
+    }
 
-    ALOGV("setOutputDevice() changing device");
+    ALOGV("setOutputDevice() changing device :%x",device);
     // do the routing
     param.addInt(String8(AudioParameter::keyRouting), (int)device);
     mpClientInterface->setParameters(output, param.toString(), delayMs);

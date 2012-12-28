@@ -120,6 +120,9 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     if(mParent->isExtOutDevice(devices)) {
         ALOGE("Set Capture from proxy true");
         mParent->mRouteAudioToExtOut = true;
+        if(mParent->mExtOutStream == NULL) {
+            mParent->switchExtOut(devices);
+        }
     }
 
     //open device based on the type (LPA or Tunnel) and devices
@@ -146,6 +149,11 @@ AudioSessionOutALSA::~AudioSessionOutALSA()
 
     mSkipWrite = true;
     mWriteCv.signal();
+    // trying to acquire mDecoderLock, make sure that, the waiting decoder thread
+    // receives the signal before the conditional variable "mWriteCv" is
+    // destroyed in ~AudioSessionOut(). Decoder thread acquires this lock
+    // before it waits for the signal.
+    Mutex::Autolock autoDecoderLock(mDecoderLock);
     //TODO: This might need to be Locked using Parent lock
     reset();
     if (mParent->mRouteAudioToExtOut) {
@@ -423,10 +431,14 @@ void  AudioSessionOutALSA::eventThreadEntry() {
         //Pollin event on Driver's timer fd
         if (pfd[0].revents & POLLIN && !mKillEventThread) {
             struct snd_timer_tread rbuf[4];
+            ALOGV("mAlsaHandle->handle = %p", mAlsaHandle->handle);
+            if( !mAlsaHandle->handle ) {
+                ALOGD(" mAlsaHandle->handle is NULL, breaking from while loop in eventthread");
+                pfd[0].revents = 0;
+                break;
+            }
             read(mAlsaHandle->handle->timer_fd, rbuf, sizeof(struct snd_timer_tread) * 4 );
             pfd[0].revents = 0;
-            if (mPaused)
-                continue;
             ALOGV("After an event occurs");
 
             mFilledQueueMutex.lock();
@@ -498,6 +510,8 @@ void AudioSessionOutALSA::createEventThread() {
 status_t AudioSessionOutALSA::start()
 {
     Mutex::Autolock autoLock(mLock);
+    ALOGV("AudioSessionOutALSA start()");
+    mEosEventReceived = false;
     if (mPaused) {
         status_t err = NO_ERROR;
         if (mSeeking) {
@@ -662,6 +676,14 @@ status_t AudioSessionOutALSA::standby()
 {
     Mutex::Autolock autoLock(mParent->mLock);
     status_t err = NO_ERROR;
+    // At this point, all the buffers with the driver should be
+    // flushed.
+    mLock.lock();
+    if( !mAlsaHandle->handle->start) {
+        ALOGV("drain from destructor which will flush the buffers");
+        drain();
+    }
+    mLock.unlock();
     mAlsaHandle->module->standby(mAlsaHandle);
     if (mParent->mRouteAudioToExtOut) {
          ALOGD("Standby - stopPlaybackOnExtOut_l - mUseCase = %d",mUseCase);
@@ -739,6 +761,13 @@ status_t AudioSessionOutALSA::getBufferInfo(buf_info **buf) {
 status_t AudioSessionOutALSA::isBufferAvailable(int *isAvail) {
 
     Mutex::Autolock autoLock(mLock);
+    // this lock is required to synchronize between decoder thread and control thread.
+    // if this thread is waiting for a signal on the conditional ariable "mWriteCv"
+    // and the ~AudioSessionOut() signals but the mWriteCv is destroyed, before the
+    // signal reaches the waiting thread, it can lead to an indefinite wait resulting
+    // in deadlock.
+    ALOGV("acquiring mDecoderLock in isBufferAvailable()");
+    Mutex::Autolock autoDecoderLock(mDecoderLock);
     ALOGV("isBufferAvailable Empty Queue size() = %d, Filled Queue size() = %d ",
           mEmptyQueue.size(),mFilledQueue.size());
     *isAvail = false;

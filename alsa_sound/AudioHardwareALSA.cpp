@@ -37,6 +37,7 @@
 #include <cutils/properties.h>
 #include <media/AudioRecord.h>
 #include <hardware_legacy/power.h>
+#include <audio_utils/resampler.h>
 #include <pthread.h>
 
 #include "AudioHardwareALSA.h"
@@ -209,8 +210,8 @@ AudioHardwareALSA::AudioHardwareALSA() :
     mUsbDevice = NULL;
     mUsbStream = NULL;
     mExtOutStream = NULL;
+    mResampler = NULL;
     mExtOutActiveUseCases = USECASE_NONE;
-    mActiveExtOut = 0;
     mIsExtOutEnabled = false;
     mKillExtOutThread = false;
     mExtOutThreadAlive = false;
@@ -230,6 +231,10 @@ AudioHardwareALSA::~AudioHardwareALSA()
             it != mDeviceList.end(); ++it) {
         it->useCase[0] = 0;
         mDeviceList.erase(it);
+    }
+    if (mResampler) {
+        release_resampler(mResampler);
+        mResampler = NULL;
     }
 #ifdef QCOM_ACDB_ENABLED
     acdb_loader_deallocate_ACDB();
@@ -438,11 +443,9 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
 
     key = String8("A2dpSuspended");
     if (param.get(key, value) == NO_ERROR) {
-        if (value == "true") {
-             if (mA2dpDevice != NULL) {
-                 mA2dpDevice->set_parameters(mA2dpDevice,keyValuePairs);
-             }
-        }
+         if (mA2dpDevice != NULL) {
+             mA2dpDevice->set_parameters(mA2dpDevice,keyValuePairs);
+         }
         param.remove(key);
     }
 
@@ -531,6 +534,7 @@ String8 AudioHardwareALSA::getParameters(const String8& keys)
 {
     AudioParameter param = AudioParameter(keys);
     String8 value;
+    int device;
 
     String8 key = String8(DUALMIC_KEY);
     if (param.get(key, value) == NO_ERROR) {
@@ -630,6 +634,11 @@ String8 AudioHardwareALSA::getParameters(const String8& keys)
         param.addInt(String8("AWB"), true );
     }
 
+    key = String8(AudioParameter::keyRouting);
+    if (param.getInt(key, device) == NO_ERROR) {
+        param.addInt(key, mCurDevice);
+    }
+
     ALOGV("AudioHardwareALSA::getParameters() %s", param.toString().string());
     return param.toString();
 }
@@ -697,7 +706,7 @@ status_t AudioHardwareALSA::doRouting(int device)
         ALOGV("Ignoring routing for FM/INCALL/VOIP recording");
         return NO_ERROR;
     }
-    ALOGV("device = 0x%x,mCurDevice 0x%x", device, mCurDevice);
+    ALOGV("device = 0x%x,mCurDevice 0x%x mCurRxDevice 0x%x", device, mCurDevice,mCurRxDevice);
     if (device == 0)
         device = mCurDevice;
     ALOGV("doRouting: device %#x newMode %d mCSCallActive %d mVolteCallActive %d"
@@ -763,19 +772,17 @@ status_t AudioHardwareALSA::doRouting(int device)
 #endif
         if ((isExtOutDevice(device)) && mRouteAudioToExtOut == true)  {
             ALOGV(" External Output Enabled - Routing everything to proxy now");
-            if (device != mCurDevice) {
-                switchExtOut(device);
-            }
+            switchExtOut(device);
             ALSAHandleList::iterator it = mDeviceList.end();
             it--;
             status_t err = NO_ERROR;
             uint32_t activeUsecase = useCaseStringToEnum(it->useCase);
             if (!((device & AudioSystem::DEVICE_OUT_ALL_A2DP) &&
-                  (mCurDevice & AudioSystem::DEVICE_OUT_ALL_USB))) {
+                  (mCurRxDevice & AudioSystem::DEVICE_OUT_ALL_USB))) {
                 if ((activeUsecase == USECASE_HIFI_LOW_POWER) ||
                     (activeUsecase == USECASE_HIFI_TUNNEL)) {
-                    if (device != mCurDevice) {
-                        if((isExtOutDevice(mCurDevice)) &&
+                    if (device != mCurRxDevice) {
+                        if((isExtOutDevice(mCurRxDevice)) &&
                            (isExtOutDevice(device))) {
                             activeUsecase = getExtOutActiveUseCases_l();
                             stopPlaybackOnExtOut_l(activeUsecase);
@@ -786,8 +793,8 @@ status_t AudioHardwareALSA::doRouting(int device)
                     err = startPlaybackOnExtOut_l(activeUsecase);
                 } else {
                     //WHY NO check for prev device here?
-                    if (device != mCurDevice) {
-                        if((isExtOutDevice(mCurDevice)) &&
+                    if (device != mCurRxDevice) {
+                        if((isExtOutDevice(mCurRxDevice)) &&
                             (isExtOutDevice(device))) {
                             activeUsecase = getExtOutActiveUseCases_l();
                             stopPlaybackOnExtOut_l(activeUsecase);
@@ -805,7 +812,7 @@ status_t AudioHardwareALSA::doRouting(int device)
                 if(err) {
                     ALOGW("startPlaybackOnExtOut_l for hardware output failed err = %d", err);
                     stopPlaybackOnExtOut_l(activeUsecase);
-                    mALSADevice->route(&(*it),(uint32_t)mCurDevice, newMode);
+                    mALSADevice->route(&(*it),(uint32_t)mCurRxDevice, newMode);
                     return err;
                 }
             }
@@ -822,7 +829,7 @@ status_t AudioHardwareALSA::doRouting(int device)
                 ALOGW("stopPlaybackOnExtOut_l failed = %d", err);
                 return err;
             }
-            if (device != mCurDevice) {
+            if (device != mCurRxDevice) {
                 mALSADevice->route(&(*it),(uint32_t)device, newMode);
             }
         } else {
@@ -833,6 +840,9 @@ status_t AudioHardwareALSA::doRouting(int device)
         }
     }
     mCurDevice = device;
+    if (device & AudioSystem::DEVICE_OUT_ALL) {
+        mCurRxDevice = device;
+    }
     return NO_ERROR;
 }
 
@@ -2082,6 +2092,7 @@ status_t AudioHardwareALSA::startPlaybackOnExtOut_l(uint32_t activeUsecase) {
     setExtOutActiveUseCases_l(activeUsecase);
     mALSADevice->resumeProxy();
 
+    Mutex::Autolock autolock1(mExtOutMutex);
     ALOGV("ExtOut signal");
     mExtOutCv.signal();
     return err;
@@ -2290,12 +2301,14 @@ status_t AudioHardwareALSA::stopExtOutThread()
         ALOGD("Return - thread not live");
         return NO_ERROR;
     }
+    mExtOutMutex.lock();
     mKillExtOutThread = true;
     err = mALSADevice->exitReadFromProxy();
     if(err) {
         ALOGE("exitReadFromProxy failed = %d", err);
     }
     mExtOutCv.signal();
+    mExtOutMutex.unlock();
     int ret = pthread_join(mExtOutThread,NULL);
     ALOGD("ExtOut thread killed = %d", ret);
     return err;
@@ -2304,6 +2317,7 @@ status_t AudioHardwareALSA::stopExtOutThread()
 void AudioHardwareALSA::switchExtOut(int device) {
 
     ALOGV("switchExtOut");
+    uint32_t sampleRate;
     Mutex::Autolock autolock1(mExtOutMutex);
     if (device & AudioSystem::DEVICE_OUT_ALL_A2DP) {
         mExtOutStream = mA2dpStream;
@@ -2311,6 +2325,37 @@ void AudioHardwareALSA::switchExtOut(int device) {
         mExtOutStream = mUsbStream;
     } else {
         mExtOutStream = NULL;
+    }
+    if (mExtOutStream != NULL) {
+        sampleRate = mExtOutStream->common.get_sample_rate(&mExtOutStream->common);
+        if (sampleRate > AFE_PROXY_SAMPLE_RATE) {
+            ALOGW(" Requested samplerate %d is greater than supported so fall back to %d ",
+                  sampleRate,AFE_PROXY_SAMPLE_RATE);
+            sampleRate = AFE_PROXY_SAMPLE_RATE;
+        }
+        if (mResampler != NULL) {
+            release_resampler(mResampler);
+            mResampler = NULL;
+        }
+        if (sampleRate != AFE_PROXY_SAMPLE_RATE) {
+            mResampler = (struct resampler_itfe *)calloc(1, sizeof(struct resampler_itfe));
+            if (mResampler != NULL ) {
+                status_t err = create_resampler(AFE_PROXY_SAMPLE_RATE,
+                                                sampleRate,
+                                                2, //channel count
+                                                RESAMPLER_QUALITY_DEFAULT,
+                                                NULL,
+                                                &mResampler);
+                ALOGV(" sampleRate %d mResampler %p",sampleRate,mResampler);
+                if (err) {
+                    ALOGE(" Failed to create resampler");
+                    free(mResampler);
+                    mResampler = NULL;
+                }
+            } else{
+                ALOGE(" Failed to allocate memory for mResampler = %p",mResampler);
+            }
+        }
     }
 }
 
@@ -2339,21 +2384,24 @@ void AudioHardwareALSA::extOutThreadFunc() {
     prctl(PR_SET_NAME, (unsigned long)"ExtOutThread", 0, 0, 0);
 
     int ionBufCount = 0;
-    uint32_t bytesWritten = 0;
+    int32_t bytesWritten = 0;
     uint32_t numBytesRemaining = 0;
     uint32_t bytesAvailInBuffer = 0;
     uint32_t proxyBufferTime = 0;
     void  *data;
     int err = NO_ERROR;
     ssize_t size = 0;
+    void * outbuffer= malloc(AFE_PROXY_PERIOD_SIZE);
 
     mALSADevice->resetProxyVariables();
 
     ALOGV("mKillExtOutThread = %d", mKillExtOutThread);
     while(!mKillExtOutThread) {
-
         {
             Mutex::Autolock autolock1(mExtOutMutex);
+            if (mKillExtOutThread) {
+                break;
+            }
             if (!mExtOutStream || !mIsExtOutEnabled ||
                 !mALSADevice->isProxyDeviceOpened() ||
                 (mALSADevice->isProxyDeviceSuspended()) ||
@@ -2386,12 +2434,26 @@ void AudioHardwareALSA::extOutThreadFunc() {
         void *copyBuffer = data;
         numBytesRemaining = size;
         proxyBufferTime = mALSADevice->mProxyParams.mBufferTime;
+        {
+            Mutex::Autolock autolock1(mExtOutMutex);
+            if (mResampler != NULL) {
+                uint32_t inFrames = size/(AFE_PROXY_CHANNEL_COUNT*2);
+                uint32_t outFrames = inFrames;
+                mResampler->resample_from_input(mResampler,
+                                               (int16_t *)data,
+                                               &inFrames,
+                                               (int16_t *)outbuffer,
+                                               &outFrames);
+                copyBuffer = outbuffer;
+                numBytesRemaining = outFrames*(AFE_PROXY_CHANNEL_COUNT*2);
+                ALOGV("inFrames %d outFrames %d",inFrames,outFrames);
+            }
+        }
         while (err == OK && (numBytesRemaining  > 0) && !mKillExtOutThread
                 && mIsExtOutEnabled ) {
             {
                 Mutex::Autolock autolock1(mExtOutMutex);
                 if(mExtOutStream != NULL ) {
-
                     bytesAvailInBuffer = mExtOutStream->common.get_buffer_size(&mExtOutStream->common);
                     uint32_t writeLen = bytesAvailInBuffer > numBytesRemaining ?
                                     numBytesRemaining : bytesAvailInBuffer;
@@ -2403,7 +2465,13 @@ void AudioHardwareALSA::extOutThreadFunc() {
                     bytesWritten = numBytesRemaining;
                 }
             }
-            ALOGV("bytesWritten = %d",bytesWritten);
+            //If the write fails make this thread sleep and let other 
+            //thread (eg: stopA2DP) to acquire lock to prevent a deadlock.
+            if(bytesWritten == -1) {
+                ALOGV("bytesWritten = %d",bytesWritten);
+                usleep(10000);
+                break;
+            }
             //Need to check warning here - void used in arithmetic
             copyBuffer = (char *)copyBuffer + bytesWritten;
             numBytesRemaining -= bytesWritten;

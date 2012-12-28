@@ -152,6 +152,7 @@ static int USBRECBIT_FM = (1 << 3);
 #define NUM_FDS 2
 #define AFE_PROXY_SAMPLE_RATE 48000
 #define AFE_PROXY_CHANNEL_COUNT 2
+#define AFE_PROXY_PERIOD_SIZE 3072
 
 #define MAX_SLEEP_RETRY 100  /*  Will check 100 times before continuing */
 #define AUDIO_INIT_SLEEP_WAIT 50 /* 50 ms */
@@ -291,6 +292,7 @@ private:
     struct mixer*  mMixer;
     int mInChannels;
     bool mIsSglte;
+    bool mIsFmEnabled;
 //   ALSAHandleList  *mDeviceList;
 
     struct proxy_params {
@@ -549,6 +551,9 @@ private:
     //Declare the condition Variables and Mutex
     Mutex mEmptyQueueMutex;
     Mutex mFilledQueueMutex;
+
+    //Mutex for sync between decoderthread and control thread
+    Mutex mDecoderLock;
 
     Condition mWriteCv;
     Condition mEventCv;
@@ -814,6 +819,7 @@ protected:
     snd_use_case_mgr_t *mUcMgr;
 
     int32_t            mCurDevice;
+    int32_t            mCurRxDevice;
     /* The flag holds all the audio related device settings from
      * Settings and Qualcomm Settings applications */
     uint32_t            mDevSettingsFlag;
@@ -843,9 +849,11 @@ protected:
     audio_stream_out   *mUsbStream;
     audio_hw_device_t  *mUsbDevice;
     audio_stream_out   *mExtOutStream;
+    struct resampler_itfe *mResampler;
 
-    bool                mKillExtOutThread;
-    bool                mExtOutThreadAlive;
+
+    volatile bool       mKillExtOutThread;
+    volatile bool       mExtOutThreadAlive;
     pthread_t           mExtOutThread;
     Mutex               mExtOutMutex;
     Condition           mExtOutCv;
@@ -860,12 +868,6 @@ protected:
       USECASE_FM = 0x10,
     };
     uint32_t mExtOutActiveUseCases;
-
-    enum {
-      A2DP_STREAM = 0x1,
-      USB_STREAM  = 0x10,
-    };
-    uint32_t mActiveExtOut;
 
 public:
     bool mRouteAudioToExtOut;
