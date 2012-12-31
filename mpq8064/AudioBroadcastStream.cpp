@@ -1,7 +1,9 @@
 /* AudioBroadcastStreamALSA.cpp
  **
  ** Copyright 2008-2009 Wind River Systems
- ** Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+ ** Copyright (c) 2011-2013, The Linux Foundation. All rights reserved
+ ** Not a Contribution, Apache license notifications and license are retained
+ ** for attribution purposes only.
  **
  ** Licensed under the Apache License, Version 2.0 (the "License");
  ** you may not use this file except in compliance with the License.
@@ -229,10 +231,14 @@ AudioBroadcastStreamALSA::~AudioBroadcastStreamALSA()
                  strlen(SND_USE_CASE_VERB_HIFI3))) ||
            (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_MUSIC3,
                  strlen(SND_USE_CASE_MOD_PLAY_MUSIC3))) ||
+           (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_MUSIC4,
+                 strlen(SND_USE_CASE_MOD_PLAY_MUSIC4)))||
            (!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
                  strlen(SND_USE_CASE_VERB_HIFI_TUNNEL2))) ||
            (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
-                 strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2)))) {
+                 strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2))) ||
+           (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL3,
+                 strlen(SND_USE_CASE_MOD_PLAY_TUNNEL3)))) {
             mParent->mDeviceList.erase(it);
         }
     }
@@ -1206,7 +1212,9 @@ status_t AudioBroadcastStreamALSA::openRoutingDevice(char *useCase,
         (!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
                           strlen(SND_USE_CASE_VERB_HIFI_TUNNEL2)) ||
         (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
-                          strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2))))) {
+                          strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2))) ||
+        (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL3,
+                          strlen(SND_USE_CASE_MOD_PLAY_TUNNEL3))))) {
         if (mUseMS11Decoder == true)
             alsa_handle.type = COMPRESSED_PASSTHROUGH_FORMAT;
         else if (mFormat == AUDIO_FORMAT_DTS || mFormat == AUDIO_FORMAT_DTS_LBR) {
