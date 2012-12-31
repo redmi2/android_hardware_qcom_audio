@@ -328,6 +328,7 @@ static card_mapping_t card_mapping_list[] = {
 #define SND_USE_CASE_MOD_CAPTURE_MUSIC2       "Capture Music2"
 #define SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED    "Capture Music Compressed"
 #define SND_USE_CASE_MOD_PLAY_MUSIC3       "Play Music3"
+#define SND_USE_CASE_MOD_PLAY_MUSIC4       "Play Music4"
 #define SND_USE_CASE_MOD_PLAY_TUNNEL1     "Play Tunnel1"
 #define SND_USE_CASE_MOD_PLAY_TUNNEL2     "Play Tunnel2"
 #define SND_USE_CASE_MOD_PLAY_TUNNEL3     "Play Tunnel3"
