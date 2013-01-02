@@ -151,7 +151,13 @@ AudioHardwareALSA::AudioHardwareALSA() :
         ALOGE("Failed to open ucm instance: %d", errno);
     } else {
         ALOGI("ucm instance opened: %u", (unsigned)mUcMgr);
+        mUcMgr->isFusion3Platform = mFusion3Platform;
     }
+
+#ifdef QCOM_CSDCLIENT_ENABLED
+    if (mFusion3Platform)
+        csd_client_init();
+#endif
 
     //set default AudioParameters
     AudioParameter param;
@@ -208,6 +214,10 @@ AudioHardwareALSA::~AudioHardwareALSA()
     }
 #ifdef QCOM_ACDB_ENABLED
     acdb_loader_deallocate_ACDB();
+#endif
+#ifdef QCOM_CSDCLIENT_ENABLED
+    if (mFusion3Platform)
+        csd_client_deinit();
 #endif
 #ifdef QCOM_USBAUDIO_ENABLED
     delete mAudioUsbALSA;
