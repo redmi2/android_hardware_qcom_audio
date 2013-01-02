@@ -723,8 +723,9 @@ int use_case_index)
                     ALOGD("Voice acdb: rx id %d tx id %d",
                           uc_mgr->current_rx_device,
                           uc_mgr->current_tx_device);
-                    acdb_loader_send_voice_cal(uc_mgr->current_rx_device,
-                        uc_mgr->current_tx_device);
+                    if (!uc_mgr->isFusion3Platform)
+                        acdb_loader_send_voice_cal(uc_mgr->current_rx_device,
+                                                    uc_mgr->current_tx_device);
                 } else {
                     ALOGV("Voice acdb: Required acdb already pushed \
                          rx id %d tx id %d", uc_mgr->current_rx_device,
