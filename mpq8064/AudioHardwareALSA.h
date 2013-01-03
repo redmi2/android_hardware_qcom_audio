@@ -643,8 +643,7 @@ private:
     pthread_t mEventThread;
 
     //Declare the condition Variables and Mutex
-    Mutex mInputMemRequestMutex;
-    Mutex mInputMemResponseMutex;
+    Mutex mInputMemMutex;
     Mutex mEventMutex;
     Mutex mFrameCountMutex;
     Mutex mWriteCvMutex;
@@ -822,8 +821,7 @@ private:
     Mutex               mPlaybackMutex;
     Condition           mPlaybackCv;
     struct              pollfd mPlaybackPfd[NUM_FDS];
-    Mutex               mInputMemRequestMutex;
-    Mutex               mInputMemResponseMutex;
+    Mutex               mInputMemMutex;
     Mutex               mWriteCvMutex;
     Condition           mWriteCv;
     int                 mPlaybackfd;

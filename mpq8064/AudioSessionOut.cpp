@@ -848,7 +848,7 @@ int32_t AudioSessionOutALSA::writeToCompressedDriver(char *buffer, int bytes)
         int n;
         ALOGV("Signal Event thread\n");
         mEventCv.signal();
-        mInputMemRequestMutex.lock();
+        mInputMemMutex.lock();
         ALOGV("write Empty Queue1 size() = %d, Queue2 size() = %d\
         Filled Queue1 size() = %d, Queue2 size() = %d",\
         mInputMemEmptyQueue[0].size(), mInputMemEmptyQueue[1].size(),\
@@ -857,16 +857,16 @@ int32_t AudioSessionOutALSA::writeToCompressedDriver(char *buffer, int bytes)
             (mSecCompreRxHandle!=NULL && mInputMemEmptyQueue[1].empty())) {
             ALOGV("Write: waiting on mWriteCv");
             mLock.unlock();
-            mInputMemRequestMutex.unlock();
+            mInputMemMutex.unlock();
             mWriteCvMutex.lock();
             mWriteCv.wait(mWriteCvMutex);
             mWriteCvMutex.unlock();
             mLock.lock();
-            mInputMemRequestMutex.lock();
+            mInputMemMutex.lock();
             if (mSkipWrite) {
                 ALOGV("Write: Flushing the previous write buffer");
                 mSkipWrite = false;
-                mInputMemRequestMutex.unlock();
+                mInputMemMutex.unlock();
                 return 0;
             }
             ALOGV("Write: received a signal to wake up");
@@ -876,16 +876,14 @@ int32_t AudioSessionOutALSA::writeToCompressedDriver(char *buffer, int bytes)
         BuffersAllocated buf = *it;
         if (bytes)
             mInputMemEmptyQueue[0].erase(it);
-        mInputMemRequestMutex.unlock();
         updateMetaData(bytes);
         memcpy(buf.memBuf, &mOutputMetadataTunnel, mOutputMetadataLength);
         ALOGD("Copy Metadata1 = %d, bytes = %d", mOutputMetadataLength, bytes);
         memcpy(((uint8_t *)buf.memBuf + mOutputMetadataLength), buffer, bytes);
         buf.bytesToWrite = bytes;
-        mInputMemResponseMutex.lock();
         if (bytes)
             mInputMemFilledQueue[0].push_back(buf);
-        mInputMemResponseMutex.unlock();
+        mInputMemMutex.unlock();
 
         ALOGV("PCM write start");
         pcm * local_handle = (struct pcm *)mCompreRxHandle->handle;
@@ -903,24 +901,25 @@ int32_t AudioSessionOutALSA::writeToCompressedDriver(char *buffer, int bytes)
         }
         // write to second handle if present
         if (mSecCompreRxHandle) {
-                mInputMemRequestMutex.lock();
+                mInputMemMutex.lock();
                 it = mInputMemEmptyQueue[1].begin();
                 buf = *it;
                 if (bytes)
                     mInputMemEmptyQueue[1].erase(it);
-                mInputMemRequestMutex.unlock();
                 memcpy(buf.memBuf, &mOutputMetadataTunnel, mOutputMetadataLength);
                 ALOGD("Copy Metadata2 = %d, bytes = %d", mOutputMetadataLength, bytes);
                 memcpy(((uint8_t *)buf.memBuf + mOutputMetadataLength), buffer, bytes);
                 buf.bytesToWrite = bytes;
-                mInputMemResponseMutex.lock();
                 if (bytes)
                     mInputMemFilledQueue[1].push_back(buf);
-                mInputMemResponseMutex.unlock();
+                mInputMemMutex.unlock();
 
                 ALOGV("PCM write start second compressed device");
                     local_handle = (struct pcm *)mSecCompreRxHandle->handle;
+                {
+                    Mutex::Autolock autoLock(mSyncLock);
                     n = pcm_write(local_handle, buf.memBuf, local_handle->period_size);
+                }
         }
         if (bytes < (local_handle->period_size - mOutputMetadataLength )) {
             //TODO : Is this code reqd - start seems to fail?
@@ -1079,11 +1078,10 @@ void  AudioSessionOutALSA::eventThreadEntry() {
                 }
                 while(hw_ptr[0] < mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr) {
                     mCompreCBk=false;
-                    mInputMemResponseMutex.lock();
-                    mInputMemRequestMutex.lock();
+                    mInputMemMutex.lock();
                     if (mInputMemFilledQueue[0].empty()) {
                         ALOGV("Filled queue1 is empty");
-                        mInputMemResponseMutex.unlock();
+                        mInputMemMutex.unlock();
                         break;
                     }
                     BuffersAllocated buf = *(mInputMemFilledQueue[0].begin());
@@ -1091,8 +1089,7 @@ void  AudioSessionOutALSA::eventThreadEntry() {
                     ALOGV("mInputMemFilledQueue1 %d", mInputMemFilledQueue[0].size());
 
                     mInputMemEmptyQueue[0].push_back(buf);
-                    mInputMemRequestMutex.unlock();
-                    mInputMemResponseMutex.unlock();
+                    mInputMemMutex.unlock();
                     hw_ptr[0] += mCompreRxHandle->bufferSize/(2*mCompreRxHandle->channels);
 
                     {
@@ -1107,17 +1104,16 @@ void  AudioSessionOutALSA::eventThreadEntry() {
 
             if (mSecCompreCBk) {
                 {
-                    Mutex::Autolock autoLock(mLock);
+                    Mutex::Autolock autoLock(mSyncLock);
                     mSecCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN | SNDRV_PCM_SYNC_PTR_HWSYNC);
                     sync_ptr(mSecCompreRxHandle->handle);
                 }
                 while (hw_ptr[1] < mSecCompreRxHandle->handle->sync_ptr->s.status.hw_ptr) {
                     mSecCompreCBk=false;
-                    mInputMemResponseMutex.lock();
-                    mInputMemRequestMutex.lock();
+                    mInputMemMutex.lock();
                     if (mInputMemFilledQueue[1].empty()) {
                         ALOGV("Filled queue2 is empty");
-                        mInputMemResponseMutex.unlock();
+                        mInputMemMutex.unlock();
                         break;
                     }
                     BuffersAllocated buf = *(mInputMemFilledQueue[1].begin());
@@ -1125,11 +1121,10 @@ void  AudioSessionOutALSA::eventThreadEntry() {
                     ALOGV("mInputMemFilledQueue2 %d", mInputMemFilledQueue[1].size());
 
                    mInputMemEmptyQueue[1].push_back(buf);
-                   mInputMemResponseMutex.unlock();
-                   mInputMemRequestMutex.unlock();
+                   mInputMemMutex.unlock();
                    hw_ptr[1] += mSecCompreRxHandle->bufferSize/(2*mSecCompreRxHandle->channels);
                    {
-                        Mutex::Autolock autoLock(mLock);
+                        Mutex::Autolock autoLock(mSyncLock);
                         mSecCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN | SNDRV_PCM_SYNC_PTR_HWSYNC);
                         sync_ptr(mSecCompreRxHandle->handle);
                    }
@@ -1281,8 +1276,7 @@ status_t AudioSessionOutALSA::pause_l()
 
 status_t AudioSessionOutALSA::resetBufferQueue()
 {
-        mInputMemResponseMutex.lock();
-        mInputMemRequestMutex.lock();
+        mInputMemMutex.lock();
         mInputMemFilledQueue[0].clear();
         mInputMemEmptyQueue[0].clear();
         List<BuffersAllocated>::iterator it = mInputBufPool[0].begin();
@@ -1305,8 +1299,7 @@ status_t AudioSessionOutALSA::resetBufferQueue()
         }
         mReachedExtractorEOS = false;
         mPostedEOS = false;
-        mInputMemRequestMutex.unlock();
-        mInputMemResponseMutex.unlock();
+        mInputMemMutex.unlock();
         return NO_ERROR;
 }
 
