@@ -1,7 +1,9 @@
 /* AudioSessionOutALSA.cpp
  **
  ** Copyright 2008-2009 Wind River Systems
- ** Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+ ** Copyright (c) 2011-2013, The Linux Foundation. All rights reserved
+ ** Not a Contribution, Apache license notifications and license are retained
+ ** for attribution purposes only.
  **
  ** Licensed under the Apache License, Version 2.0 (the "License");
  ** you may not use this file except in compliance with the License.
@@ -53,8 +55,6 @@ namespace sys_write {
 namespace android_audio_legacy
 {
 // ----------------------------------------------------------------------------
-
-static int sessionCount = 0;
 
 AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
                                          uint32_t   devices,
@@ -140,6 +140,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     mFirstBuffer         = true;
     mFirstAACBuffer      = NULL;
     mFirstAACBufferLength = 0;
+    mA2dpUseCase = AudioHardwareALSA::USECASE_NONE;
 
     if(devices == 0) {
         ALOGE("No output device specified");
@@ -280,13 +281,25 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     }
     ALOGV("mRouteAudioToA2dp = %d", mRouteAudioToA2dp);
     if (mRouteAudioToA2dp) {
-        status_t err = NO_ERROR;
-        ALOGD("startA2dpPlayback_l - A2DPDirectOutput");
-        err = mParent->startA2dpPlayback_l(AudioHardwareALSA::A2DPDirectOutput);
-        *status = err;
+        alsa_handle_t *handle = NULL;
+        if (mPcmRxHandle && (mPcmRxHandle->devices & AudioSystem::DEVICE_OUT_PROXY))
+            handle = mPcmRxHandle;
+        else if (mCompreRxHandle && (mCompreRxHandle->devices & AudioSystem::DEVICE_OUT_PROXY))
+            handle = mCompreRxHandle;
+        else if (mSecCompreRxHandle && (mSecCompreRxHandle->devices & AudioSystem::DEVICE_OUT_PROXY))
+            handle = mSecCompreRxHandle;
+        if (handle) {
+            mA2dpUseCase = mParent->useCaseStringToEnum(handle->useCase);
+            ALOGD("startA2dpPlayback_l - usecase %x", mA2dpUseCase);
+            status_t err = mParent->startA2dpPlayback_l(mA2dpUseCase);
+            if(err != NO_ERROR) {
+                ALOGW("startA2dpPlayback_l returned = %d", err);
+                *status = err;
+            }
+        }
+        // if handle is null(WMA), take care of this in write call
     }
     mCurDevice = devices;
-    sessionCount++;
 }
 
 AudioSessionOutALSA::~AudioSessionOutALSA()
@@ -296,18 +309,17 @@ AudioSessionOutALSA::~AudioSessionOutALSA()
     mSkipWrite = true;
     mWriteCv.signal();
 
-    if (mRouteAudioToA2dp && sessionCount == 1) {
-        ALOGD("destructor - stopA2dpPlayback - A2DPDirectOutput");
-        status_t err = mParent->stopA2dpPlayback_l(AudioHardwareALSA::A2DPDirectOutput);
+    //TODO: This might need to be Locked using Parent lock
+    reset();
+
+    if (mRouteAudioToA2dp) {
+        ALOGD("destructor - stopA2dpPlayback_l - usecase %x", mA2dpUseCase);
+        status_t err = mParent->stopA2dpPlayback_l(mA2dpUseCase);
         if(err) {
-            ALOGE("destructor - stopA2dpPlayback-A2DPDirectOutput return err = %d", err);
+            ALOGE("destructor - stopA2dpPlayback_l return err = %d", err);
         }
         mRouteAudioToA2dp = false;
     }
-
-    //TODO: This might need to be Locked using Parent lock
-    reset();
-    sessionCount--;
 }
 
 status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
@@ -534,6 +546,26 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
         }
         mWMAConfigDataSet = true;
         return bytes;
+    }
+    if (mRouteAudioToA2dp && mA2dpUseCase == AudioHardwareALSA::USECASE_NONE) {
+        alsa_handle_t *handle = NULL;
+        if (mPcmRxHandle && (mPcmRxHandle->devices & AudioSystem::DEVICE_OUT_PROXY))
+            handle = mPcmRxHandle;
+        else if (mCompreRxHandle && (mCompreRxHandle->devices & AudioSystem::DEVICE_OUT_PROXY))
+            handle = mCompreRxHandle;
+        else if (mSecCompreRxHandle && (mSecCompreRxHandle->devices & AudioSystem::DEVICE_OUT_PROXY))
+            handle = mSecCompreRxHandle;
+        if (handle) {
+            mA2dpUseCase = mParent->useCaseStringToEnum(handle->useCase);
+            ALOGD("startA2dpPlayback_l - usecase %x", mA2dpUseCase);
+            status_t err = mParent->startA2dpPlayback_l(mA2dpUseCase);
+            if(err != NO_ERROR) {
+                ALOGE("write:startA2dpPlayback_l returned = %d", err);
+                return -1;
+            }
+        }
+        else
+            return -1;
     }
 #ifdef DEBUG
     mFpDumpInput = fopen("/data/input.raw","a");
@@ -1171,8 +1203,8 @@ status_t AudioSessionOutALSA::start()
     
     if(mPaused) {
         if (mRouteAudioToA2dp) {
-            ALOGD("startA2dpPlayback_l - resume - A2DPDirectOutput");
-            err = mParent->startA2dpPlayback_l(AudioHardwareALSA::A2DPDirectOutput);
+            ALOGD("startA2dpPlayback_l - resume - usecase %x", mA2dpUseCase);
+            err = mParent->startA2dpPlayback_l(mA2dpUseCase);
             if(err) {
                 ALOGE("startA2dpPlayback_l from resume return error = %d", err);
                 return err;
@@ -1215,9 +1247,9 @@ status_t AudioSessionOutALSA::pause()
         fclose(mFpDumpInput);
     }
 #endif
-    if (mRouteAudioToA2dp && sessionCount == 1) {
-        ALOGD("Pause - suspendA2dpPlayback - A2DPDirectOutput");
-        err = mParent->suspendA2dpPlayback(AudioHardwareALSA::A2DPDirectOutput);
+    if (mRouteAudioToA2dp) {
+        ALOGD("Pause - suspendA2dpPlayback_l - usecase %x", mA2dpUseCase);
+        err = mParent->suspendA2dpPlayback_l(mA2dpUseCase);
         if(err != NO_ERROR) {
             ALOGE("suspend Proxy from Pause returned error = %d",err);
             return err;
@@ -1469,14 +1501,14 @@ status_t AudioSessionOutALSA::stop()
     //TODO: This might need to be Locked using Parent lock
     reset();
 
-    if (mRouteAudioToA2dp && sessionCount == 1) {
-        ALOGD("stop - suspendA2dpPlayback - A2DPDirectOutput");
-        status_t err = mParent->suspendA2dpPlayback(AudioHardwareALSA::A2DPDirectOutput);
+    if (mRouteAudioToA2dp) {
+        ALOGD("stop - suspendA2dpPlayback_l - usecase %x", mA2dpUseCase);
+        status_t err = mParent->suspendA2dpPlayback_l(mA2dpUseCase);
         if(err) {
-            ALOGE("stop-suspendA2dpPlayback-A2DPDirectOutput return err = %d", err);
+            ALOGE("stop-suspendA2dpPlayback- return err = %d", err);
             return err;
         }
-        mRouteAudioToA2dp = false;
+        mA2dpUseCase = AudioHardwareALSA::USECASE_NONE;
     }
 
     return NO_ERROR;
@@ -1491,27 +1523,25 @@ status_t AudioSessionOutALSA::standby()
 {
     Mutex::Autolock autoLock(mLock);
     ALOGD("standby");
+
+    mSkipWrite = true;
+    mWriteCv.signal();
+
+    //TODO: This might need to be Locked using Parent lock
+    reset();
+
     if (mRouteAudioToA2dp) {
-         ALOGD("standby - suspendA2dpPlayback - A2DPDirectOutput");
-         status_t err = mParent->suspendA2dpPlayback(AudioHardwareALSA::A2DPDirectOutput);
+         ALOGD("standby - stopA2dpPlayback_l - usecase %x", mA2dpUseCase);
+         status_t err = mParent->stopA2dpPlayback_l(mA2dpUseCase);
          if(err) {
-             ALOGE("standby-suspendA2dpPlayback-A2DPDirectOutput return er = %d", err);
+             ALOGE("standby-stopA2dpPlayback- return er = %d", err);
          }
+         mRouteAudioToA2dp = false;
     }
-
-    if(mPcmRxHandle) {
-        mPcmRxHandle->module->standby(mPcmRxHandle);
-    }
-
     if (mPowerLock) {
         release_wake_lock ("AudioOutLock");
         mPowerLock = false;
     }
-    mFrameCountMutex.lock();
-    mFrameCount = 0;
-    mFrameCountMutex.unlock();
-    if(mUseMS11Decoder == true)
-        mBitstreamSM->resetBitstreamPtr();
     return NO_ERROR;
 }
 
@@ -1701,8 +1731,8 @@ status_t AudioSessionOutALSA::doRouting(int devices)
     } else if(!(devices & AudioSystem::DEVICE_OUT_ALL_A2DP) && mRouteAudioToA2dp){
         mRouteAudioToA2dp = false;
         devices &= ~AudioSystem::DEVICE_OUT_PROXY;
-        ALOGD("doRouting-stopA2dpPlayback_l-A2DPDirectOutput disable");
-        status = mParent->stopA2dpPlayback_l(AudioHardwareALSA::A2DPDirectOutput);
+        ALOGD("doRouting-stopA2dpPlayback_l- usecase %x", mA2dpUseCase);
+        status = mParent->stopA2dpPlayback_l(mA2dpUseCase);
     }
     if(devices == mDevices) {
         ALOGW("Return same device ");
@@ -1835,21 +1865,30 @@ status_t AudioSessionOutALSA::doRouting(int devices)
     }
 
     if(mRouteAudioToA2dp ) {
-        ALOGD("doRouting-startA2dpPlayback_l-A2DPDirectOutput-enable");
-        status = mParent->startA2dpPlayback_l(AudioHardwareALSA::A2DPDirectOutput);
-        if(status) {
-            ALOGW("startA2dpPlayback_l for direct output failed err = %d", status);
-            status_t err = mParent->stopA2dpPlayback_l(AudioHardwareALSA::A2DPDirectOutput);
-            if(err) {
-                ALOGW("stop A2dp playback for hardware output failed = %d", err);
+        alsa_handle_t *handle = NULL;
+        if (mPcmRxHandle && (mPcmRxHandle->devices & AudioSystem::DEVICE_OUT_PROXY))
+            handle = mPcmRxHandle;
+        else if (mCompreRxHandle && (mCompreRxHandle->devices & AudioSystem::DEVICE_OUT_PROXY))
+            handle = mCompreRxHandle;
+        else if (mSecCompreRxHandle && (mSecCompreRxHandle->devices & AudioSystem::DEVICE_OUT_PROXY))
+            handle = mSecCompreRxHandle;
+        if (handle) {
+            mA2dpUseCase = mParent->useCaseStringToEnum(handle->useCase);
+            ALOGD("doRouting - startA2dpPlayback_l - usecase %x", mA2dpUseCase);
+            status = mParent->startA2dpPlayback_l(mA2dpUseCase);
+            if(status != NO_ERROR) {
+                ALOGW("startA2dpPlayback_l returned = %d", status);
+                mParent->stopA2dpPlayback_l(mA2dpUseCase);
+                mRouteAudioToA2dp = false;
             }
-            mRouteAudioToA2dp = false;
+        }
+        if (handle == NULL || status != NO_ERROR) {
             mDevices = mCurDevice;
             if(mPcmRxHandle) {
                 mALSADevice->switchDeviceUseCase(mPcmRxHandle, devices, mParent->mode());
             }
-            if(mUseTunnelDecoder &&  mCompreRxHandle) {
-               mALSADevice->switchDeviceUseCase(mCompreRxHandle, devices, mParent->mode());
+            if(mCompreRxHandle) {
+                mALSADevice->switchDeviceUseCase(mCompreRxHandle, devices, mParent->mode());
             }
         }
         resume_l();

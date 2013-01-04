@@ -1,7 +1,9 @@
 /* AudioStreamOutALSA.cpp
  **
  ** Copyright 2008-2009 Wind River Systems
- ** Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+ ** Copyright (c) 2011-2013, The Linux Foundation. All rights reserved
+ ** Not a Contribution, Apache license notifications and license are retained
+ ** for attribution purposes only.
  **
  ** Licensed under the Apache License, Version 2.0 (the "License");
  ** you may not use this file except in compliance with the License.
@@ -49,16 +51,18 @@ static const int DEFAULT_SAMPLE_RATE = ALSA_DEFAULT_SAMPLE_RATE;
 AudioStreamOutALSA::AudioStreamOutALSA(AudioHardwareALSA *parent, alsa_handle_t *handle) :
     ALSAStreamOps(parent, handle),
     mParent(parent),
-    mFrameCount(0)
+    mFrameCount(0),
+    mA2dpUseCase(AudioHardwareALSA::USECASE_NONE)
 {
 }
 
 AudioStreamOutALSA::~AudioStreamOutALSA()
 {
     if (mParent->mRouteAudioToA2dp) {
-         status_t err = mParent->stopA2dpPlayback_l(AudioHardwareALSA::A2DPHardwareOutput);
-         ALOGW("stopA2dpPlayback_l return err  %d", err);
-         mParent->mRouteAudioToA2dp = false;
+         ALOGD("stopA2dpPlayback_l - usecase  %x", mA2dpUseCase);
+         status_t err = mParent->stopA2dpPlayback_l(mA2dpUseCase);
+         if (err)
+             ALOGW("stopA2dpPlayback_l return err  %d", err);
     }
     close();
 }
@@ -175,11 +179,15 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
         }
         if (mParent->mRouteAudioToA2dp) {
             status_t err = NO_ERROR;
-            err = mParent->startA2dpPlayback_l(AudioHardwareALSA::A2DPHardwareOutput);
-            if(err) {
-                ALOGE("startA2dpPlayback_l from write return err = %d", err);
-                mParent->mLock.unlock();
-                return err;
+            mA2dpUseCase = mParent->useCaseStringToEnum(mHandle->useCase);
+            if (!(mParent->getA2DPActiveUseCases_l() & mA2dpUseCase)) {
+                ALOGD("startA2dpPlayback_l usecase %x", mA2dpUseCase);
+                err = mParent->startA2dpPlayback_l(mA2dpUseCase);
+                if(err) {
+                    ALOGE("startA2dpPlayback_l from write return err = %d", err);
+                    mParent->mLock.unlock();
+                    return err;
+                }
             }
         }
         mParent->mLock.unlock();
@@ -237,8 +245,8 @@ status_t AudioStreamOutALSA::close()
     Mutex::Autolock autoLock(mParent->mLock);
     ALOGV("close = %d", mParent->mRouteAudioToA2dp);
     if (mParent->mRouteAudioToA2dp) {
-         ALOGD("close-stopA2dpPlayback_l-A2DPHardwareOutput");
-         status_t err = mParent->stopA2dpPlayback_l(AudioHardwareALSA::A2DPHardwareOutput);
+         ALOGD("close-stopA2dpPlayback_l- usecase %x", mA2dpUseCase);
+         status_t err = mParent->stopA2dpPlayback_l(mA2dpUseCase);
          if(err) {
              ALOGE("stopA2dpPlayback_l from hardware output close return err = %d", err);
              return err;
@@ -278,18 +286,17 @@ status_t AudioStreamOutALSA::standby()
          return NO_ERROR;
      }
 
+    mHandle->module->standby(mHandle);
     ALOGD("standby = %d", mParent->mRouteAudioToA2dp);
 
     if (mParent->mRouteAudioToA2dp) {
-        ALOGD("standby-stopA2dpPlayback_l-A2DPHardwareOutput");
-        status_t err = mParent->stopA2dpPlayback_l(AudioHardwareALSA::A2DPHardwareOutput);
+        ALOGD("standby-stopA2dpPlayback_l- usecase %x", mA2dpUseCase);
+        status_t err = mParent->stopA2dpPlayback_l(mA2dpUseCase);
         if(err) {
             ALOGE("stopA2dpPlayback_l from standby return err = %d", err);
             return err;
         }
     }
-    mHandle->module->standby(mHandle);
-
     if (mPowerLock) {
         release_wake_lock ("AudioOutLock");
         mPowerLock = false;
