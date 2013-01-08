@@ -839,6 +839,14 @@ status_t AudioBroadcastStreamALSA::openCapturingAndRoutingDevices()
     if(mCaptureHandle)
         status = createCaptureThread();
 
+    /*A call to DoRoutingSetup() is required below if the audio
+    source is digital broadcast, as capture thread is not created
+    in case of digital broadcast and in current design
+    doRoutingSetup is called from capture thread*/
+
+    if(mAudioSource == QCOM_AUDIO_SOURCE_DIGITAL_BROADCAST_MAIN_ONLY)
+        doRoutingSetup();
+
     return status;
 }
 
