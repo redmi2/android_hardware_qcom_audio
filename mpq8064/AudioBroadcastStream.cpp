@@ -1,7 +1,9 @@
 /* AudioBroadcastStreamALSA.cpp
  **
  ** Copyright 2008-2009 Wind River Systems
- ** Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+ ** Copyright (c) 2011-2013, The Linux Foundation. All rights reserved
+ ** Not a Contribution, Apache license notifications and license are retained
+ ** for attribution purposes only.
  **
  ** Licensed under the Apache License, Version 2.0 (the "License");
  ** you may not use this file except in compliance with the License.
@@ -83,6 +85,7 @@ AudioBroadcastStreamALSA::AudioBroadcastStreamALSA(AudioHardwareALSA *parent,
     mAudioSource    = audioSource;
     mALSADevice     = mParent->mALSADevice;
     mUcMgr          = mParent->mUcMgr;
+    mA2dpUseCase    = AudioHardwareALSA::USECASE_NONE;
 
     ALOGD("devices:%d, format:%d, channels:%d, sampleRate:%d, audioSource:%d",
         devices, format, channels, sampleRate, audioSource);
@@ -153,15 +156,8 @@ AudioBroadcastStreamALSA::AudioBroadcastStreamALSA(AudioHardwareALSA *parent,
 
 AudioBroadcastStreamALSA::~AudioBroadcastStreamALSA()
 {
-    ALOGV("Destructor");
+    ALOGD("Destructor ++");
     Mutex::Autolock autoLock(mLock);
-
-    if (mRouteAudioToA2dp) {
-        status_t status = mParent->stopA2dpPlayback_l(
-                                AudioHardwareALSA::A2DPBroadcast);
-        ALOGV("stopA2dpPlayback_l for broadcast returned %d", status);
-        mRouteAudioToA2dp = false;
-    }
 
     mSkipWrite = true;
     mWriteCv.signal();
@@ -201,6 +197,14 @@ AudioBroadcastStreamALSA::~AudioBroadcastStreamALSA()
         closeDevice(mCompreRxHandle);
         if(mCompreWriteTempBuffer)
             free(mCompreWriteTempBuffer);
+    }
+
+    if (mRouteAudioToA2dp) {
+        ALOGD("stopA2dpPlayback_l for broadcast usecase %x", mA2dpUseCase);
+        status_t status = mParent->stopA2dpPlayback_l(mA2dpUseCase);
+        if (status)
+            ALOGW("stopA2dpPlayback_l for broadcast returned %d", status);
+        mRouteAudioToA2dp = false;
     }
 
     for(ALSAHandleList::iterator it = mParent->mDeviceList.begin();
@@ -249,6 +253,7 @@ AudioBroadcastStreamALSA::~AudioBroadcastStreamALSA()
     for(inputMetadataList::iterator it = mInputMetadataListCompre.begin();
             it != mInputMetadataListCompre.end(); ++it)
         mInputMetadataListCompre.erase(it);
+    ALOGD("Destructor --");
 }
 
 status_t AudioBroadcastStreamALSA::setParameters(const String8& keyValuePairs)
@@ -435,16 +440,6 @@ status_t AudioBroadcastStreamALSA::standby()
     ALOGD("standby");
     Mutex::Autolock autoLock(mLock);
 
-    if (mRouteAudioToA2dp) {
-        status_t status = mParent->stopA2dpPlayback_l(
-                                     AudioHardwareALSA::A2DPBroadcast);
-        if(status) {
-            ALOGE("stopA2dpPlayback_l from standby returned = %d", status);
-            return status;
-        }
-        mRouteAudioToA2dp = false;
-    }
-
     if(mPcmRxHandle) {
         mPcmRxHandle->module->standby(mPcmRxHandle);
     }
@@ -461,6 +456,15 @@ status_t AudioBroadcastStreamALSA::standby()
         mCompreTxHandle->module->standby(mCompreTxHandle);
         mALSADevice->removeUseCase(mCompreTxHandle, "MI2S");
     }
+    if (mRouteAudioToA2dp) {
+        ALOGD("stopA2dpPlayback_l from standby - usecase %x", mA2dpUseCase);
+        status_t status = mParent->stopA2dpPlayback_l(mA2dpUseCase);
+        if(status) {
+            ALOGW("stopA2dpPlayback_l from standby returned = %d", status);
+        }
+        mRouteAudioToA2dp = false;
+    }
+
     if (mPowerLock) {
         release_wake_lock ("AudioBroadcastLock");
         mPowerLock = false;
@@ -1495,10 +1499,20 @@ status_t AudioBroadcastStreamALSA::doRoutingSetup()
     }
     ALOGV("mRouteAudioToA2dp = %d", mRouteAudioToA2dp);
     if (mRouteAudioToA2dp) {
-        status = mParent->startA2dpPlayback_l(
-                                AudioHardwareALSA::A2DPBroadcast);
-        ALOGV("startA2dpPlayback for broadcast returned = %d", status);
-        if(status != NO_ERROR)
+        alsa_handle_t *handle = NULL;
+        if (mPcmRxHandle && (mPcmRxHandle->devices & AudioSystem::DEVICE_OUT_PROXY))
+            handle = mPcmRxHandle;
+        else if (mCompreRxHandle && (mCompreRxHandle->devices & AudioSystem::DEVICE_OUT_PROXY))
+            handle = mCompreRxHandle;
+        if (handle) {
+            mA2dpUseCase = mParent->useCaseStringToEnum(handle->useCase);
+            ALOGD("startA2dpPlayback_l - usecase %x", mA2dpUseCase);
+            status = mParent->startA2dpPlayback_l(mA2dpUseCase);
+            if(status != NO_ERROR) {
+                ALOGW("startA2dpPlayback_l for broadcast returned = %d", status);
+                status = BAD_VALUE;
+            }
+        } else
             status = BAD_VALUE;
     }
     mRoutingSetupDone = true;
@@ -1982,8 +1996,8 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
     } else if(!(devices & AudioSystem::DEVICE_OUT_ALL_A2DP) && mRouteAudioToA2dp){
         mRouteAudioToA2dp = false;
         devices &= ~AudioSystem::DEVICE_OUT_PROXY;
-        ALOGD("doRouting-stopA2dpPlayback_l-A2DPBroadcast disable");
-        status = mParent->stopA2dpPlayback_l(AudioHardwareALSA::A2DPBroadcast);
+        ALOGD("doRouting-stopA2dpPlayback_l-usecase %x", mA2dpUseCase);
+        status = mParent->stopA2dpPlayback_l(mA2dpUseCase);
     }
     if(devices == mDevices) {
         ALOGW("Return same device ");
@@ -2086,21 +2100,31 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
     }
 
     if(mRouteAudioToA2dp ) {
-        ALOGD("doRouting-startA2dpPlayback_l-A2DPBroadcast-enable");
-        status = mParent->startA2dpPlayback_l(AudioHardwareALSA::A2DPBroadcast);
-        if(status) {
-            ALOGW("startA2dpPlayback_l for direct output failed err = %d", status);
-            status_t err = mParent->stopA2dpPlayback_l(AudioHardwareALSA::A2DPBroadcast);
-            if(err) {
-                ALOGW("stop A2dp playback for hardware output failed = %d", err);
+        alsa_handle_t *handle = NULL;
+        if (mPcmRxHandle && (mPcmRxHandle->devices & AudioSystem::DEVICE_OUT_PROXY))
+            handle = mPcmRxHandle;
+        else if (mCompreRxHandle && (mCompreRxHandle->devices & AudioSystem::DEVICE_OUT_PROXY))
+            handle = mCompreRxHandle;
+        if (handle) {
+            mA2dpUseCase = mParent->useCaseStringToEnum(handle->useCase);
+            ALOGD("doRouting-startA2dpPlayback_l-usecase %x", mA2dpUseCase);
+            status = mParent->startA2dpPlayback_l(mA2dpUseCase);
+            if(status) {
+                ALOGW("startA2dpPlayback for broadcast returned = %d", status);
+                status_t err = mParent->stopA2dpPlayback_l(mA2dpUseCase);
+                if(err) {
+                    ALOGW("stop A2dp playback for hardware output failed = %d", err);
+                }
+                mRouteAudioToA2dp = false;
             }
-            mRouteAudioToA2dp = false;
+        }
+        if (handle == NULL || status != NO_ERROR) {
             mDevices = mCurDevice;
             if(mPcmRxHandle) {
                 mALSADevice->switchDeviceUseCase(mPcmRxHandle, devices, mParent->mode());
             }
-            if(mUseTunnelDecoder &&  mCompreRxHandle) {
-               mALSADevice->switchDeviceUseCase(mCompreRxHandle, devices, mParent->mode());
+            if(mCompreRxHandle) {
+                mALSADevice->switchDeviceUseCase(mCompreRxHandle, devices, mParent->mode());
             }
         }
         resume_l();
@@ -2126,9 +2150,8 @@ status_t AudioBroadcastStreamALSA::pause_l()
         isSessionPaused = true;
     }
     if (mRouteAudioToA2dp) {
-        ALOGD("Pause - suspendA2dpPlayback - A2DPBroadcast");
-        status_t status = mParent->suspendA2dpPlayback(
-                                       AudioHardwareALSA::A2DPBroadcast);
+        ALOGD("Pause - suspendA2dpPlayback_l - usecase %x", mA2dpUseCase);
+        status_t status = mParent->suspendA2dpPlayback_l(mA2dpUseCase);
         if(status != NO_ERROR) {
             ALOGE("Suspend Proxy from Pause returned error = %d",status);
             return BAD_VALUE;
@@ -2140,11 +2163,10 @@ status_t AudioBroadcastStreamALSA::pause_l()
 status_t AudioBroadcastStreamALSA::resume_l()
 {
     if (mRouteAudioToA2dp) {
-        ALOGD("startA2dpPlayback - resume - A2DPBroadcast");
-        status_t status = mParent->startA2dpPlayback_l(
-                                       AudioHardwareALSA::A2DPBroadcast);
-        if(status) {
-            ALOGE("startA2dpPlayback from resume return error = %d", status);
+        ALOGD("startA2dpPlayback - resume - usecase %x", mA2dpUseCase);
+        status_t status = mParent->startA2dpPlayback_l(mA2dpUseCase);
+        if(status != NO_ERROR) {
+            ALOGE("startA2dpPlayback for broadcast returned = %d", status);
             return BAD_VALUE;
         }
     }

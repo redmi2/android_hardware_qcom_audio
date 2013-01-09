@@ -1,7 +1,9 @@
 /* AudioHardwareALSA.h
  **
  ** Copyright 2008-2010, Wind River Systems
- ** Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+ ** Copyright (c) 2011-2013, The Linux Foundation. All rights reserved
+ ** Not a Contribution, Apache license notifications and license are retained
+ ** for attribution purposes only.
  **
  ** Licensed under the Apache License, Version 2.0 (the "License");
  ** you may not use this file except in compliance with the License.
@@ -470,6 +472,7 @@ private:
     alsa_handle_t *     mPcmRxHandle;
     alsa_handle_t *     mSpdifRxHandle;
     alsa_handle_t *     mCompreRxHandle;
+    uint32_t            mA2dpUseCase;
 
 protected:
     AudioHardwareALSA *     mParent;
@@ -575,6 +578,7 @@ private:
     int32_t             mSpdifFormat;
     int32_t             mHdmiFormat;
     uint64_t            hw_ptr[2];
+    uint32_t            mA2dpUseCase;
 
     AudioHardwareALSA  *mParent;
     alsa_handle_t *     mPcmRxHandle;
@@ -775,6 +779,7 @@ private:
     output_metadata_handle_t mOutputMetadataCompre;
     char                *mPcmWriteTempBuffer;
     char                *mCompreWriteTempBuffer;
+    uint32_t            mA2dpUseCase;
 
     // ALSA device handle to route PCM 2.0 playback
     alsa_handle_t      *mPcmRxHandle;
@@ -1087,7 +1092,7 @@ private:
     void        setA2DPActiveUseCases_l(uint32_t activeUsecase);
     uint32_t    getA2DPActiveUseCases_l();
     void        clearA2DPActiveUseCases_l(uint32_t activeUsecase);
-
+    uint32_t    useCaseStringToEnum(const char *usecase);
 
 protected:
     virtual status_t    dump(int fd, const Vector<String16>& args);
@@ -1133,12 +1138,14 @@ protected:
     volatile bool       mIsA2DPEnabled;
 
     enum {
-      A2DPNone = 0x0,
-      A2DPHardwareOutput = 0x1,
-      A2DPDirectOutput = 0x2,
-      A2DPBroadcast = 0x4,
-      A2DPVoip = 0x8,
-      A2DPFm = 0x16,
+      USECASE_NONE = 0x00,
+      USECASE_HIFI = 0x01,
+      USECASE_HIFI2 = 0x0100,
+      USECASE_HIFI3 = 0x0200,
+      USECASE_HIFI_TUNNEL = 0x010000,
+      USECASE_HIFI_TUNNEL2 = 0x020000,
+      USECASE_FM = 0x01000000,
+      USECASE_HWOUTPUT = 0x11,
     };
     uint32_t mA2DPActiveUseCases;
 
