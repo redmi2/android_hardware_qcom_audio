@@ -413,9 +413,15 @@ String8 AudioHardwareALSA::getParameters(const String8& keys)
 
     key = String8(AudioParameter::keyRouting);
     if (param.getInt(key, device) == NO_ERROR) {
-        int devices = mCurDevice;
-        ALOGV("mCurDevice %d A2DPEnabled %d", mCurDevice, mIsA2DPEnabled);
-        if((mCurDevice & AudioSystem::DEVICE_OUT_PROXY) && (mIsA2DPEnabled == true)) {
+        int devices = 0;
+        for(ALSAHandleList::iterator it = mDeviceList.begin(); it != mDeviceList.end(); ++it) {
+            alsa_handle_t *handle = &(*it);
+            if(handle->handle != NULL)
+                devices |= handle->activeDevice;
+        }
+
+        ALOGV("devices %d A2DPEnabled %d", devices, mIsA2DPEnabled);
+        if((devices & AudioSystem::DEVICE_OUT_PROXY) && (mIsA2DPEnabled == true)) {
             devices |= AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP;
             devices &= ~AudioSystem::DEVICE_OUT_PROXY;
         }
