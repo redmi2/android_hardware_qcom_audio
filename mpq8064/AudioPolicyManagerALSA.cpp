@@ -890,6 +890,18 @@ uint32_t AudioPolicyManager::setOutputDevice(audio_io_handle_t output,
     ALOGV("setOutputDevice() changing device");
     // do the routing
     param.addInt(String8(AudioParameter::keyRouting), (int)device);
+    // If the device is changed from DEVICE_OUT_PROXY, then there is a chance
+    // that pcm_write(non mmap) is blocked,which in turn blocks the
+    // corresponding AudioFlinger thread(Mixer thread, Direct out thread) due
+    // to the lack of a valid backend DAI, this will happen if the PROXY
+    // session is closed before device change, which in turn closes the BE DAI.
+    // Fix is to bypass the blocked AudioFlinger thread to update new device to
+    // HAL so that a valid BE dai is established and pcm_write is unblocked.
+    if (AudioSystem::DEVICE_OUT_PROXY == prevDevice){
+               ALOGD("Changing from PROXY device");
+               mpClientInterface->setParameters(0, param.toString(), delayMs);
+    }
+
     mpClientInterface->setParameters(output, param.toString(), delayMs);
 
     // update stream volumes according to new device
