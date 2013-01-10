@@ -206,6 +206,8 @@ status_t AudioPolicyManager::setDeviceConnectionState(AudioSystem::audio_devices
                    device == AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_HEADSET ||
                    device == AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_CARKIT) {
             device = AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET;
+        } else if(device == AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET){
+                device = AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET;
         } else if(device == AudioSystem::DEVICE_OUT_ANC_HEADSET){
                device = AudioSystem::DEVICE_IN_ANC_HEADSET; //wait for actual ANC device
         } else {
@@ -941,15 +943,27 @@ audio_devices_t AudioPolicyManager::getDeviceForInputSource(int inputSource)
             device = AudioSystem::DEVICE_IN_WIRED_HEADSET;
         } else if (mAvailableInputDevices & AudioSystem::DEVICE_IN_ANC_HEADSET) {
             device = AudioSystem::DEVICE_IN_ANC_HEADSET;
+        } else if (mAvailableInputDevices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) {
+            device = AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET;
         } else if (mAvailableInputDevices & AudioSystem::DEVICE_IN_BUILTIN_MIC) {
             device = AudioSystem::DEVICE_IN_BUILTIN_MIC;
         }
         break;
     case AUDIO_SOURCE_VOICE_COMMUNICATION:
-        device = AudioSystem::DEVICE_IN_COMMUNICATION;
+        if ((mAvailableInputDevices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) &&
+            !(mAvailableInputDevices & AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET ||
+            mAvailableInputDevices & AudioSystem::DEVICE_IN_WIRED_HEADSET)) {
+            device = AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET;
+        } else {
+            device = AudioSystem::DEVICE_IN_COMMUNICATION;
+        }
         break;
     case AUDIO_SOURCE_CAMCORDER:
-        if (mAvailableInputDevices & AudioSystem::DEVICE_IN_BACK_MIC) {
+        if (mAvailableInputDevices & AudioSystem::DEVICE_IN_WIRED_HEADSET) {
+            device = AudioSystem::DEVICE_IN_WIRED_HEADSET;
+        } else if (mAvailableInputDevices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) {
+            device = AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET;
+        } else if (mAvailableInputDevices & AudioSystem::DEVICE_IN_BACK_MIC) {
             device = AudioSystem::DEVICE_IN_BACK_MIC;
         } else if (mAvailableInputDevices & AudioSystem::DEVICE_IN_BUILTIN_MIC) {
             device = AudioSystem::DEVICE_IN_BUILTIN_MIC;

@@ -4725,6 +4725,20 @@ SectionDevice
 
 EndSection
 
+SectionDevice
+        Name "USB PROXY Tx"
+
+        EnableSequence
+        EndSequence
+
+        DisableSequence
+        EndSequence
+
+       ACDBID       44:2
+       EffectsMixerCTL "SRS SS3D"
+
+EndSection
+
 SectionModifier
 	Name "Play Music"
 	Comment "Modifier for music playback"
@@ -5796,6 +5810,23 @@ EndSection
 
 SectionModifier
         Name "Capture MusicPROXY Tx"
+
+        EnableSequence
+                'MultiMedia1 Mixer AFE_PCM_TX':1:1
+        EndSequence
+
+        DisableSequence
+                'MultiMedia1 Mixer AFE_PCM_TX':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 0
+        PlaybackPCM 0
+
+EndSection
+
+SectionModifier
+        Name "Capture MusicUSB PROXY Tx"
 
         EnableSequence
                 'MultiMedia1 Mixer AFE_PCM_TX':1:1

@@ -41,6 +41,9 @@
 #include <sys/prctl.h>
 
 #include "AudioHardwareALSA.h"
+#ifdef QCOM_USBAUDIO_ENABLED
+#include "AudioUsbALSA.h"
+#endif
 extern "C"{
 #include "acdb-loader.h"
 }
@@ -83,6 +86,11 @@ AudioHardwareALSA::AudioHardwareALSA() :
     mIsVoiceCallActive = 0;
     mIsFmActive = 0;
     mDevSettingsFlag = 0;
+#ifdef QCOM_USBAUDIO_ENABLED
+    mAudioUsbALSA = new AudioUsbALSA();
+    musbPlaybackState = 0;
+    musbRecordingState = 0;
+#endif
     mDevSettingsFlag |= TTY_OFF;
     mBluetoothVGS = false;
 
@@ -146,6 +154,9 @@ AudioHardwareALSA::~AudioHardwareALSA()
         mDeviceList.erase(it);
     }
     acdb_loader_deallocate_ACDB();
+#ifdef QCOM_USBAUDIO_ENABLED
+    delete mAudioUsbALSA;
+#endif
 }
 
 status_t AudioHardwareALSA::initCheck()
@@ -472,6 +483,53 @@ String8 AudioHardwareALSA::getParameters(const String8& keys)
     return param.toString();
 }
 
+#ifdef QCOM_USBAUDIO_ENABLED
+void AudioHardwareALSA::closeUSBPlayback()
+{
+    ALOGV("closeUSBPlayback, musbPlaybackState: %d", musbPlaybackState);
+    musbPlaybackState = 0;
+    mAudioUsbALSA->exitPlaybackThread(SIGNAL_EVENT_KILLTHREAD);
+}
+
+void AudioHardwareALSA::closeUSBRecording()
+{
+    ALOGV("closeUSBRecording");
+    musbRecordingState = 0;
+    mAudioUsbALSA->exitRecordingThread(SIGNAL_EVENT_KILLTHREAD);
+}
+
+void AudioHardwareALSA::closeUsbPlaybackIfNothingActive(){
+    ALOGV("closeUsbPlaybackIfNothingActive, musbPlaybackState: %d", musbPlaybackState);
+    if(!musbPlaybackState && mAudioUsbALSA != NULL) {
+        mAudioUsbALSA->exitPlaybackThread(SIGNAL_EVENT_TIMEOUT);
+    }
+}
+
+void AudioHardwareALSA::closeUsbRecordingIfNothingActive(){
+    ALOGV("closeUsbRecordingIfNothingActive, musbRecordingState: %d", musbRecordingState);
+    if(!musbRecordingState && mAudioUsbALSA != NULL) {
+        ALOGD("Closing USB Recording Session as no stream is active");
+        mAudioUsbALSA->setkillUsbRecordingThread(true);
+    }
+}
+
+void AudioHardwareALSA::startUsbPlaybackIfNotStarted(){
+    ALOGV("Starting the USB playback %d kill %d", musbPlaybackState,
+             mAudioUsbALSA->getkillUsbPlaybackThread());
+    if((!musbPlaybackState) || (mAudioUsbALSA->getkillUsbPlaybackThread() == true)) {
+        mAudioUsbALSA->startPlayback();
+    }
+}
+
+void AudioHardwareALSA::startUsbRecordingIfNotStarted(){
+    ALOGV("Starting the recording musbRecordingState: %d killUsbRecordingThread %d",
+          musbRecordingState, mAudioUsbALSA->getkillUsbRecordingThread());
+    if((!musbRecordingState) || (mAudioUsbALSA->getkillUsbRecordingThread() == true)) {
+        mAudioUsbALSA->startRecording();
+    }
+}
+#endif
+
 status_t AudioHardwareALSA::doRouting(int device)
 {
     Mutex::Autolock autoLock(mLock);
@@ -668,7 +726,46 @@ status_t AudioHardwareALSA::doRouting(int device)
         }
         mRouteAudioToA2dp = false;
         mALSADevice->route((uint32_t)device, newMode);
-    } else {
+    }
+
+#ifdef QCOM_USBAUDIO_ENABLED
+    else if(!(device & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET) &&
+            !(device & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET) &&
+            !(device & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) &&
+             (musbPlaybackState || musbRecordingState)){
+                //USB unplugged
+                mALSADevice->route((uint32_t)device, newMode);
+                ALOGD("USB UNPLUGGED, setting musbPlaybackState to 0");
+                closeUSBRecording();
+                closeUSBPlayback();
+    } else if((device & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
+                  (device & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)){
+                    ALOGD("Routing everything to prox now");
+                    ALSAHandleList::iterator it;
+                    if (device != mCurDevice) {
+                        if(musbPlaybackState)
+                            closeUSBPlayback();
+                    }
+                    mALSADevice->route((uint32_t)device, newMode);
+
+                    for(it = mDeviceList.begin(); it != mDeviceList.end(); ++it) {
+                        if((!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
+                                   (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL))) {
+                                    ALOGD("doRouting: Tunnel Player device switch to proxy");
+                                    startUsbPlaybackIfNotStarted();
+                                    musbPlaybackState |= USBPLAYBACKBIT_TUNNEL;
+                                    break;
+                        } else if((!strcmp(it->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO)) ||
+                                 (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_FM))) {
+                                    ALOGD("doRouting: FM device switch to proxy");
+                                    startUsbPlaybackIfNotStarted();
+                                    musbPlaybackState |= USBPLAYBACKBIT_FM;
+                                    break;
+                        }
+                    }
+    }
+#endif
+    else {
         // ToDo: to use snd_use_case_set_case API here
         // HANDLING ONLY USE CASE WHICH ARE NOT AT OTHER DOROUTING
         // CONFIRM ?
@@ -1113,10 +1210,28 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         ALSAHandleList::iterator it = mDeviceList.end();
         it--;
         if (devices == AudioSystem::DEVICE_IN_VOICE_CALL){
+#ifdef QCOM_USBAUDIO_ENABLED
+            if(mCurDevice == AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET ||
+               mCurDevice == AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET){
+                ALOGD("Routing everything from proxy for VOIP call");
+                route_devices = devices | AudioSystem::DEVICE_IN_PROXY;
+            } else
+#endif
            /* Add current devices info to devices to do route */
-            route_devices = devices | mCurDevice;
+            {
+                route_devices = devices | mCurDevice;
+            }
         } else {
-            route_devices = devices;
+#ifdef QCOM_USBAUDIO_ENABLED
+            if(devices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET ||
+               devices & AudioSystem::DEVICE_IN_PROXY) {
+                route_devices = devices | AudioSystem::DEVICE_IN_PROXY;
+                ALOGE("routing everything from proxy");
+            } else
+#endif
+            {
+                route_devices = devices;
+            }
         }
         it->devices = route_devices;
         // NOTE: NEED CLARIFICATION to update route_device in the handle ???
