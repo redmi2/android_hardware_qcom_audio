@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2009 The Android Open Source Project
- * Copyright (c) 2012, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -989,7 +989,10 @@ status_t AudioPolicyManager::stopInput(audio_io_handle_t input)
         if (mAvailableOutputDevices & AudioSystem::DEVICE_OUT_FM) {
             ALOGD("Calling applyStreamVOlume from stopInput, device no: %x",
                   (audio_devices_t)(AudioSystem::DEVICE_OUT_FM));
-            applyStreamVolumes(mPrimaryOutput, (audio_devices_t)(AudioSystem::DEVICE_OUT_FM), 0, true);
+            if (FM_ANALOG == getFMMode())
+                  applyStreamVolumes(mPrimaryOutput, (audio_devices_t)(AudioSystem::DEVICE_OUT_FM), 0, true);
+            else if (FM_DIGITAL == getFMMode())
+                  applyStreamVolumes(mPrimaryOutput, (audio_devices_t)(AudioSystem::DEVICE_OUT_SPEAKER), 0, true);
         }
         inputDesc->mRefCount = 0;
         return NO_ERROR;
