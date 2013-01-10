@@ -1670,7 +1670,9 @@ status_t AudioSessionOutALSA::openDevice(char *useCase, bool bIsUseCase, int dev
         (!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
                           strlen(SND_USE_CASE_VERB_HIFI_TUNNEL2)) ||
         (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
-                          strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2))))) {
+                          strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2))) ||
+        (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL3,
+                          strlen(SND_USE_CASE_MOD_PLAY_TUNNEL3))))) {
         if (mUseMS11Decoder == true)
             alsa_handle.type = COMPRESSED_PASSTHROUGH_FORMAT;
         else if (mFormat == AUDIO_FORMAT_DTS || mFormat == AUDIO_FORMAT_DTS_LBR) {
