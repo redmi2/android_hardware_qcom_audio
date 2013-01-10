@@ -2894,7 +2894,7 @@ void AudioHardware::AudioSessionOutLPA::bufferAlloc( )
     void *ion_buf; int32_t ion_fd;
     struct msm_audio_ion_info ion_info;
     //1. Open the ion_audio
-    ionfd = open("/dev/ion", O_RDONLY);
+    ionfd = open("/dev/ion", O_RDONLY | O_SYNC);
     if (ionfd < 0) {
         ALOGE("/dev/ion open failed \n");
         return;
@@ -2922,8 +2922,7 @@ void* AudioHardware::AudioSessionOutLPA::memBufferAlloc(int nSize, int32_t *ion_
 
     alloc_data.len =   nSize;
     alloc_data.align = 0x1000;
-    alloc_data.heap_mask = ION_HEAP(ION_AUDIO_HEAP_ID);
-    alloc_data.flags = 0;
+    alloc_data.flags = ION_HEAP(ION_AUDIO_HEAP_ID);
     int rc = ioctl(ionfd, ION_IOC_ALLOC, &alloc_data);
     if (rc) {
         ALOGE("ION_IOC_ALLOC ioctl failed\n");
