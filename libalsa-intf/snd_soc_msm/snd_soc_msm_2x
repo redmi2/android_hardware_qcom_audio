@@ -433,6 +433,42 @@ SectionVerb
         PlaybackPCM 0
 
 EndSection
+
+SectionVerb
+        Name "HiFi Tunnel2PROXY Rx Speaker Headset"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia7':1:1
+                'SLIMBUS_0_RX Audio Mixer MultiMedia7':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia7':1:0
+                'SLIMBUS_0_RX Audio Mixer MultiMedia7':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 16
+
+EndSection
+
+SectionVerb
+        Name "HiFi Tunnel2PROXY Rx Speaker ANC Headset"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia7':1:1
+                'SLIMBUS_0_RX Audio Mixer MultiMedia7':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia7':1:0
+                'SLIMBUS_0_RX Audio Mixer MultiMedia7':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 16
+
+EndSection
 }
 SectionUseCase."HiFi2" {
 Comment "Music playback use case for MM2 FE"
@@ -2572,258 +2608,6 @@ SectionVerb
 
 EndSection
 }
-SectionDevice
-	Name "Earpiece"
-	Comment "Handset Rx device"
-
-	EnableSequence
-		'SLIM_0_RX Channels':0:One
-		'RX1 MIX1 INP1':0:RX1
-		'EAR PA Gain':0:POS_2_DB
-		'DAC1 Switch':1:1
-		'RX1 Digital Volume':1:68
-	EndSequence
-
-	DisableSequence
-		'RX1 MIX1 INP1':0:ZERO
-		'DAC1 Switch':1:0
-	EndSequence
-
-	ACDBID	7:1
-	EffectsMixerCTL "SRS TruMedia"
-	EC_REF_RXMixerCTL "SLIM_RX"
-
-EndSection
-
-SectionDevice
-	Name "Voice Earpiece"
-	Comment "Handset Rx device for voice call"
-
-	EnableSequence
-		'SLIM_0_RX Channels':0:One
-		'RX1 MIX1 INP1':0:RX1
-		'EAR PA Gain':0:POS_2_DB
-		'DAC1 Switch':1:1
-		'RX1 Digital Volume':1:68
-	EndSequence
-
-	DisableSequence
-		'RX1 MIX1 INP1':0:ZERO
-		'DAC1 Switch':1:0
-	EndSequence
-
-	ACDBID	7:1
-	EffectsMixerCTL "SRS TruMedia"
-
-EndSection
-
-SectionDevice
-	Name "TTY Handset Rx"
-	Comment "TTY HCO Handset Rx device"
-
-	EnableSequence
-		'SLIM_0_RX Channels':0:One
-		'RX1 MIX1 INP1':0:RX1
-		'EAR PA Gain':0:POS_2_DB
-		'DAC1 Switch':1:1
-		'RX1 Digital Volume':1:68
-	EndSequence
-
-	DisableSequence
-		'RX1 MIX1 INP1':0:ZERO
-		'DAC1 Switch':1:0
-	EndSequence
-
-	ACDBID  37:1
-	EffectsMixerCTL "SRS TruMedia"
-	EC_REF_RXMixerCTL "SLIM_RX"
-
-EndSection
-
-SectionVerb
-        Name "HiFi Tunnel2PROXY Rx Speaker Headset"
-
-        EnableSequence
-                'AFE_PCM_RX Audio Mixer MultiMedia7':1:1
-                'SLIMBUS_0_RX Audio Mixer MultiMedia7':1:1
-        EndSequence
-
-        DisableSequence
-                'AFE_PCM_RX Audio Mixer MultiMedia7':1:0
-                'SLIMBUS_0_RX Audio Mixer MultiMedia7':1:0
-        EndSequence
-
-        # ALSA PCMs
-        PlaybackPCM 16
-
-EndSection
-
-SectionVerb
-        Name "HiFi Tunnel2PROXY Rx Speaker ANC Headset"
-
-        EnableSequence
-                'AFE_PCM_RX Audio Mixer MultiMedia7':1:1
-                'SLIMBUS_0_RX Audio Mixer MultiMedia7':1:1
-        EndSequence
-
-        DisableSequence
-                'AFE_PCM_RX Audio Mixer MultiMedia7':1:0
-                'SLIMBUS_0_RX Audio Mixer MultiMedia7':1:0
-        EndSequence
-
-        # ALSA PCMs
-        PlaybackPCM 16
-
-EndSection
-}
-SectionUseCase."VoLTE" {
-Comment "VoLTE use case"
-SectionVerb
-	Name "VoLTE"
-
-	EnableSequence
-		'SLIM_0_RX_Voice Mixer VoLTE':1:1
-		'VoLTE_Tx Mixer SLIM_0_TX_VoLTE':1:1
-	EndSequence
-
-	DisableSequence
-		'SLIM_0_RX_Voice Mixer VoLTE':1:0
-		'VoLTE_Tx Mixer SLIM_0_TX_VoLTE':1:0
-	EndSequence
-
-	# ALSA PCMs
-	PlaybackPCM 12
-	capturePCM 12
-
-EndSection
-
-SectionVerb
-	Name "VoLTE CallHDMI"
-
-	EnableSequence
-	EndSequence
-
-	DisableSequence
-		'HDMI_RX_Voice Mixer VoLTE':1:0
-		'VoLTE_Tx Mixer SLIM_0_TX_VoLTE':1:0
-	EndSequence
-
-	# ALSA PCMs
-	PlaybackPCM 12
-	capturePCM 12
-
-EndSection
-
-SectionVerb
-	Name "VoLTE CallHDMI Tx"
-
-	EnableSequence
-		'HDMI_RX_Voice Mixer VoLTE':1:1
-		'VoLTE_Tx Mixer SLIM_0_TX_VoLTE':1:1
-	EndSequence
-
-	DisableSequence
-	EndSequence
-
-	# ALSA PCMs
-	PlaybackPCM 12
-	capturePCM 12
-
-EndSection
-
-SectionVerb
-	Name "VoLTE CallBT SCO Rx"
-
-	EnableSequence
-	EndSequence
-
-	DisableSequence
-                'Internal BTSCO SampleRate':0:8000
-		'INTERNAL_BT_SCO_RX_Voice Mixer VoLTE':1:0
-		'VoLTE_Tx Mixer INTERNAL_BT_SCO_TX_VoLTE':1:0
-	EndSequence
-
-	# ALSA PCMs
-	PlaybackPCM 12
-	capturePCM 12
-
-EndSection
-
-SectionVerb
-	Name "VoLTE CallBT SCO Tx"
-
-	EnableSequence
-                'Internal BTSCO SampleRate':0:8000
-		'INTERNAL_BT_SCO_RX_Voice Mixer VoLTE':1:1
-		'VoLTE_Tx Mixer INTERNAL_BT_SCO_TX_VoLTE':1:1
-	EndSequence
-
-	DisableSequence
-	EndSequence
-
-	# ALSA PCMs
-	PlaybackPCM 12
-	capturePCM 12
-
-EndSection
-
-SectionVerb
-	Name "VoLTE CallBT SCO WB Rx"
-
-	EnableSequence
-	EndSequence
-
-	DisableSequence
-                'Internal BTSCO SampleRate':0:8000
-		'INTERNAL_BT_SCO_RX_Voice Mixer VoLTE':1:0
-		'VoLTE_Tx Mixer INTERNAL_BT_SCO_TX_VoLTE':1:0
-	EndSequence
-
-	# ALSA PCMs
-	PlaybackPCM 12
-	capturePCM 12
-
-EndSection
-
-SectionVerb
-	Name "VoLTE CallBT SCO WB Tx"
-
-	EnableSequence
-                'Internal BTSCO SampleRate':0:16000
-		'INTERNAL_BT_SCO_RX_Voice Mixer VoLTE':1:1
-		'VoLTE_Tx Mixer INTERNAL_BT_SCO_TX_VoLTE':1:1
-	EndSequence
-
-	DisableSequence
-	EndSequence
-
-	# ALSA PCMs
-	PlaybackPCM 12
-	capturePCM 12
-
-EndSection
-}
-SectionUseCase."ADSP testfwk" {
-Comment "ADSP testfwk use case"
-
-SectionVerb
-        Name "ADSP testfwk"
-
-        EnableSequence
-		'SLIMBUS_DL_HL Switch':1:1
-        EndSequence
-
-        DisableSequence
-		'SLIMBUS_DL_HL Switch':1:0
-        EndSequence
-
-        # ALSA PCMs
-        PlaybackPCM 5
-        CapturePCM 5
-
-EndSection
-}
-
 SectionUseCase."HiFi Lowlatency Rec" {
 Comment "Recording use case"
 SectionVerb
@@ -2926,7 +2710,6 @@ SectionVerb
 
 EndSection
 }
-
 SectionUseCase."HiFi Lowlatency" {
 Comment "LowLatnecy mode playback use case"
 SectionVerb
@@ -3316,6 +3099,7 @@ SectionDevice
 		'RX1 MIX1 INP1':0:RX1
 		'EAR PA Gain':0:POS_2_DB
 		'DAC1 Switch':1:1
+		'RX1 Digital Volume':1:68
 	EndSequence
 
 	DisableSequence
@@ -3338,6 +3122,7 @@ SectionDevice
 		'RX1 MIX1 INP1':0:RX1
 		'EAR PA Gain':0:POS_2_DB
 		'DAC1 Switch':1:1
+		'RX1 Digital Volume':1:68
 	EndSequence
 
 	DisableSequence
@@ -3359,6 +3144,7 @@ SectionDevice
 		'RX1 MIX1 INP1':0:RX1
 		'EAR PA Gain':0:POS_2_DB
 		'DAC1 Switch':1:1
+		'RX1 Digital Volume':1:68
 	EndSequence
 
 	DisableSequence
