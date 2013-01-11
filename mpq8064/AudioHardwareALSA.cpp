@@ -337,6 +337,17 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         param.remove(key);
     }
 
+    key = String8("a2dp_connected");
+    if (param.get(key, value) == NO_ERROR) {
+        if (value == "true") {
+                ALOGD("setParam: a2dp_connected=true");
+        } else {
+            ALOGD("setParam: a2dp_connected=false");
+            stopA2dpPlayback_l(mA2DPActiveUseCases);
+        }
+        param.remove(key);
+    }
+
     key = String8(SPDIF_FORMAT_KEY);
     if (param.get(key, value) == NO_ERROR) {
         if(value == "lpcm" || value == "ac3" || value == "dts")
