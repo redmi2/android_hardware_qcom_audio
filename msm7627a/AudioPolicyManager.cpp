@@ -54,6 +54,18 @@ extern "C" void destroyAudioPolicyManager(AudioPolicyInterface *interface)
     delete interface;
 }
 
+void AudioPolicyManager::handleNotificationRoutingForStream(AudioSystem::stream_type stream) {
+    switch(stream) {
+    case AudioSystem::MUSIC:
+        AudioPolicyManagerBase::checkOutputForStrategy(STRATEGY_SONIFICATION_RESPECTFUL);
+        AudioPolicyManagerBase::checkOutputForStrategy(STRATEGY_MEDIA);
+        AudioPolicyManagerBase::updateDeviceForStrategy();
+        break;
+    default:
+        break;
+    }
+}
+
 audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strategy, bool fromCache)
 {
     uint32_t device = 0;
