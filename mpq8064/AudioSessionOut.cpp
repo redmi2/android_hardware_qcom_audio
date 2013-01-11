@@ -1545,18 +1545,18 @@ uint32_t AudioSessionOutALSA::latency() const
     // Android wants latency in milliseconds.
     int32_t err;
     if(mPcmRxHandle && mPcmRxHandle->handle){
+         mPcmRxHandle->handle->sync_ptr->flags = SNDRV_PCM_SYNC_PTR_APPL|
+                                                 SNDRV_PCM_SYNC_PTR_AVAIL_MIN|
+                                                 SNDRV_PCM_SYNC_PTR_HWSYNC;
 
-    mPcmRxHandle->handle->sync_ptr->flags = SNDRV_PCM_SYNC_PTR_APPL|
-                                                    SNDRV_PCM_SYNC_PTR_AVAIL_MIN|
-                                                    SNDRV_PCM_SYNC_PTR_HWSYNC;
+         err = sync_ptr(mPcmRxHandle->handle);
 
-    err = sync_ptr(mPcmRxHandle->handle);
-    if(err == NO_ERROR)
-    return USEC_TO_MSEC ((uint64_t)(((mPcmRxHandle->handle->sync_ptr->c.control.appl_ptr -
-                          mPcmRxHandle->handle->sync_ptr->s.status.hw_ptr)*2*mChannels)* 1000000)
-                          / (int64_t)mSampleRate);
-    else
-       return 0;
+         if(err == NO_ERROR){
+              return USEC_TO_MSEC(((((uint64_t)(mPcmRxHandle->handle->sync_ptr->c.control.appl_ptr -
+                     mPcmRxHandle->handle->sync_ptr->s.status.hw_ptr)) * 1000000 )/(uint64_t)mSampleRate));
+         }
+         else
+              return 0;
     }
     else
         return 0;
