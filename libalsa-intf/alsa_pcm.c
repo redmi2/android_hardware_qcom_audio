@@ -1,6 +1,8 @@
 /*
 ** Copyright 2010, The Android Open-Source Project
-** Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+** Copyright (c) 2011-2013, The Linux Foundation. All rights reserved
+** Not a Contribution, Apache license notifications and license are retained
+** for attribution purposes only.
 **
 ** Licensed under the Apache License, Version 2.0 (the "License");
 ** you may not use this file except in compliance with the License.
@@ -520,7 +522,7 @@ u_int8_t *dst_address(struct pcm *pcm)
 {
     unsigned long pcm_offset = 0;
     struct snd_pcm_sync_ptr *sync_ptr = pcm->sync_ptr;
-    unsigned int appl_ptr = 0;
+    uint64_t appl_ptr = 0;
     int channels;
     if(pcm->flags & PCM_MONO)
         channels = 1;
@@ -533,7 +535,7 @@ u_int8_t *dst_address(struct pcm *pcm)
     else
         channels = 2;
 
-    appl_ptr = sync_ptr->c.control.appl_ptr*2*channels;
+    appl_ptr = ((uint64_t)sync_ptr->c.control.appl_ptr)*2*channels;
     pcm_offset = (appl_ptr % (unsigned long)pcm->buffer_size);
     return pcm->addr + pcm_offset;
 
@@ -579,7 +581,7 @@ int mmap_transfer_capture(struct pcm *pcm, void *data, unsigned offset,
     u_int8_t *dst_addr, *mmaped_addr;
     u_int8_t *src_addr;
     int channels;
-    unsigned int tmp;
+    uint64_t tmp;
 
     if(pcm->flags & PCM_MONO)
         channels = 1;
@@ -591,7 +593,7 @@ int mmap_transfer_capture(struct pcm *pcm, void *data, unsigned offset,
         channels = 8;
     else
         channels = 2;
-    tmp = sync_ptr->c.control.appl_ptr*2*channels;
+    tmp = ((uint64_t )sync_ptr->c.control.appl_ptr)*2*channels;
     pcm_offset = (tmp % (unsigned long)pcm->buffer_size);
     dst_addr = data;
     src_addr = pcm->addr + pcm_offset;

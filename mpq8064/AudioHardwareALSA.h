@@ -746,7 +746,7 @@ private:
     int                 mInputBufferSize;
     int                 mInputBufferCount;
     int32_t             mMinBytesReqToDecode;
-    int hw_ptr;
+    int64_t             hw_ptr;
     bool                mDtsTranscode;
     compressed_read_metadata_t mReadMetaData;
     // HDMI and SPDIF specifics
