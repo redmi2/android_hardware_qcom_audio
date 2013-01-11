@@ -54,6 +54,8 @@ public:
                                             audio_devices_t prevDevice,
                                             uint32_t delayMs);
         virtual void setForceUse(AudioSystem::force_use usage, AudioSystem::forced_config config);
+
+        virtual void handleNotificationRoutingForStream(AudioSystem::stream_type stream);
 protected:
         fm_modes fmMode;
         bool pendingForceNone;
