@@ -1349,9 +1349,6 @@ void AudioBroadcastStreamALSA::captureThreadEntry()
 
             size = readFromCapturePath(tempBuffer);
             if(size <= 0) {
-                // nothing to write break the driver by sending zero byte hack
-                if (mCaptureCompressedFromDSP)
-                    write_l( (char *)tempBuffer, 0);
                 ALOGE("capturePath returned size = %d", size);
                 if(mCaptureHandle) {
                     status = pcm_prepare(mCaptureHandle->handle);
@@ -1564,7 +1561,7 @@ ssize_t AudioBroadcastStreamALSA::readFromCapturePath(char *buffer)
                 read(capture_handle->timer_fd, rbuf, sizeof(struct snd_timer_tread) * 4 );
             }
             if (mCapturePfd[1].revents & POLLIN) {
-                ALOGV("Event on userspace fd");
+                ALOGD("Event on userspace fd");
                 mCapturePfd[1].revents  = 0;
             }
 
@@ -1671,20 +1668,18 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
             ALOGV("After an event occurs");
             {
                 Mutex::Autolock autoLock(mSyncLock);
-                mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_APPL |
-                                    SNDRV_PCM_SYNC_PTR_AVAIL_MIN);
+                mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN | SNDRV_PCM_SYNC_PTR_HWSYNC);
                 sync_ptr(mCompreRxHandle->handle);
             }
             while(hw_ptr < mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr) {
                 if (mInputMemFilledQueue.empty()) {
-                    ALOGV("Filled queue is empty");
-                    continue;
+                    ALOGD("Filled queue is empty");
+                    break;
                 }
-                mInputMemResponseMutex.lock();
-                mInputMemRequestMutex.lock();
+                mInputMemMutex.lock();
                 BuffersAllocated buf = *(mInputMemFilledQueue.begin());
                 mInputMemFilledQueue.erase(mInputMemFilledQueue.begin());
-                ALOGV("mInputMemFilledQueue %d", mInputMemFilledQueue.size());
+
                 if (mInputMemFilledQueue.empty() && mPlaybackReachedEOS) {
                     ALOGE("Queue Empty");
                     ALOGD("Audio Drain DONE ++");
@@ -1701,14 +1696,14 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
 
                 mInputMemEmptyQueue.push_back(buf);
 
-                mInputMemRequestMutex.unlock();
-                mInputMemResponseMutex.unlock();
+                ALOGV("playback thread :Empty Queue size() = %d, Filled Queue size() = %d ",
+                     mInputMemEmptyQueue.size(), mInputMemFilledQueue.size());
+                mInputMemMutex.unlock();
                 mWriteCv.signal();
                 hw_ptr += mCompreRxHandle->bufferSize/(2*mCompreRxHandle->channels);
                 {
                     Mutex::Autolock autoLock(mSyncLock);
-                    mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_APPL |
-                                        SNDRV_PCM_SYNC_PTR_AVAIL_MIN);
+                    mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN | SNDRV_PCM_SYNC_PTR_HWSYNC);
                     sync_ptr(mCompreRxHandle->handle);
                 }
                 ALOGE("hw_ptr = %d status.hw_ptr = %ld appl_ptr = %ld", hw_ptr, mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,
@@ -1842,11 +1837,6 @@ ssize_t AudioBroadcastStreamALSA::write_l(char *buffer, size_t bytes)
     size_t   sent = 0;
     bool     continueDecode;
 
-    if (bytes == 0 && mCompreRxHandle != NULL) {
-        ALOGD("Number of bytes in the buffer - zero");
-        writeToCompressedDriver(buffer, bytes);
-    }
-
     // set decoder configuration data if any
     if(setDecoderConfig(buffer, bytes)) {
         ALOGD("decoder configuration set");
@@ -1870,25 +1860,27 @@ int32_t AudioBroadcastStreamALSA::writeToCompressedDriver(char *buffer, int byte
     ALOGV("writeToCompressedDriver");
     int n = 0;
     mPlaybackCv.signal();
-    mInputMemRequestMutex.lock();
+    mInputMemMutex.lock();
 
     ALOGV("write Empty Queue size() = %d, Filled Queue size() = %d ",
               mInputMemEmptyQueue.size(), mInputMemFilledQueue.size());
     if (mInputMemEmptyQueue.empty()) {
-        ALOGV("Write: waiting on mWriteCv");
+        ALOGD("Write: waiting on mWriteCv");
+        ALOGD("hw_ptr = %d status.hw_ptr = %ld appl_ptr = %ld", hw_ptr, mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,
+                  mCompreRxHandle->handle->sync_ptr->c.control.appl_ptr);
         mLock.unlock();
         mWriteCvMutex.lock();
-        mInputMemRequestMutex.unlock();
+        mInputMemMutex.unlock();
         mWriteCv.wait(mWriteCvMutex);
-        mInputMemRequestMutex.lock();
+        mInputMemMutex.lock();
         mWriteCvMutex.unlock();
         mLock.lock();
         if (mSkipWrite) {
             mSkipWrite = false;
-            mInputMemRequestMutex.unlock();
+            mInputMemMutex.unlock();
             return 0;
         }
-        ALOGV("Write: received a signal to wake up");
+        ALOGD("Write: received a signal to wake up");
     }
 
     List<BuffersAllocated>::iterator it = mInputMemEmptyQueue.begin();
@@ -1896,15 +1888,13 @@ int32_t AudioBroadcastStreamALSA::writeToCompressedDriver(char *buffer, int byte
     if(bytes)
         mInputMemEmptyQueue.erase(it);
 
-    mInputMemRequestMutex.unlock();
 
     memcpy(buf.memBuf, buffer, bytes);
 
     buf.bytesToWrite = bytes;
-    mInputMemResponseMutex.lock();
     if(bytes)
         mInputMemFilledQueue.push_back(buf);
-    mInputMemResponseMutex.unlock();
+    mInputMemMutex.unlock();
 
     pcm * local_handle = (struct pcm *)mCompreRxHandle->handle;
     ALOGV("PCM write start");
