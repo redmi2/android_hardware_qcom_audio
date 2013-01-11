@@ -278,7 +278,6 @@ private:
     int mFmVolume;
     uint32_t mDevSettingsFlag;
     int mBtscoSamplerate;
-    bool mPflag;
     ALSAUseCaseList mUseCaseList;
     int mCallMode;
     struct mixer*  mMixer;
