@@ -743,15 +743,16 @@ status_t AudioPolicyManager::startOutput(audio_io_handle_t output,
                 }
             }
         }
+    uint32_t NewDevice = (uint32_t)AudioPolicyManagerBase::getNewDevice(output, true);
     if((stream == AudioSystem::SYSTEM) && (FM_ANALOG == getFMMode())
-    && (newDevice == (audio_devices_t)AudioSystem::DEVICE_OUT_FM))
+    && (NewDevice == AudioSystem::DEVICE_OUT_FM))
     {
-        newDevice = (audio_devices_t)((uint32_t)newDevice | AudioSystem::DEVICE_OUT_WIRED_HEADSET);
-        ALOGE("Selecting AnlgFM + CODEC device %x",newDevice);
-        muteWaitMs = setOutputDevice(output, (audio_devices_t)newDevice, true);
+        NewDevice |= AudioSystem::DEVICE_OUT_WIRED_HEADSET;
+        ALOGE("Selecting AnlgFM + CODEC device %x",NewDevice);
+        muteWaitMs = setOutputDevice(output, (audio_devices_t)NewDevice, true);
     }
     else
-        muteWaitMs = setOutputDevice(output, (audio_devices_t)newDevice, force);
+        muteWaitMs = setOutputDevice(output, (audio_devices_t)NewDevice, force);
 
         // handle special case for sonification while in call
         if (isInCall()) {
