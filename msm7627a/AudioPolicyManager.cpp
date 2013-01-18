@@ -575,6 +575,118 @@ status_t AudioPolicyManager::setDeviceConnectionState(AudioSystem::audio_devices
     return BAD_VALUE;
 }
 
+void AudioPolicyManager::setPhoneState(int state)
+{
+    ALOGV("setPhoneState() state %d", state);
+    audio_devices_t newDevice = (audio_devices_t)0;
+    if (state < 0 || state >= AudioSystem::NUM_MODES) {
+        ALOGW("setPhoneState() invalid state %d", state);
+        return;
+    }
+
+    if (state == mPhoneState ) {
+        ALOGW("setPhoneState() setting same state %d", state);
+        return;
+    }
+
+    // if leaving call state, handle special case of active streams
+    // pertaining to sonification strategy see handleIncallSonification()
+    if (isInCall()) {
+        ALOGV("setPhoneState() in call state management: new state is %d", state);
+        for (int stream = 0; stream < AudioSystem::NUM_STREAM_TYPES; stream++) {
+            AudioPolicyManagerBase::handleIncallSonification(stream, false, true);
+        }
+    }
+
+    // store previous phone state for management of sonification strategy below
+    int oldState = mPhoneState;
+    mPhoneState = state;
+    bool force = false;
+
+    // are we entering or starting a call
+    if (!isStateInCall(oldState) && isStateInCall(state)) {
+        ALOGV("  Entering call in setPhoneState()");
+        // force routing command to audio hardware when starting a call
+        // even if no device change is needed
+        force = true;
+    } else if (isStateInCall(oldState) && !isStateInCall(state)) {
+        ALOGV("  Exiting call in setPhoneState()");
+        // force routing command to audio hardware when exiting a call
+        // even if no device change is needed
+        force = true;
+    } else if (isStateInCall(state) && (state != oldState)) {
+        ALOGV("  Switching between telephony and VoIP in setPhoneState()");
+        // force routing command to audio hardware when switching between telephony and VoIP
+        // even if no device change is needed
+        force = true;
+    }
+
+    // check for device and output changes triggered by new phone state
+    newDevice = getNewDevice(mPrimaryOutput, false /*fromCache*/);
+    AudioPolicyManagerBase::checkA2dpSuspend();
+    AudioPolicyManagerBase::checkOutputForAllStrategies();
+    AudioPolicyManagerBase::updateDeviceForStrategy();
+
+    AudioOutputDescriptor *hwOutputDesc = mOutputs.valueFor(mPrimaryOutput);
+
+    // force routing command to audio hardware when ending call
+    // even if no device change is needed
+    if (isStateInCall(oldState) && newDevice == 0) {
+        newDevice = hwOutputDesc->device();
+    }
+
+    // when changing from ring tone to in call mode, mute the ringing tone
+    // immediately and delay the route change to avoid sending the ring tone
+    // tail into the earpiece or headset.
+    int delayMs = 0;
+    if (isStateInCall(state) && oldState == AudioSystem::MODE_RINGTONE) {
+        // delay the device change command by twice the output latency to have some margin
+        // and be sure that audio buffers not yet affected by the mute are out when
+        // we actually apply the route change
+        delayMs = hwOutputDesc->mLatency*2;
+        setStreamMute(AudioSystem::RING, true, mPrimaryOutput);
+    }
+
+    // change routing is necessary
+    setOutputDevice(mPrimaryOutput, newDevice, force, delayMs);
+
+    // if entering in call state, handle special case of active streams
+    // pertaining to sonification strategy see handleIncallSonification()
+    if (isStateInCall(state)) {
+        ALOGV("setPhoneState() in call state management: new state is %d", state);
+        // unmute the ringing tone after a sufficient delay if it was muted before
+        // setting output device above
+        if (oldState == AudioSystem::MODE_RINGTONE) {
+            setStreamMute(AudioSystem::RING, false, mPrimaryOutput, MUTE_TIME_MS);
+        }
+        for (int stream = 0; stream < AudioSystem::NUM_STREAM_TYPES; stream++) {
+            AudioPolicyManagerBase::handleIncallSonification(stream, true, true);
+        }
+    }
+
+    if (isStateInCall(oldState) && !isStateInCall(state)) {
+        // force restoring the device selection on other active outputs if it differs from the
+        // one being selected for this output
+        for (size_t i = 0; i < mOutputs.size(); i++) {
+            audio_io_handle_t curOutput = mOutputs.keyAt(i);
+            AudioOutputDescriptor *desc = mOutputs.valueAt(i);
+            if (curOutput != mPrimaryOutput && desc->refCount() != 0) {
+                setOutputDevice(curOutput,
+                               getNewDevice(curOutput, false /*fromCache*/),
+                               force, delayMs);
+            }
+        }
+    }
+
+    // Flag that ringtone volume must be limited to music volume until we exit MODE_RINGTONE
+    if (state == AudioSystem::MODE_RINGTONE &&
+        isStreamActive(AudioSystem::MUSIC, SONIFICATION_HEADSET_MUSIC_DELAY)) {
+        mLimitRingtoneVolume = true;
+    } else {
+        mLimitRingtoneVolume = false;
+    }
+}
+
 void AudioPolicyManager::setForceUse(AudioSystem::force_use usage, AudioSystem::forced_config config)
 {
     ALOGV("setForceUse() usage %d, config %d, mPhoneState %d", usage, config, mPhoneState);
