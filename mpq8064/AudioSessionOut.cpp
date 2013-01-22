@@ -1200,7 +1200,7 @@ status_t AudioSessionOutALSA::start()
 {
     Mutex::Autolock autoLock(mLock);
     status_t err = NO_ERROR;
-    
+
     if(mPaused) {
         if (mRouteAudioToA2dp) {
             ALOGD("startA2dpPlayback_l - resume - usecase %x", mA2dpUseCase);
@@ -1216,12 +1216,7 @@ status_t AudioSessionOutALSA::start()
     
     // 1. Set the absolute time stamp
     // ToDo: We need the ioctl from driver to set the time stamp
-
-    // 2. Signal the driver to start rendering data
-    if (ioctl(mPcmRxHandle->handle->fd, SNDRV_PCM_IOCTL_START)) {
-        ALOGE("start:SNDRV_PCM_IOCTL_START failed\n");
-        err = UNKNOWN_ERROR;
-    }
+    // 2. Signal the driver to start rendering data if threshold is not to be honoured.
     return err;
 }
 status_t AudioSessionOutALSA::pause()
@@ -1725,6 +1720,7 @@ status_t AudioSessionOutALSA::doRouting(int devices)
 {
     status_t status = NO_ERROR;
     char *use_case;
+    bool resumeA2DP = false;
     Mutex::Autolock autoLock(mParent->mLock);
 
     ALOGV("doRouting: devices 0x%x, mDevices = 0x%x", devices,mDevices);
@@ -1734,8 +1730,10 @@ status_t AudioSessionOutALSA::doRouting(int devices)
         devices &= ~AudioSystem::DEVICE_OUT_SPDIF;
 //NOTE: TODO - donot remove SPDIF device for A2DP device switch
         devices |=  AudioSystem::DEVICE_OUT_PROXY;
-        if(devices != mDevices)
+        if((devices != mDevices) && (mPaused != true)){
             pause_l();
+            resumeA2DP = true;
+        }
         mRouteAudioToA2dp = true;
 
     } else if(!(devices & AudioSystem::DEVICE_OUT_ALL_A2DP) && mRouteAudioToA2dp){
@@ -1901,7 +1899,8 @@ status_t AudioSessionOutALSA::doRouting(int devices)
                 mALSADevice->switchDeviceUseCase(mCompreRxHandle, devices, mParent->mode());
             }
         }
-        resume_l();
+        if(resumeA2DP == true)
+            resume_l();
     }
     if(status)
         mCurDevice = mDevices;
