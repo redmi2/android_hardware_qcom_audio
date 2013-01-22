@@ -138,6 +138,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     mOutputMetadataLength = 0;
     mTranscodeDevices     = 0;
     mFirstBuffer         = true;
+    mADTSHeaderPresent    = false;
     mFirstAACBuffer      = NULL;
     mFirstAACBufferLength = 0;
     mA2dpUseCase = AudioHardwareALSA::USECASE_NONE;
@@ -629,7 +630,7 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
         /* check for sync word, if present then configure MS11 for fileplayback mode OFF
            This is specifically done to handle Widevine usecase, in which the ADTS HEADER is
            not stripped off by the Widevine parser */
-        if( mFirstBuffer && (mFormat == AUDIO_FORMAT_AAC || mFormat == AUDIO_FORMAT_HE_AAC_V1 ||
+        if((mFirstBuffer == true) && (mFormat == AUDIO_FORMAT_AAC || mFormat == AUDIO_FORMAT_HE_AAC_V1 ||
             mFormat == AUDIO_FORMAT_AAC_ADIF || mFormat == AUDIO_FORMAT_HE_AAC_V2)){
 
             uint16_t uData = (*((char *)buffer) << 8) + *((char *)buffer + 1) ;
@@ -651,6 +652,7 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
                     delete mMS11Decoder;
                     return -1;
                 }
+              mADTSHeaderPresent= true;
             }
         }
 
@@ -1420,15 +1422,25 @@ status_t AudioSessionOutALSA::flush()
          } else {
             format_ms11 = FORMAT_DOLBY_DIGITAL_PLUS_MAIN;
          }
-         if(mMS11Decoder->setUseCaseAndOpenStream(format_ms11,mChannels, mSampleRate)){
-            ALOGE("SetUseCaseAndOpen MS11 failed");
-            delete mMS11Decoder;
-            return -1;
-         }
-         if(mFirstAACBuffer != NULL && mFirstAACBufferLength != 0 &&
+         /*Check if flush was issued for a widevine clip, having ADTS header, if yes then configure MS11
+           in Fileplayback mode OFF*/
+         if(mADTSHeaderPresent == true){
+            if(mMS11Decoder->setUseCaseAndOpenStream(format_ms11,mChannels, mSampleRate,false)){
+               ALOGE("SetUseCaseAndOpen MS11 failed");
+               delete mMS11Decoder;
+               return -1;
+            }
+         } else {
+            if(mMS11Decoder->setUseCaseAndOpenStream(format_ms11,mChannels, mSampleRate)){
+               ALOGE("SetUseCaseAndOpen MS11 failed");
+               delete mMS11Decoder;
+               return -1;
+            }
+            if(mFirstAACBuffer != NULL && mFirstAACBufferLength != 0 &&
                format_ms11 == FORMAT_DOLBY_PULSE_MAIN &&
                mMS11Decoder->setAACConfig((unsigned char *)mFirstAACBuffer, mFirstAACBufferLength) == true)
-         mAacConfigDataSet = true;
+               mAacConfigDataSet = true;
+         }
       }
     }
 #ifdef DEBUG

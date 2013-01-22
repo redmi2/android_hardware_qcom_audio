@@ -593,6 +593,7 @@ private:
     output_metadata_handle_t mOutputMetadataTunnel;
     uint32_t            mOutputMetadataLength;
     bool                mFirstBuffer;
+    bool                mADTSHeaderPresent;
 
     status_t            openPcmDevice(int devices);
     status_t            openDevice(char *pUseCase, bool bIsUseCase, int devices);
