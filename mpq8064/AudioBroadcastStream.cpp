@@ -1302,6 +1302,7 @@ void AudioBroadcastStreamALSA::allocatePlaybackPollFd()
         mPlaybackfd            = eventfd(0,0);
         mPlaybackPfd[1].fd     = mPlaybackfd;
         mPlaybackPfd[1].events = POLLIN | POLLERR | POLLNVAL;
+        ALOGD("mPlaybackPfd[0].fd %d mPlaybackPfd[1].fd %d", mPlaybackPfd[0].fd, mPlaybackPfd[1].fd);
     }
 }
 
@@ -1638,7 +1639,7 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
     if(!mKillPlaybackThread)
         allocatePlaybackPollFd();
 
-    while(!mKillPlaybackThread && ((err_poll = poll(mPlaybackPfd, NUM_FDS, -1)) >=0)) {
+    while(!mKillPlaybackThread && ((err_poll = poll(mPlaybackPfd, NUM_FDS, 3000)) >=0)) {
         ALOGD("pfd[0].revents = %d", mPlaybackPfd[0].revents);
         ALOGD("pfd[1].revents = %d", mPlaybackPfd[1].revents);
         if (err_poll == EINTR)
@@ -1717,7 +1718,7 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
                     mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN | SNDRV_PCM_SYNC_PTR_HWSYNC);
                     sync_ptr(mCompreRxHandle->handle);
                 }
-                ALOGE("hw_ptr = %d status.hw_ptr = %ld appl_ptr = %ld", hw_ptr, mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,
+                ALOGD("hw_ptr = %lld status.hw_ptr = %ld appl_ptr = %ld", hw_ptr, mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,
                        mCompreRxHandle->handle->sync_ptr->c.control.appl_ptr);
            }
         } else {
@@ -1740,6 +1741,7 @@ void AudioBroadcastStreamALSA::exitFromCaptureThread()
 
     mExitReadCapturePath = true;
     mKillCaptureThread = true;
+    ALOGD("exitFromCaptureThread mCapturefd = %d", mCapturefd);
     if(mCapturefd != -1) {
         uint64_t writeValue = KILL_CAPTURE_THREAD;
         ALOGD("Writing to mCapturefd %d",mCapturefd);
@@ -1755,13 +1757,13 @@ void AudioBroadcastStreamALSA::exitFromCaptureThread()
 
 void AudioBroadcastStreamALSA::exitFromPlaybackThread()
 {
-    ALOGV("exitFromPlaybackPath");
+    ALOGD("exitFromPlaybackPath");
     if (!mPlaybackThreadAlive)
         return;
 
     mKillPlaybackThread = true;
     if(mPlaybackfd != -1) {
-        ALOGE("Writing to mPlaybackfd %d",mPlaybackfd);
+        ALOGD("Writing to mPlaybackfd %d",mPlaybackfd);
         uint64_t writeValue = KILL_PLAYBACK_THREAD;
         sys_broadcast::lib_write(mPlaybackfd, &writeValue, sizeof(uint64_t));
     }
@@ -1786,7 +1788,7 @@ void AudioBroadcastStreamALSA::resetCapturePathVariables()
 
 void AudioBroadcastStreamALSA::resetPlaybackPathVariables()
 {
-    ALOGV("resetPlaybackPathVariables");
+    ALOGD("resetPlaybackPathVariables");
     if(mPlaybackfd != -1) {
         sys_broadcast::lib_close(mPlaybackfd);
         mPlaybackfd = -1;
