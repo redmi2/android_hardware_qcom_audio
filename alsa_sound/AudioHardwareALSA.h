@@ -1,7 +1,7 @@
 /* AudioHardwareALSA.h
  **
  ** Copyright 2008-2010, Wind River Systems
- ** Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+ ** Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
  **
  ** Licensed under the Apache License, Version 2.0 (the "License");
  ** you may not use this file except in compliance with the License.
@@ -61,14 +61,10 @@ class AudioHardwareALSA;
 #define DEFAULT_CHANNEL_MODE  2
 #define VOICE_SAMPLING_RATE   8000
 #define VOICE_CHANNEL_MODE    1
-#define PLAYBACK_LATENCY      170000
+#define PLAYBACK_LATENCY      96000
 #define RECORD_LATENCY        96000
 #define VOICE_LATENCY         85333
-#ifdef TARGET_8974
 #define DEFAULT_BUFFER_SIZE   2048
-#else
-#define DEFAULT_BUFFER_SIZE   4096
-#endif
 //4032 = 336(kernel buffer size) * 2(bytes pcm_16) * 6(number of channels)
 #define DEFAULT_MULTI_CHANNEL_BUF_SIZE    4032
 #define DEFAULT_VOICE_BUFFER_SIZE   2048
@@ -77,18 +73,21 @@ class AudioHardwareALSA;
 #define PLAYBACK_LOW_LATENCY_MEASURED  42000
 #ifdef TARGET_8974
 #define DEFAULT_IN_BUFFER_SIZE 512
+#define MIN_CAPTURE_BUFFER_SIZE_PER_CH   512
+#define VOIP_BUFFER_SIZE_8K    512
+#define VOIP_BUFFER_SIZE_16K   1024
 #else
 #define DEFAULT_IN_BUFFER_SIZE 320
-#endif
 #define MIN_CAPTURE_BUFFER_SIZE_PER_CH   320
+#define VOIP_BUFFER_SIZE_8K    320
+#define VOIP_BUFFER_SIZE_16K   640
+#endif
 #define MAX_CAPTURE_BUFFER_SIZE_PER_CH   2048
 #define FM_BUFFER_SIZE        1024
 
 #define VOIP_SAMPLING_RATE_8K 8000
 #define VOIP_SAMPLING_RATE_16K 16000
 #define VOIP_DEFAULT_CHANNEL_MODE  1
-#define VOIP_BUFFER_SIZE_8K    320
-#define VOIP_BUFFER_SIZE_16K   640
 #define VOIP_BUFFER_MAX_SIZE   VOIP_BUFFER_SIZE_16K
 #define VOIP_PLAYBACK_LATENCY      6400
 #define VOIP_RECORD_LATENCY        6400
@@ -266,6 +265,7 @@ public:
     void     setCsdHandle(void*);
 #endif
 
+    bool mSSRComplete;
 protected:
     friend class AudioHardwareALSA;
 private:
@@ -299,6 +299,7 @@ private:
     char mMicType[25];
     char mCurRxUCMDevice[50];
     char mCurTxUCMDevice[50];
+    //fluence mode value: FLUENCE_MODE_BROADSIDE or FLUENCE_MODE_ENDFIRE
     uint32_t mFluenceMode;
     int mFmVolume;
     uint32_t mDevSettingsFlag;
@@ -867,6 +868,9 @@ protected:
 
     void *mAcdbHandle;
     void *mCsdHandle;
+
+    //fluence key value: fluencepro, fluence, or none
+    char mFluenceKey[20];
     //A2DP variables
     audio_stream_out   *mA2dpStream;
     audio_hw_device_t  *mA2dpDevice;

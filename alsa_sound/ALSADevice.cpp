@@ -67,6 +67,7 @@ ALSADevice::ALSADevice() {
 #ifdef USES_FLUENCE_INCALL
     mDevSettingsFlag = TTY_OFF | DMIC_FLAG;
 #else
+    mSSRComplete = false;
     mDevSettingsFlag = TTY_OFF;
 #endif
     mBtscoSamplerate = 8000;
@@ -271,8 +272,9 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
             || !strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED, strlen(SND_USE_CASE_VERB_HIFI_REC_COMPRESSED))
             || !strncmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC))
             || !strncmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED))) {
-            ALOGV("HWParams: Use 4 channels in kernel for 5.1(%s) recording ", handle->useCase);
             channels = 4;
+            reqBuffSize = DEFAULT_IN_BUFFER_SIZE*4;
+            ALOGV("HWParams: Use 4 channels in kernel for 5.1(%s) recording reqBuffSize:%d", handle->useCase,reqBuffSize);
         }
     }
 #endif
@@ -519,7 +521,7 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
     mods_size = snd_use_case_get_list(handle->ucMgr, "_enamods", &mods_list);
     if (rxDevice != NULL) {
         if ((strncmp(mCurRxUCMDevice, "None", 4)) &&
-            ((strncmp(rxDevice, mCurRxUCMDevice, MAX_STR_LEN)) || (inCallDevSwitch == true))) {
+            (mSSRComplete || (strncmp(rxDevice, mCurRxUCMDevice, MAX_STR_LEN)) || (inCallDevSwitch == true))) {
             if ((use_case != NULL) && (strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
                 strlen(SND_USE_CASE_VERB_INACTIVE)))) {
                 usecase_type = getUseCaseType(use_case);
@@ -546,7 +548,7 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
     }
     if (txDevice != NULL) {
         if ((strncmp(mCurTxUCMDevice, "None", 4)) &&
-            ((strncmp(txDevice, mCurTxUCMDevice, MAX_STR_LEN)) || (inCallDevSwitch == true))) {
+            (mSSRComplete || (strncmp(txDevice, mCurTxUCMDevice, MAX_STR_LEN)) || (inCallDevSwitch == true))) {
             if ((use_case != NULL) && (strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
                 strlen(SND_USE_CASE_VERB_INACTIVE)))) {
                 usecase_type = getUseCaseType(use_case);
@@ -708,18 +710,17 @@ status_t ALSADevice::open(alsa_handle_t *handle)
         flags |= PCM_QUAD;
     } else if (handle->channels == 6 ) {
 #ifdef QCOM_SSR_ENABLED
-        if (!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC)
-            || !strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED)
-            || !strcmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC)
-            || !strcmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED)) {
+        if (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC, strlen(SND_USE_CASE_VERB_HIFI_REC))
+            || !strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED, strlen(SND_USE_CASE_VERB_HIFI_REC_COMPRESSED))
+            || !strncmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC))
+            || !strncmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED))) {
             flags |= PCM_QUAD;
-        } else {
+        } else
+#endif
+        {
             flags |= PCM_5POINT1;
         }
-#else
-        flags |= PCM_5POINT1;
     }
-#endif
     else {
         flags |= PCM_STEREO;
     }

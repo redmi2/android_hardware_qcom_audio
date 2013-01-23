@@ -1,7 +1,7 @@
 /* AudioHardwareALSA.cpp
  **
  ** Copyright 2008-2010 Wind River Systems
- ** Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+ ** Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
  **
  ** Licensed under the Apache License, Version 2.0 (the "License");
  ** you may not use this file except in compliance with the License.
@@ -255,20 +255,19 @@ AudioHardwareALSA::AudioHardwareALSA() :
     String8 value;
 
     //Set default AudioParameter for fluencetype
-    key  = String8(FLUENCE_KEY);
-    char fluence_key[20] = "none";
-    property_get("ro.qc.sdk.audio.fluencetype",fluence_key,"0");
-    if (0 == strncmp("fluencepro", fluence_key, sizeof("fluencepro"))) {
+    key  = String8(AudioParameter::keyFluenceType);
+    property_get("ro.qc.sdk.audio.fluencetype",mFluenceKey,"0");
+    if (0 == strncmp("fluencepro", mFluenceKey, sizeof("fluencepro"))) {
         mDevSettingsFlag |= QMIC_FLAG;
         mDevSettingsFlag &= (~DMIC_FLAG);
         value = String8("fluencepro");
         ALOGD("FluencePro quadMic feature Enabled");
-    } else if (0 == strncmp("fluence", fluence_key, sizeof("fluence"))) {
+    } else if (0 == strncmp("fluence", mFluenceKey, sizeof("fluence"))) {
         mDevSettingsFlag |= DMIC_FLAG;
         mDevSettingsFlag &= (~QMIC_FLAG);
         value = String8("fluence");
         ALOGD("Fluence dualmic feature Enabled");
-    } else if (0 == strncmp("none", fluence_key, sizeof("none"))) {
+    } else if (0 == strncmp("none", mFluenceKey, sizeof("none"))) {
         mDevSettingsFlag &= (~DMIC_FLAG);
         mDevSettingsFlag &= (~QMIC_FLAG);
         value = String8("none");
@@ -276,6 +275,17 @@ AudioHardwareALSA::AudioHardwareALSA() :
     }
     param.add(key, value);
     mALSADevice->setFlags(mDevSettingsFlag);
+
+    //set default AudioParameters for surround sound recording
+    char ssr_enabled[6] = "false";
+    property_get("ro.qc.sdk.audio.ssr",ssr_enabled,"0");
+    if (!strncmp("true", ssr_enabled, 4)) {
+        ALOGD("surround sound recording is supported");
+        param.add(String8(AudioParameter::keySSR), String8("true"));
+    } else {
+        ALOGD("surround sound recording is not supported");
+        param.add(String8(AudioParameter::keySSR), String8("false"));
+    }
 
     //mALSADevice->setDeviceList(&mDeviceList);
     mRouteAudioToExtOut = false;
@@ -438,6 +448,25 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
     int state;
     ALOGV("setParameters() %s", keyValuePairs.string());
 
+    key = String8(AudioParameter::keyADSPStatus);
+    if (param.get(key, value) == NO_ERROR) {
+       if (value == "ONLINE") {
+           ALOGV("ADSP online set SSRcomplete");
+           mALSADevice->mSSRComplete = true;
+           return status;
+       }
+       else if (value == "OFFLINE") {
+           ALOGV("ADSP online re-set SSRcomplete");
+           mALSADevice->mSSRComplete = false;
+           if ( mRouteAudioToExtOut==true) {
+               ALOGV("ADSP offline close EXT output");
+               uint32_t activeUsecase = getExtOutActiveUseCases_l();
+               stopPlaybackOnExtOut_l(activeUsecase);
+           }
+           return status;
+       }
+    }
+
     key = String8(TTY_MODE_KEY);
     if (param.get(key, value) == NO_ERROR) {
         mDevSettingsFlag &= TTY_CLEAR;
@@ -458,16 +487,23 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         doRouting(0);
     }
 
-    key = String8(FLUENCE_KEY);
+    key = String8(AudioParameter::keyFluenceType);
     if (param.get(key, value) == NO_ERROR) {
         if (value == "quadmic") {
-            mDevSettingsFlag |= QMIC_FLAG;
-            mDevSettingsFlag &= (~DMIC_FLAG);
-            ALOGV("Fluence quadMic feature Enabled");
+            //Allow changing fluence type to "quadmic" only when fluence type is fluencepro
+            if (0 == strncmp("fluencepro", mFluenceKey, sizeof("fluencepro"))) {
+                mDevSettingsFlag |= QMIC_FLAG;
+                mDevSettingsFlag &= (~DMIC_FLAG);
+                ALOGV("Fluence quadMic feature Enabled");
+            }
         } else if (value == "dualmic") {
-            mDevSettingsFlag |= DMIC_FLAG;
-            mDevSettingsFlag &= (~QMIC_FLAG);
-            ALOGV("Fluence dualmic feature Enabled");
+            //Allow changing fluence type to "dualmic" only when fluence type is fluencepro or fluence
+            if (0 == strncmp("fluencepro", mFluenceKey, sizeof("fluencepro")) ||
+                0 == strncmp("fluencepro", mFluenceKey, sizeof("fluence"))) {
+                mDevSettingsFlag |= DMIC_FLAG;
+                mDevSettingsFlag &= (~QMIC_FLAG);
+                ALOGV("Fluence dualmic feature Enabled");
+            }
         } else if (value == "none") {
             mDevSettingsFlag &= (~DMIC_FLAG);
             mDevSettingsFlag &= (~QMIC_FLAG);
@@ -660,7 +696,7 @@ String8 AudioHardwareALSA::getParameters(const String8& keys)
         param.add(key, value);
     }
 
-    key = String8(FLUENCE_KEY);
+    key = String8(AudioParameter::keyFluenceType);
     if (param.get(key, value) == NO_ERROR) {
     if ((mDevSettingsFlag & QMIC_FLAG) &&
                                (mDevSettingsFlag & ~DMIC_FLAG))
@@ -1702,21 +1738,23 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         if (!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC, strlen(SND_USE_CASE_VERB_HIFI_REC))
             || !strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC))) {
             ALOGV("OpenInoutStream: getInputBufferSize sampleRate:%d format:%d, channels:%d", it->sampleRate,*format,it->channels);
-#ifdef TARGET_8974
-            it->bufferSize = DEFAULT_IN_BUFFER_SIZE;
-#else
             it->bufferSize = getInputBufferSize(it->sampleRate,*format,it->channels);
-#endif
         }
 
 #ifdef QCOM_SSR_ENABLED
-        //Check if SSR is supported by reading system property
-        char ssr_enabled[6] = "false";
-        property_get("ro.qc.sdk.audio.ssr",ssr_enabled,"0");
-        if (strncmp("true", ssr_enabled, 4)) {
-            if (status) *status = err;
-            ALOGE("openInputStream: FAILED:%d. Surround sound recording is not supported",*status);
-            return in;
+        if (6 == it->channels) {
+            if (!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC, strlen(SND_USE_CASE_VERB_HIFI_REC))
+                || !strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED, strlen(SND_USE_CASE_VERB_HIFI_REC_COMPRESSED))
+                || !strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC))
+                || !strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED))) {
+                //Check if SSR is supported by reading system property
+                char ssr_enabled[6] = "false";
+                property_get("ro.qc.sdk.audio.ssr",ssr_enabled,"0");
+                if (strncmp("true", ssr_enabled, 4)) {
+                    if (status) *status = err;
+                    ALOGE("openInputStream: FAILED:%d. Surround sound recording is not supported",*status);
+                }
+            }
         }
 #endif
         err = mALSADevice->open(&(*it));
@@ -1791,7 +1829,11 @@ size_t AudioHardwareALSA::getInputBufferSize(uint32_t sampleRate, int format, in
     size_t bufferSize = 0;
     if (format == AUDIO_FORMAT_PCM_16_BIT) {
         if(sampleRate == 8000 || sampleRate == 16000 || sampleRate == 32000) {
+#ifdef TARGET_8974
+            bufferSize = DEFAULT_IN_BUFFER_SIZE;
+#else
             bufferSize = (sampleRate * channelCount * 20 * sizeof(int16_t)) / 1000;
+#endif
         } else if (sampleRate == 11025 || sampleRate == 12000) {
             bufferSize = 256 * sizeof(int16_t)  * channelCount;
         } else if (sampleRate == 22050 || sampleRate == 24000) {
