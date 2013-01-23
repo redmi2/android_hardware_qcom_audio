@@ -69,7 +69,7 @@ using android::Condition;
 #define MBADRC_DISABLE 0xFFEF
 #define SRS_ENABLE 0x0020
 #define SRS_DISABLE 0xFFDF
-#define LPA_BUFFER_SIZE 512*1024
+#define LPA_BUFFER_SIZE 480*1024
 #define BUFFER_COUNT 2
 
 #define AGC_ENABLE     0x0001
