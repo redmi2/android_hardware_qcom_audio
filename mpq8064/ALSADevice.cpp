@@ -152,8 +152,8 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
                       (handle->bufferSize/handle->periodSize));
         minPeroid = compr_cap.min_fragment_size;
         maxPeroid = compr_cap.max_fragment_size;
-        ALOGV("Min peroid size = %d , Maximum Peroid size = %d",\
-            minPeroid, maxPeroid);
+        ALOGV("Min peroid size = %d , Maximum Peroid size = %d format = %d",\
+            minPeroid, maxPeroid, format);
         //TODO: what if codec not supported or the array has wrong codec!!!!
         if (format == AUDIO_FORMAT_WMA || format == AUDIO_FORMAT_WMA_PRO) {
             ALOGV("WMA CODEC");
@@ -1093,10 +1093,14 @@ int  ALSADevice::getUseCaseType(const char *useCase)
            strlen(SND_USE_CASE_MOD_PLAY_MUSIC4)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_FM,
            strlen(SND_USE_CASE_MOD_PLAY_FM)) ||
-        !strncmp(useCase, SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL,
-           strlen(SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL)) ||
-        !strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_TUNNEL,
-           strlen(SND_USE_CASE_MOD_PSEUDO_TUNNEL))) {
+        !strncmp(useCase, SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL1,
+           strlen(SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL1)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_TUNNEL1,
+           strlen(SND_USE_CASE_MOD_PSEUDO_TUNNEL1)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_TUNNEL2,
+           strlen(SND_USE_CASE_MOD_PSEUDO_TUNNEL2)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_TUNNEL3,
+           strlen(SND_USE_CASE_MOD_PSEUDO_TUNNEL3))) {
         return USECASE_TYPE_RX;
     } else if (!strncmp(useCase, SND_USE_CASE_VERB_HIFI_REC,
            strlen(SND_USE_CASE_VERB_HIFI_REC)) ||
