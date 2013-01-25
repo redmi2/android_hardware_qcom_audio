@@ -149,7 +149,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                         mParent->mALSADevice->setVocRecMode(INCALL_REC_STEREO);
                         strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE,
                                 sizeof(mHandle->useCase));
-                        csd_client_start_record(INCALL_REC_STEREO);
+                        csd_client_start_record(INCALL_REC_STEREO, mParent->mVoiceSessionId);
                     } else 
 #endif
                     {
@@ -162,7 +162,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                         mParent->mALSADevice->setVocRecMode(INCALL_REC_MONO);
                         strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE,
                                 sizeof(mHandle->useCase));
-                        csd_client_start_record(INCALL_REC_MONO);
+                        csd_client_start_record(INCALL_REC_MONO, mParent->mVoiceSessionId);
                     } else 
 #endif
                     {
@@ -198,7 +198,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                         mParent->mALSADevice->setVocRecMode(INCALL_REC_STEREO);
                         strlcpy(mHandle->useCase, SND_USE_CASE_VERB_INCALL_REC,
                                 sizeof(mHandle->useCase));
-                        csd_client_start_record(INCALL_REC_STEREO);
+                        csd_client_start_record(INCALL_REC_STEREO, mParent->mVoiceSessionId);
                     } else 
 #endif
                     {
@@ -211,7 +211,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                        mParent->mALSADevice->setVocRecMode(INCALL_REC_MONO);
                        strlcpy(mHandle->useCase, SND_USE_CASE_VERB_INCALL_REC,
                                sizeof(mHandle->useCase));
-                       csd_client_start_record(INCALL_REC_MONO);
+                       csd_client_start_record(INCALL_REC_MONO, mParent->mVoiceSessionId);
                    } else
 #endif            
                    {
@@ -507,7 +507,7 @@ status_t AudioStreamInALSA::close()
     if (mParent->mFusion3Platform) {
        if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_INCALL_REC)) ||
            (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE))) {
-           csd_client_stop_record();
+           csd_client_stop_record(mParent->mVoiceSessionId);
        }
     }
 #endif
@@ -579,7 +579,7 @@ status_t AudioStreamInALSA::standby()
        if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_INCALL_REC)) ||
            (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE))) {
            ALOGD(" into standby, stop record");
-           csd_client_stop_record();
+           csd_client_stop_record(mParent->mVoiceSessionId);
        }
     }
 #endif
