@@ -1035,8 +1035,8 @@ status_t ALSADevice::close(alsa_handle_t *handle)
                 !strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOICE)) ||
                 (!strcmp(handle->useCase, SND_USE_CASE_VERB_VOLTE) ||
                 !strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOLTE)) ||
-                (!strcmp(handle->useCase, SND_USE_CASE_VERB_SGLTECALL) ||
-                !strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_SGLTE))) &&
+                (!strcmp(handle->useCase, SND_USE_CASE_VERB_VOICE2) ||
+                !strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOICE2))) &&
                 platform_is_Fusion3()) {
 #ifdef QCOM_CSDCLIENT_ENABLED
             err = csd_client_stop_voice(mVoiceSessionId);
@@ -1172,10 +1172,10 @@ int ALSADevice::getUseCaseType(const char *useCase)
             MAX_LEN(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE,
             MAX_LEN(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE)) ||
-        !strncmp(useCase, SND_USE_CASE_VERB_SGLTECALL,
-            MAX_LEN(useCase, SND_USE_CASE_VERB_SGLTECALL)) ||
-        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_SGLTE,
-            MAX_LEN(useCase, SND_USE_CASE_MOD_PLAY_SGLTE)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_VOICE2,
+            MAX_LEN(useCase, SND_USE_CASE_VERB_VOICE2)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_VOICE2,
+            MAX_LEN(useCase, SND_USE_CASE_MOD_PLAY_VOICE2)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_VOLTE,
             MAX_LEN(useCase, SND_USE_CASE_VERB_VOLTE)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_VOLTE,
@@ -1523,16 +1523,17 @@ void ALSADevice::setVoiceVolume(int vol, int sessionid)
     }
 }
 
-void ALSADevice::setSGLTEVolume(int vol, int sessionid)
+void ALSADevice::setVoice2Volume(int vol, int sessionid)
 {
     int err = 0;
-    ALOGD("setSGLTEVolume: volume %d sessionid:%d", vol, sessionid);
-    setMixerControl("SGLTE Rx Volume", vol, 0);
+
+    ALOGD("setVoice2Volume: volume %d sessionid:%d", vol, sessionid);
+    setMixerControl("Voice2 Rx Volume", vol, 0);
 
     if (platform_is_Fusion3()) {
-        err = csd_client_volume(vol,sessionid);
+        err = csd_client_volume(vol, sessionid);
         if (err < 0) {
-            ALOGE("setSGLTEVolume: csd_client error %d", err);
+            ALOGE("setVoice2Volume: csd_client error %d", err);
         }
     }
 }
@@ -1543,9 +1544,9 @@ void ALSADevice::setVoLTEVolume(int vol, int sessionid)
     ALOGD("setVoLTEVolume: volume %d sessionid:%d", vol, sessionid);
     setMixerControl("VoLTE Rx Volume", vol, 0);
     if (platform_is_Fusion3()) {
-        err = csd_client_volume(vol,sessionid);
+        err = csd_client_volume(vol, sessionid);
         if (err < 0) {
-            ALOGE("setSGLTEVolume: csd_client error %d", err);
+            ALOGE("setVoLTEVolume: csd_client error %d", err);
         }
     }
 }
@@ -1565,7 +1566,7 @@ void ALSADevice::setMicMute(int state, int sessionid)
 
     if (platform_is_Fusion3()) {
 #ifdef QCOM_CSDCLIENT_ENABLED
-        err = csd_client_mic_mute(state,sessionid);
+        err = csd_client_mic_mute(state, sessionid);
         if (err < 0) {
             ALOGE("setMicMute: csd_client error %d", err);
         }
@@ -1573,16 +1574,17 @@ void ALSADevice::setMicMute(int state, int sessionid)
     }
 }
 
-void ALSADevice::setSGLTEMicMute(int state, int sessionid)
+void ALSADevice::setVoice2MicMute(int state, int sessionid)
 {
     int err = 0;
-    ALOGD("setSGLTEMicMute: state %d sessionid:%d", state, sessionid);
-    setMixerControl("SGLTE Tx Mute", state, 0);
+
+    ALOGD("setVoice2MicMute: state %d sessionid:%d", state, sessionid);
+    setMixerControl("Voice2 Tx Mute", state, 0);
 
     if (platform_is_Fusion3()) {
-        err = csd_client_mic_mute(state,sessionid);
+        err = csd_client_mic_mute(state, sessionid);
         if (err < 0) {
-            ALOGE("setSGLTEMicMute: csd_client error %d", err);
+            ALOGE("setVoice2MicMute: csd_client error %d", err);
         }
     }
 }
@@ -1593,9 +1595,9 @@ void ALSADevice::setVoLTEMicMute(int state, int sessionid)
     ALOGD("setVolteMicMute: state %d sessionid:%d", state, sessionid);
     setMixerControl("VoLTE Tx Mute", state, 0);
     if (platform_is_Fusion3()) {
-        err = csd_client_mic_mute(state,sessionid);
+        err = csd_client_mic_mute(state, sessionid);
         if (err < 0) {
-            ALOGE("setSGLTEMicMute: csd_client error %d", err);
+            ALOGE("setVoLTEMicMute: csd_client error %d", err);
         }
     }
 }
