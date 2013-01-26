@@ -415,8 +415,7 @@ status_t AudioSessionOutALSA::openTunnelDevice(int devices)
     hw_ptr[0] = 0;
     hw_ptr[1] = 0;
     if(mCaptureFromProxy) {
-        devices = (mDevices & AudioSystem::DEVICE_OUT_SPDIF);
-        devices |= AudioSystem::DEVICE_OUT_PROXY;
+        devices = AudioSystem::DEVICE_OUT_PROXY;
     }
     mInputBufferSize    = TUNNEL_DECODER_BUFFER_SIZE;
     mInputBufferCount   = TUNNEL_DECODER_BUFFER_COUNT;
@@ -1736,11 +1735,14 @@ status_t AudioSessionOutALSA::doRouting(int devices)
         }
         mRouteAudioToA2dp = true;
 
-    } else if(!(devices & AudioSystem::DEVICE_OUT_ALL_A2DP) && mRouteAudioToA2dp){
-        mRouteAudioToA2dp = false;
-        devices &= ~AudioSystem::DEVICE_OUT_PROXY;
-        ALOGD("doRouting-stopA2dpPlayback_l- usecase %x", mA2dpUseCase);
-        status = mParent->stopA2dpPlayback_l(mA2dpUseCase);
+    } else if(!(devices & AudioSystem::DEVICE_OUT_ALL_A2DP)) {
+        if(mRouteAudioToA2dp) {
+            mRouteAudioToA2dp = false;
+            ALOGD("doRouting-stopA2dpPlayback_l- usecase %x", mA2dpUseCase);
+            status = mParent->stopA2dpPlayback_l(mA2dpUseCase);
+        }
+        if(devices & AudioSystem::DEVICE_OUT_PROXY)
+            devices &= ~AudioSystem::DEVICE_OUT_SPDIF;
     }
     if(devices == mDevices) {
         ALOGW("Return same device ");
@@ -2122,6 +2124,9 @@ status_t AudioSessionOutALSA::openPcmDevice(int devices)
     }
     if(mHdmiFormat == COMPRESSED_FORMAT) {
         devices = devices & ~AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+    }
+    if(mCaptureFromProxy) {
+        devices = AudioSystem::DEVICE_OUT_PROXY;
     }
     status = setPlaybackFormat();
     if(status != NO_ERROR) {
