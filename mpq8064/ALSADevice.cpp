@@ -24,7 +24,6 @@
 #include <utils/Log.h>
 #include <cutils/properties.h>
 #include <linux/ioctl.h>
-#include "AudioUtil.h"
 #include "AudioHardwareALSA.h"
 #include <media/AudioRecord.h>
 
@@ -33,7 +32,6 @@
 #define USECASE_TYPE_TX 2
 #define DEVICE_TYPE_RX 1
 #define DEVICE_TYPE_TX 2
-#define MAX_HDMI_CHANNEL_CNT 8
 
 #define AFE_PROXY_PERIOD_SIZE 3072
 #define KILL_A2DP_THREAD 1
@@ -127,22 +125,6 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     char hdmiFormat[20];
     char dtsModelId[128];
     int hdmiChannels = 8;
-    EDID_AUDIO_INFO info = { 0 };
-
-    if (handle->devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
-        if (AudioUtil::getHDMIAudioSinkCaps(&info)) {
-            int channel_count = 0;
-            for (int i = 0; i < info.nAudioBlocks && i < MAX_EDID_BLOCKS; i++) {
-                if (info.AudioBlocksArray[i].nChannels > channel_count &&
-                          info.AudioBlocksArray[i].nChannels <= MAX_HDMI_CHANNEL_CNT) {
-                    channel_count = info.AudioBlocksArray[i].nChannels;
-                }
-            }
-            hdmiChannels = channel_count;
-            pcm_set_channel_map(NULL, mMixer, MAX_HDMI_CHANNEL_CNT, info.channelMap);
-            setChannelAlloc(info.channelAllocation);
-        }
-    }
     property_get("mpq.audio.spdif.format",spdifFormat,"0");
     property_get("mpq.audio.hdmi.format",hdmiFormat,"0");
 
@@ -1507,26 +1489,6 @@ status_t ALSADevice::setMixerControl(const char *name, const char *value)
     return (ret < 0) ? BAD_VALUE : NO_ERROR;
 }
 
-status_t ALSADevice::setMixerControlExt(const char *name, int count, char **setValues)
-{
-    struct mixer_ctl *ctl;
-    int ret = 0;
-    ALOGD("setMixerControl:: name %s count %d", name, count);
-    if (!mMixer) {
-        ALOGE("Control not initialized");
-        return NO_INIT;
-    }
-
-    // ToDo: Do we need to send index here? Right now it works with 0
-    ctl = mixer_get_control(mMixer, name, 0);
-    if(ctl == NULL) {
-        ALOGE("Could not get the mixer control");
-        return BAD_VALUE;
-    }
-    ret = mixer_ctl_set_value(ctl, count, setValues);
-    return (ret < 0) ? BAD_VALUE : NO_ERROR;
-}
-
 int32_t ALSADevice::get_linearpcm_channel_status(uint32_t sampleRate,
                                                  unsigned char *channel_status)
 {
@@ -1682,26 +1644,6 @@ status_t ALSADevice::setChannelMap(alsa_handle_t *handle, int maxChannels,
     return status;
 }
 
-void ALSADevice::setChannelAlloc(int channelAlloc)
-{
-    ALOGD("channel allocation = 0x%x", channelAlloc);
-    char** setValues;
-    setValues = (char**)malloc(sizeof(char*));
-    if (setValues == NULL) {
-          return;
-    }
-    setValues[0] = (char*)malloc(4*sizeof(char));
-    if (setValues[0] == NULL) {
-          free(setValues);
-          return;
-    }
-    sprintf(setValues[0], "%d", channelAlloc);
-    setMixerControlExt("HDMI RX CA", 1, setValues);
-    free(setValues[0]);
-    free(setValues);
-    return;
-}
-
 status_t ALSADevice::setCaptureFormat(const char *value)
 {
     status_t err = NO_ERROR;
@@ -1777,19 +1719,13 @@ int ALSADevice::getALSABufferSize(alsa_handle_t *handle) {
 status_t ALSADevice::setHDMIChannelCount(int channels)
 {
     status_t err = NO_ERROR;
-    const char *channel_cnt_str = NULL;
-    ALOGE("dddd: channels in sethdmichannelcount = %d", channels);
-    switch (channels) {
-    case 8: channel_cnt_str = "Eight"; break;
-    case 7: channel_cnt_str = "Seven"; break;
-    case 6: channel_cnt_str = "Six"; break;
-    case 5: channel_cnt_str = "Five"; break;
-    case 4: channel_cnt_str = "Four"; break;
-    case 3: channel_cnt_str = "Three"; break;
-    default: channel_cnt_str = "Two"; break;
+    if(channels == 2)
+        err = setMixerControl("HDMI_RX Channels","Two");
+    else
+        err = setMixerControl("HDMI_RX Channels","Eight");
+    if(err) {
+        ALOGE("setHDMIChannelCount error = %d",err);
     }
-    ALOGD("HDMI channel count: %s", channel_cnt_str);
-    setMixerControl("HDMI_RX Channels",channel_cnt_str);
     return err;
 }
 

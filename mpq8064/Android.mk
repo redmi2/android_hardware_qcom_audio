@@ -17,8 +17,7 @@ LOCAL_SRC_FILES := \
   AudioStreamInALSA.cpp 	\
   ALSAStreamOps.cpp		\
   ALSADevice.cpp		\
-  audio_hw_hal.cpp		\
-  AudioUtil.cpp
+  audio_hw_hal.cpp
 
 LOCAL_STATIC_LIBRARIES := \
     libmedia_helper \
