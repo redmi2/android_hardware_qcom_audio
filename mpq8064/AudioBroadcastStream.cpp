@@ -845,7 +845,7 @@ status_t AudioBroadcastStreamALSA::openCapturingAndRoutingDevices()
     doRoutingSetup is called from capture thread*/
 
     if(mAudioSource == QCOM_AUDIO_SOURCE_DIGITAL_BROADCAST_MAIN_ONLY)
-        doRoutingSetup();
+        status = doRoutingSetup();
 
     return status;
 }
@@ -1398,7 +1398,7 @@ void AudioBroadcastStreamALSA::captureThreadEntry()
                             continue;
                             break;
                      }
-                     ALOGV("format: %d, frameSize: %d", mReadMetaData.formatId,
+                     ALOGD("format: %d, frameSize: %d", mReadMetaData.formatId,
                                          frameSize);
                 }
                 if(NO_ERROR != doRoutingSetup()){
@@ -1633,9 +1633,11 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
     prctl(PR_SET_NAME, (unsigned long)"HAL Audio EventThread", 0, 0, 0);
 
     mPlaybackMutex.lock();
-    ALOGV("PlaybackThreadEntry wait for signal \n");
-    mPlaybackCv.wait(mPlaybackMutex);
-    ALOGV("PlaybackThreadEntry ready to work \n");
+    if(!mKillPlaybackThread){
+        ALOGV("PlaybackThreadEntry wait for signal \n");
+        mPlaybackCv.wait(mPlaybackMutex);
+        ALOGV("PlaybackThreadEntry ready to work \n");
+    }
     mPlaybackMutex.unlock();
 
     if(!mKillPlaybackThread)
@@ -1763,6 +1765,7 @@ void AudioBroadcastStreamALSA::exitFromPlaybackThread()
     if (!mPlaybackThreadAlive)
         return;
 
+    mPlaybackMutex.lock();
     mKillPlaybackThread = true;
     if(mPlaybackfd != -1) {
         ALOGD("Writing to mPlaybackfd %d",mPlaybackfd);
@@ -1770,6 +1773,7 @@ void AudioBroadcastStreamALSA::exitFromPlaybackThread()
         sys_broadcast::lib_write(mPlaybackfd, &writeValue, sizeof(uint64_t));
     }
     mPlaybackCv.signal();
+    mPlaybackMutex.unlock();
     pthread_join(mPlaybackThread,NULL);
     ALOGD("Playback thread killed");
 

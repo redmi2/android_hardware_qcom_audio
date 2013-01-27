@@ -258,11 +258,13 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     if (mUseTunnelDecoder) {
         ALOGV("Tunnel decoder case use mSecDevices=%d, mUseDualTunnel=%d \
         mSecCompreRxHandle=%u", mSecDevices, mUseDualTunnel, mSecCompreRxHandle);
-        createThreadsForTunnelDecode();
         if (format != AUDIO_FORMAT_WMA && format != AUDIO_FORMAT_WMA_PRO)
             *status = openTunnelDevice(mDevices);
         else
             *status = NO_ERROR;
+        if(*status != NO_ERROR)
+            return;
+        createThreadsForTunnelDecode();
     } else if ((mSpdifFormat == COMPRESSED_FORMAT) ||
                (mHdmiFormat == COMPRESSED_FORMAT)) {
         devices = 0;
@@ -981,6 +983,7 @@ void AudioSessionOutALSA::requestAndWaitForEventThreadExit() {
 
     if (!mEventThreadAlive)
         return;
+    mEventMutex.lock();
     mKillEventThread = true;
     if(mEfd != -1) {
         ALOGE("Writing to mEfd %d",mEfd);
@@ -988,6 +991,7 @@ void AudioSessionOutALSA::requestAndWaitForEventThreadExit() {
         sys_write::lib_write(mEfd, &writeValue, sizeof(uint64_t));
     }
     mEventCv.signal();
+    mEventMutex.unlock();
     pthread_join(mEventThread,NULL);
     ALOGD("event thread killed");
 }
@@ -1006,7 +1010,6 @@ void  AudioSessionOutALSA::eventThreadEntry() {
     struct pollfd pfd[NUM_AUDIOSESSION_FDS];
     struct pcm * local_handle = NULL;
     struct pcm * local_handle2 = NULL;
-    mEventMutex.lock();
     int timeout = -1;
     bool freeBuffer = false;
     bool mCompreCBk = false;
@@ -1016,10 +1019,12 @@ void  AudioSessionOutALSA::eventThreadEntry() {
     pid_t tid  = gettid();
     androidSetThreadPriority(tid, ANDROID_PRIORITY_AUDIO);
     prctl(PR_SET_NAME, (unsigned long)"HAL Audio EventThread", 0, 0, 0);
-
-    ALOGV("eventThreadEntry wait for signal \n");
-    mEventCv.wait(mEventMutex);
-    ALOGV("eventThreadEntry ready to work \n");
+    mEventMutex.lock();
+    if(!mKillEventThread){
+       ALOGV("eventThreadEntry wait for signal \n");
+       mEventCv.wait(mEventMutex);
+       ALOGV("eventThreadEntry ready to work \n");
+    }
     mEventMutex.unlock();
 
     ALOGV("Allocating poll fd");
@@ -1186,13 +1191,14 @@ void  AudioSessionOutALSA::eventThreadEntry() {
 
 void AudioSessionOutALSA::createThreadsForTunnelDecode() {
     mKillEventThread = false;
-    mEventThreadAlive = true;
     ALOGD("Creating Event Thread");
     pthread_attr_t attr;
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-    pthread_create(&mEventThread, &attr, eventThreadWrapper, this);
-    ALOGD("Event Thread created");
+    if(!(pthread_create(&mEventThread, &attr, eventThreadWrapper, this))){
+       ALOGD("Event Thread created");
+       mEventThreadAlive=true;
+    }
 }
 
 status_t AudioSessionOutALSA::start()
