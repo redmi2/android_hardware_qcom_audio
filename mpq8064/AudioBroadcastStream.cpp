@@ -1684,7 +1684,8 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
             ALOGV("After an event occurs");
             {
                 Mutex::Autolock autoLock(mSyncLock);
-                mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN | SNDRV_PCM_SYNC_PTR_HWSYNC);
+                mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN |
+                                                            SNDRV_PCM_SYNC_PTR_HWSYNC | SNDRV_PCM_SYNC_PTR_APPL);
                 sync_ptr(mCompreRxHandle->handle);
             }
             while(hw_ptr < mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr) {
@@ -1719,7 +1720,8 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
                 hw_ptr += mCompreRxHandle->bufferSize/(2*mCompreRxHandle->channels);
                 {
                     Mutex::Autolock autoLock(mSyncLock);
-                    mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN | SNDRV_PCM_SYNC_PTR_HWSYNC);
+                    mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN |
+                                                                SNDRV_PCM_SYNC_PTR_HWSYNC | SNDRV_PCM_SYNC_PTR_APPL);
                     sync_ptr(mCompreRxHandle->handle);
                 }
                 ALOGD("hw_ptr = %lld status.hw_ptr = %ld appl_ptr = %ld", hw_ptr, mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,

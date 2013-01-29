@@ -1082,7 +1082,8 @@ void  AudioSessionOutALSA::eventThreadEntry() {
             if (mCompreCBk) {
                 {
                     Mutex::Autolock autoLock(mSyncLock);
-                    mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN | SNDRV_PCM_SYNC_PTR_HWSYNC);
+                    mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN |
+                                                                SNDRV_PCM_SYNC_PTR_HWSYNC | SNDRV_PCM_SYNC_PTR_APPL);
                     sync_ptr(mCompreRxHandle->handle);
                 }
                 while(hw_ptr[0] < mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr) {
@@ -1103,7 +1104,8 @@ void  AudioSessionOutALSA::eventThreadEntry() {
 
                     {
                         Mutex::Autolock autoLock(mSyncLock);
-                        mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN | SNDRV_PCM_SYNC_PTR_HWSYNC);
+                        mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN |
+                                                                    SNDRV_PCM_SYNC_PTR_HWSYNC | SNDRV_PCM_SYNC_PTR_APPL);
                         sync_ptr(mCompreRxHandle->handle);
                     }
                     ALOGE("hw_ptr1 = %lld status.hw_ptr1 = %ld appl_ptr = %ld", hw_ptr[0], mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,
@@ -1114,7 +1116,8 @@ void  AudioSessionOutALSA::eventThreadEntry() {
             if (mSecCompreCBk) {
                 {
                     Mutex::Autolock autoLock(mSyncLock);
-                    mSecCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN | SNDRV_PCM_SYNC_PTR_HWSYNC);
+                    mSecCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN |
+                                                                   SNDRV_PCM_SYNC_PTR_HWSYNC | SNDRV_PCM_SYNC_PTR_APPL);
                     sync_ptr(mSecCompreRxHandle->handle);
                 }
                 while (hw_ptr[1] < mSecCompreRxHandle->handle->sync_ptr->s.status.hw_ptr) {
@@ -1134,7 +1137,8 @@ void  AudioSessionOutALSA::eventThreadEntry() {
                    hw_ptr[1] += mSecCompreRxHandle->bufferSize/(2*mSecCompreRxHandle->channels);
                    {
                         Mutex::Autolock autoLock(mSyncLock);
-                        mSecCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN | SNDRV_PCM_SYNC_PTR_HWSYNC);
+                        mSecCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN |
+                                                                        SNDRV_PCM_SYNC_PTR_HWSYNC | SNDRV_PCM_SYNC_PTR_APPL);
                         sync_ptr(mSecCompreRxHandle->handle);
                    }
                    ALOGE("hw_ptr2 = %lld status.hw_ptr2 = %ld appl_ptr = %ld", hw_ptr[1], mSecCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,
