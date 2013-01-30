@@ -145,6 +145,8 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
         if (ioctl(handle->handle->fd, SNDRV_COMPRESS_GET_CAPS, &compr_cap)) {
             ALOGE("SNDRV_COMPRESS_GET_CAPS, failed Error no %d \n", errno);
             err = -errno;
+            if (params)
+                free(params);
             return err;
         }
 
@@ -165,6 +167,8 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
             }
             if (mWMA_params == NULL) {
                 ALOGV("WMA param config missing.");
+                if (params)
+                    free(params);
                 return BAD_VALUE;
             }
             compr_params.codec.bit_rate = mWMA_params[0];
@@ -227,6 +231,8 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
              compr_params.codec.id = compr_cap.codecs[12];
         }else {
              ALOGE("format not supported to open tunnel device");
+             if (params)
+                 free(params);
              return BAD_VALUE;
         }
         if (dtsTranscode) {
@@ -245,6 +251,8 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
         if (ioctl(handle->handle->fd, SNDRV_COMPRESS_SET_PARAMS, &compr_params)) {
             ALOGE("SNDRV_COMPRESS_SET_PARAMS,failed Error no %d \n", errno);
             err = -errno;
+            if (params)
+                free(params);
             return err;
         }
         handle->handle->flags &= ~(PCM_STEREO | PCM_MONO | PCM_QUAD | PCM_5POINT1);
@@ -261,6 +269,8 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
         err = setHDMIChannelCount(hdmiChannels);
         if(err != OK) {
             ALOGE("setHDMIChannelCount err = %d", err);
+            if (params)
+                free(params);
             return err;
         }
     }
@@ -287,6 +297,8 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
 
     if (param_set_hw_params(handle->handle, params)) {
         ALOGE("cannot set hw params");
+        if (params)
+            free(params);
         return NO_INIT;
     }
     param_dump(params);
@@ -367,6 +379,8 @@ status_t ALSADevice::setSoftwareParams(alsa_handle_t *handle)
 
     if (param_set_sw_params(handle->handle, params)) {
         ALOGE("cannot set sw params");
+        if (params)
+            free(params);
         return NO_INIT;
     }
     return NO_ERROR;
@@ -1767,7 +1781,7 @@ int ALSADevice::getDevices(uint32_t devices, uint32_t mode, char **rxDevice, cha
             devices = devices | (AudioSystem::DEVICE_OUT_PROXY |
                       AudioSystem::DEVICE_IN_PROXY);
         } else if (devices & AudioSystem::DEVICE_OUT_ALL_A2DP) {
-            devices = devices | (AudioSystem::DEVICE_IN_PROXY);
+            ALOGE("getDevices:: Invalid A2DP Combination for mode %d", mode);
         }
     }
 
@@ -2084,6 +2098,7 @@ status_t ALSADevice::openProxyDevice()
     mProxyParams.mProxyPcmHandle->rate     = AFE_PROXY_SAMPLE_RATE;
     mProxyParams.mProxyPcmHandle->flags    = flags;
     mProxyParams.mProxyPcmHandle->period_size = AFE_PROXY_PERIOD_SIZE;
+    mProxyParams.mBufferTime = (AFE_PROXY_PERIOD_SIZE*1000)/(AFE_PROXY_CHANNEL_COUNT*AFE_PROXY_SAMPLE_RATE*2);
 
     params = (struct snd_pcm_hw_params*) calloc(1,sizeof(struct snd_pcm_hw_params));
     if (!params) {

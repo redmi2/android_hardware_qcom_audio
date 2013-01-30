@@ -370,6 +370,7 @@ private:
         unsigned mAvail;
         struct pollfd mPfdProxy[NUM_FDS];
         long mFrames;
+        long mBufferTime;
     };
     struct proxy_params mProxyParams;
 };
@@ -1129,20 +1130,23 @@ protected:
     audio_stream_out   *mA2dpStream;
     audio_hw_device_t  *mA2dpDevice;
 
-    bool                mKillA2DPThread;
-    bool                mA2dpThreadAlive;
+    volatile bool       mKillA2DPThread;
+    volatile bool       mA2dpThreadAlive;
     pthread_t           mA2dpThread;
     Mutex               mA2dpMutex;
     Condition           mA2dpCv;
     volatile bool       mIsA2DPEnabled;
+    volatile bool       mIsA2DPSuspended;
 
     enum {
       USECASE_NONE = 0x00,
       USECASE_HIFI = 0x01,
       USECASE_HIFI2 = 0x0100,
       USECASE_HIFI3 = 0x0200,
+      USECASE_HIFI4 = 0x0400,
       USECASE_HIFI_TUNNEL = 0x010000,
       USECASE_HIFI_TUNNEL2 = 0x020000,
+      USECASE_HIFI_TUNNEL3 = 0x040000,
       USECASE_FM = 0x01000000,
       USECASE_HWOUTPUT = 0x11,
     };

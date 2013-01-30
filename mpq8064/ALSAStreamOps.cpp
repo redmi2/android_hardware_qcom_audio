@@ -197,6 +197,8 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
             }
         }
         param.remove(key);
+    } else {
+        mParent->setParameters(keyValuePairs);
     }
     return err;
 }
