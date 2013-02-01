@@ -4677,7 +4677,7 @@ SectionDevice
 	EndSequence
 
 	ACDBID	0:1
-	EffectsMixerCTL "SRS SS3D"
+	EffectsMixerCTL "SRS SS3D Proxy"
 
 EndSection
 
