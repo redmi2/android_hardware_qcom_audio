@@ -157,7 +157,6 @@ AudioBroadcastStreamALSA::AudioBroadcastStreamALSA(AudioHardwareALSA *parent,
 AudioBroadcastStreamALSA::~AudioBroadcastStreamALSA()
 {
     ALOGD("Destructor ++");
-    Mutex::Autolock autoLock(mLock);
 
     mSkipWrite = true;
     mWriteCv.signal();
@@ -2488,6 +2487,7 @@ uint32_t AudioBroadcastStreamALSA::render(bool continueDecode)
     int      period_size;
     uint32_t requiredSize;
 
+    Mutex::Autolock autoLock(mLock);
     if(mPcmRxHandle && mRoutePcmAudio && mRoutePCMStereoToDSP) {
         period_size = mPcmRxHandle->periodSize;
         requiredSize = period_size - mOutputMetadataLength;
