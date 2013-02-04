@@ -117,9 +117,9 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
         return;
     }
 
-    if(mParent->isExtOutDevice(devices)) {
+    if(devices & AudioSystem::DEVICE_OUT_ALL_A2DP) {
         ALOGE("Set Capture from proxy true");
-        mParent->mRouteAudioToExtOut = true;
+        mParent->mRouteAudioToA2dp = true;
     }
 
     //open device based on the type (LPA or Tunnel) and devices
@@ -130,10 +130,10 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     createEventThread();
 
     mUseCase = mParent->useCaseStringToEnum(mAlsaHandle->useCase);
-    ALOGV("mParent->mRouteAudioToExtOut = %d", mParent->mRouteAudioToExtOut);
-    if (mParent->mRouteAudioToExtOut) {
+    ALOGV("mParent->mRouteAudioToA2dp = %d", mParent->mRouteAudioToA2dp);
+    if (mParent->mRouteAudioToA2dp) {
         status_t err = NO_ERROR;
-        err = mParent->startPlaybackOnExtOut_l(mUseCase);
+        err = mParent->startA2dpPlayback_l(mUseCase);
         *status = err;
     }
 
@@ -148,10 +148,10 @@ AudioSessionOutALSA::~AudioSessionOutALSA()
     mWriteCv.signal();
     //TODO: This might need to be Locked using Parent lock
     reset();
-    if (mParent->mRouteAudioToExtOut) {
-         status_t err = mParent->stopPlaybackOnExtOut_l(mUseCase);
+    if (mParent->mRouteAudioToA2dp) {
+         status_t err = mParent->stopA2dpPlayback(mUseCase);
          if(err){
-             ALOGE("stopPlaybackOnExtOut_l return err  %d", err);
+             ALOGE("stopA2dpPlayback return err  %d", err);
          }
     }
 }
@@ -641,10 +641,10 @@ status_t AudioSessionOutALSA::stop()
     mSkipWrite = true;
     mWriteCv.signal();
 
-    if (mParent->mRouteAudioToExtOut) {
-        status_t err = mParent->suspendPlaybackOnExtOut(mUseCase);
+    if (mParent->mRouteAudioToA2dp) {
+        status_t err = mParent->suspendA2dpPlayback(mUseCase);
         if(err) {
-            ALOGE("stop-suspendPlaybackOnExtOut- return err = %d", err);
+            ALOGE("stop-suspendA2dpPlayback- return err = %d", err);
             return err;
         }
     }
@@ -659,11 +659,11 @@ status_t AudioSessionOutALSA::standby()
     Mutex::Autolock autoLock(mParent->mLock);
     status_t err = NO_ERROR;
     mAlsaHandle->module->standby(mAlsaHandle);
-    if (mParent->mRouteAudioToExtOut) {
-         ALOGD("Standby - stopPlaybackOnExtOut_l - mUseCase = %d",mUseCase);
-         err = mParent->stopPlaybackOnExtOut_l(mUseCase);
+    if (mParent->mRouteAudioToA2dp) {
+         ALOGD("Standby - stopA2dpPlayback_l - mUseCase = %d",mUseCase);
+         err = mParent->stopA2dpPlayback_l(mUseCase);
          if(err){
-             ALOGE("stopPlaybackOnExtOut_l return err  %d", err);
+             ALOGE("stopA2dpPlayback return err  %d", err);
          }
     }
     mPaused = false;
@@ -819,9 +819,9 @@ status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
         // Ignore routing if device is 0.
         if(device) {
             ALOGV("setParameters(): keyRouting with device %#x", device);
-            if (mParent->isExtOutDevice(device)) {
-                mParent->mRouteAudioToExtOut = true;
-                ALOGD("setParameters(): device %#x", device);
+            if(device & AudioSystem::DEVICE_OUT_ALL_A2DP) {
+                mParent->mRouteAudioToA2dp = true;
+                ALOGD("setParameters(): A2DP device %#x", device);
             }
             mParent->doRouting(device);
         }

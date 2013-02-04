@@ -415,10 +415,8 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
             devices = devices | (AudioSystem::DEVICE_OUT_PROXY |
                       AudioSystem::DEVICE_IN_PROXY);
 #endif
-        } else if (devices & AudioSystem::DEVICE_OUT_ALL_USB) {
-            devices = devices | AudioSystem::DEVICE_IN_BUILTIN_MIC;
         } else if (devices & AudioSystem::DEVICE_OUT_ALL_A2DP) {
-            ALOGE("SwitchDevice:: Invalid A2DP Combination for mode %d", mode);
+            devices = devices | (AudioSystem::DEVICE_IN_PROXY);
         }
     }
 #ifdef QCOM_SSR_ENABLED
@@ -1347,11 +1345,6 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
             return strdup(SND_USE_CASE_DEV_PROXY_RX_SPEAKER);
         } else if (devices & AudioSystem::DEVICE_OUT_ALL_A2DP) {
             return strdup(SND_USE_CASE_DEV_PROXY_RX);
-        } else if (devices & AudioSystem::DEVICE_OUT_ALL_USB &&
-                   devices & AudioSystem::DEVICE_OUT_SPEAKER) {
-            return strdup(SND_USE_CASE_DEV_PROXY_RX_SPEAKER);
-        } else if (devices & AudioSystem::DEVICE_OUT_ALL_USB) {
-            return strdup(SND_USE_CASE_DEV_PROXY_RX);
         } else if ((devices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET ||
                     devices & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET) &&
                     devices & AudioSystem::DEVICE_OUT_SPEAKER) {
@@ -2112,7 +2105,6 @@ status_t ALSADevice::openProxyDevice()
     mProxyParams.mProxyPcmHandle->rate     = AFE_PROXY_SAMPLE_RATE;
     mProxyParams.mProxyPcmHandle->flags    = flags;
     mProxyParams.mProxyPcmHandle->period_size = AFE_PROXY_PERIOD_SIZE;
-    mProxyParams.mBufferTime = (AFE_PROXY_PERIOD_SIZE*1000)/(AFE_PROXY_CHANNEL_COUNT*AFE_PROXY_SAMPLE_RATE*2);
 
     params = (struct snd_pcm_hw_params*) calloc(1,sizeof(struct snd_pcm_hw_params));
     if (!params) {
