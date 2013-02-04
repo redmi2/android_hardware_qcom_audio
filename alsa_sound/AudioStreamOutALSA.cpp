@@ -60,10 +60,10 @@ AudioStreamOutALSA::AudioStreamOutALSA(AudioHardwareALSA *parent, alsa_handle_t 
 
 AudioStreamOutALSA::~AudioStreamOutALSA()
 {
-    if (mParent->mRouteAudioToExtOut) {
-         status_t err = mParent->stopPlaybackOnExtOut_l(mUseCase);
+    if (mParent->mRouteAudioToA2dp) {
+         status_t err = mParent->stopA2dpPlayback(mUseCase);
          if (err) {
-             ALOGE("stopPlaybackOnExtOut_l return err  %d", err);
+             ALOGE("stopA2dpPlayback return err  %d", err);
          }
     }
     close();
@@ -120,9 +120,9 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
          * the buffers, recheck and break if PCM handle is valid */
         if (mHandle->handle == NULL && mHandle->rxHandle == NULL) {
             ALOGV("mDevices =0x%x", mDevices);
-            if(mParent->isExtOutDevice(mDevices)) {
-                ALOGV("StreamOut write - mRouteAudioToExtOut = %d ", mParent->mRouteAudioToExtOut);
-                mParent->mRouteAudioToExtOut = true;
+            if(mDevices &  AudioSystem::DEVICE_OUT_ALL_A2DP) {
+                ALOGV("StreamOut write - mRouteAudioToA2dp = %d ", mParent->mRouteAudioToA2dp);
+                mParent->mRouteAudioToA2dp = true;
             }
             snd_use_case_get(mHandle->ucMgr, "_verb", (const char **)&use_case);
             if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
@@ -196,14 +196,14 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
             }
 #endif
         }
-        if (mParent->mRouteAudioToExtOut) {
+        if (mParent->mRouteAudioToA2dp) {
             mUseCase = mParent->useCaseStringToEnum(mHandle->useCase);
-            if (! (mParent->getExtOutActiveUseCases_l() & mUseCase )){
-                ALOGD("startPlaybackOnExtOut_l from write :: useCase = %s", mHandle->useCase);
+            if (! (mParent->getA2DPActiveUseCases_l() & mUseCase )){
+                ALOGD("startA2dpPlayback_l from write :: useCase = %s", mHandle->useCase);
                 status_t err = NO_ERROR;
-                err = mParent->startPlaybackOnExtOut_l(mUseCase);
+                err = mParent->startA2dpPlayback_l(mUseCase);
                 if(err) {
-                    ALOGE("startPlaybackOnExtOut_l from write return err = %d", err);
+                    ALOGE("startA2dpPlayback_l from write return err = %d", err);
                     mParent->mLock.unlock();
                     return err;
                 }
@@ -309,7 +309,7 @@ status_t AudioStreamOutALSA::close()
                  mParent->closeUsbPlaybackIfNothingActive();
                  mParent->closeUsbRecordingIfNothingActive();
 
-                 if (mParent->mRouteAudioToExtOut) {
+                 if (mParent->mRouteAudioToA2dp) {
                      //TODO: HANDLE VOIP A2DP
                  }
              }
@@ -333,11 +333,11 @@ status_t AudioStreamOutALSA::close()
     mParent->closeUsbPlaybackIfNothingActive();
 #endif
 
-    if (mParent->mRouteAudioToExtOut) {
-         ALOGD("close-suspendPlaybackOnExtOut_l::mUseCase = %d",mUseCase);
-         status_t err = mParent->suspendPlaybackOnExtOut_l(mUseCase);
+    if (mParent->mRouteAudioToA2dp) {
+         ALOGD("close-suspendA2dpPlayback_l::mUseCase = %d",mUseCase);
+         status_t err = mParent->suspendA2dpPlayback_l(mUseCase);
          if(err) {
-             ALOGE("suspendExtOutPlayback from hardware output close return err = %d", err);
+             ALOGE("suspendA2dpPlayback from hardware output close return err = %d", err);
              return err;
          }
     }
@@ -373,12 +373,13 @@ status_t AudioStreamOutALSA::standby()
 #endif
 
     mHandle->module->standby(mHandle);
-    if (mParent->mRouteAudioToExtOut) {
-        status_t err = mParent->stopPlaybackOnExtOut_l(mUseCase);
+    if (mParent->mRouteAudioToA2dp) {
+        status_t err = mParent->stopA2dpPlayback_l(mUseCase);
         if(err) {
-            ALOGE("stopPlaybackOnExtOut_l return err  %d", err);
+            ALOGE("stopA2dpPlayback return err  %d", err);
         }
     }
+
 #ifdef QCOM_USBAUDIO_ENABLED
     mParent->closeUsbPlaybackIfNothingActive();
 #endif
