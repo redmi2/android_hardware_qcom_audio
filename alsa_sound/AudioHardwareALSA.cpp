@@ -2188,12 +2188,14 @@ status_t AudioHardwareALSA::stopA2dpThread()
         ALOGD("Return - thread not live");
         return NO_ERROR;
     }
+    mA2dpMutex.lock();
     mKillA2DPThread = true;
     err = mALSADevice->exitReadFromProxy();
     if(err) {
         ALOGE("exitReadFromProxy failed = %d", err);
     }
     mA2dpCv.signal();
+    mA2dpMutex.unlock();
     int ret = pthread_join(mA2dpThread,NULL);
     ALOGD("a2dp thread killed = %d", ret);
     return err;
@@ -2233,6 +2235,9 @@ void AudioHardwareALSA::a2dpThreadFunc() {
 
         {
             Mutex::Autolock autolock1(mA2dpMutex);
+            if (mKillA2DPThread) {
+                break;
+            }
             if (!mA2dpStream || !mIsA2DPEnabled ||
                 !mALSADevice->isProxyDeviceOpened() ||
                 (mALSADevice->isProxyDeviceSuspended()) ||
