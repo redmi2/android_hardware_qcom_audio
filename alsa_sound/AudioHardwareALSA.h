@@ -834,8 +834,8 @@ protected:
     audio_stream_out   *mA2dpStream;
     audio_hw_device_t  *mA2dpDevice;
 
-    bool                mKillA2DPThread;
-    bool                mA2dpThreadAlive;
+    volatile bool       mKillA2DPThread;
+    volatile bool       mA2dpThreadAlive;
     pthread_t           mA2dpThread;
     Mutex               mA2dpMutex;
     Condition           mA2dpCv;
