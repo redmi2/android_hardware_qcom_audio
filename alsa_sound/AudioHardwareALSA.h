@@ -503,6 +503,7 @@ private:
     uint32_t            mStreamVol;
 
     bool                mPaused;
+    bool                mSkipEOS;
     bool                mSeeking;
     bool                mReachedEOS;
     int                 mSkipWrite;
