@@ -755,9 +755,7 @@ status_t AudioHardwareALSA::doRouting(int device)
 #endif
         if ((isExtOutDevice(device)) && mRouteAudioToExtOut == true)  {
             ALOGV(" External Output Enabled - Routing everything to proxy now");
-            if (device != mCurRxDevice) {
-                switchExtOut(device);
-            }
+            switchExtOut(device);
             ALSAHandleList::iterator it = mDeviceList.end();
             it--;
             status_t err = NO_ERROR;
