@@ -2410,7 +2410,7 @@ void AudioHardwareALSA::extOutThreadFunc() {
     prctl(PR_SET_NAME, (unsigned long)"ExtOutThread", 0, 0, 0);
 
     int ionBufCount = 0;
-    uint32_t bytesWritten = 0;
+    int32_t bytesWritten = 0;
     uint32_t numBytesRemaining = 0;
     uint32_t bytesAvailInBuffer = 0;
     uint32_t proxyBufferTime = 0;
@@ -2477,7 +2477,13 @@ void AudioHardwareALSA::extOutThreadFunc() {
                     bytesWritten = numBytesRemaining;
                 }
             }
-            ALOGV("bytesWritten = %d",bytesWritten);
+            //If the write fails make this thread sleep and let other
+            //thread (eg: stopA2DP) to acquire lock to prevent a deadlock.
+            if(bytesWritten == -1) {
+                ALOGV("bytesWritten = %d",bytesWritten);
+                usleep(10000);
+                break;
+            }
             //Need to check warning here - void used in arithmetic
             copyBuffer = (char *)copyBuffer + bytesWritten;
             numBytesRemaining -= bytesWritten;
