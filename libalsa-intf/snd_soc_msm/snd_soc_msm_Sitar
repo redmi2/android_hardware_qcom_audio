@@ -124,6 +124,25 @@ SectionVerb
 EndSection
 
 SectionVerb
+	Name "HiFiPROXY Rx Speaker"
+
+	EnableSequence
+		'SLIMBUS_0_RX Audio Mixer MultiMedia1':1:1
+		'AFE_PCM_RX Audio Mixer MultiMedia1':1:1
+	EndSequence
+
+	DisableSequence
+		'SLIMBUS_0_RX Audio Mixer MultiMedia1':1:0
+		'AFE_PCM_RX Audio Mixer MultiMedia1':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 0
+	PlaybackPCM 0
+
+EndSection
+
+SectionVerb
         Name "HiFiPROXY Tx"
 
         EnableSequence
@@ -2252,6 +2271,34 @@ SectionDevice
 
 	ACDBID	0:1
 	EffectsMixerCTL "SRS TruMedia"
+
+EndSection
+
+SectionDevice
+	Name "PROXY Rx Speaker"
+	Comment "PROXY Rx + Speaker Rx device combo device"
+
+	EnableSequence
+		'DAC3 MUX':0:INV_RX1
+		'DAC2 MUX':0:RX1
+		'LINEOUT1 Volume':1:100
+		'LINEOUT2 Volume':1:100
+		'SLIM_0_RX Channels':0:One
+		'RX1 MIX1 INP1':0:RX1
+		'RX1 Digital Volume':1:70
+		'PMIC SPK Gain':0:POS_10_DB
+	EndSequence
+
+	DisableSequence
+		'RX1 MIX1 INP1':0:ZERO
+		'DAC3 MUX':0:ZERO
+		'DAC2 MUX':0:ZERO
+		'RX1 Digital Volume':1:0
+	EndSequence
+
+	ACDBID	14:1
+	EffectsMixerCTL "SRS TruMedia"
+	EC_REF_RXMixerCTL "SLIM_RX"
 
 EndSection
 
