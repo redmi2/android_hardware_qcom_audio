@@ -134,9 +134,6 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     unsigned int requestedRate = handle->sampleRate;
     int format = handle->format;
 
-    bool dtsTranscode = false;
-    char spdifFormat[20];
-    char hdmiFormat[20];
     char dtsModelId[128];
     int hdmiChannels = 8;
     char dtsPPparam[20];
@@ -158,13 +155,6 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
             setChannelAlloc(info.channelAllocation);
         }
     }
-    property_get("mpq.audio.spdif.format",spdifFormat,"0");
-    property_get("mpq.audio.hdmi.format",hdmiFormat,"0");
-
-    if ((!strncmp(spdifFormat,"dts",sizeof(spdifFormat)) ||
-        !strncmp(hdmiFormat,"dts",sizeof(hdmiFormat))) &&
-        format !=AUDIO_FORMAT_DTS && format !=AUDIO_FORMAT_DTS_LBR)
-        dtsTranscode = true;
 
     params = (snd_pcm_hw_params*) calloc(1, sizeof(struct snd_pcm_hw_params));
     if (!params) {
@@ -173,8 +163,8 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     param_init(params);
 
     reqBuffSize = handle->bufferSize;
-    ALOGD("Handle type %d", (int)handle->type);
-    if (handle->type == COMPRESSED_FORMAT || handle->type == COMPRESSED_PASSTHROUGH_FORMAT) {
+    ALOGD("Handle type %x", (int)handle->type);
+    if (handle->type & COMPRESSED_FORMAT) {
         if (ioctl(handle->handle->fd, SNDRV_COMPRESS_GET_CAPS, &compr_cap)) {
             ALOGE("SNDRV_COMPRESS_GET_CAPS, failed Error no %d \n", errno);
             err = -errno;
@@ -227,7 +217,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
         } else if(format == AUDIO_FORMAT_MP3) {
              ALOGV("MP3 CODEC");
              compr_params.codec.id = compr_cap.codecs[0];
-        } else if(format == AUDIO_FORMAT_DTS && handle->type == COMPRESSED_FORMAT) {
+        } else if(format == AUDIO_FORMAT_DTS && !(handle->type & PASSTHROUGH_FORMAT)) {
              ALOGV("DTS CODEC");
              property_get("ro.build.modelid",dtsModelId,"0");
              ALOGV("from property modelId=%s,length=%d\n",
@@ -259,7 +249,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
              if(!(dtsPPval == 0 || dtsPPval == 1))
                  dtsPPval = -1;
              compr_params.codec.options.dts.parse_rev2aux = dtsPPval;
-        } else if(format == AUDIO_FORMAT_DTS_LBR && handle->type == COMPRESSED_FORMAT) {
+        } else if(format == AUDIO_FORMAT_DTS_LBR && !(handle->type & PASSTHROUGH_FORMAT)) {
              ALOGV("DTS LBR CODEC");
              property_get("ro.build.modelid", dtsModelId, "0");
              ALOGV("from property modelId=%s,length=%d\n",
@@ -287,12 +277,12 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
                  dtsPPval = -1;
              compr_params.codec.options.dts.parse_rev2aux = dtsPPval;
         } else if(format == AUDIO_FORMAT_DTS
-                 && handle->type == COMPRESSED_PASSTHROUGH_FORMAT) {
+                 && (handle->type & PASSTHROUGH_FORMAT)) {
              ALOGV("DTS PASSTHROUGH CODEC");
              compr_params.codec.id = compr_cap.codecs[7];
              hdmiChannels = 2;
         } else if(format == AUDIO_FORMAT_DTS_LBR
-                 && handle->type == COMPRESSED_PASSTHROUGH_FORMAT) {
+                 && (handle->type & PASSTHROUGH_FORMAT)) {
              ALOGV("DTS LBR PASSTHROUGH CODEC");
              compr_params.codec.id = compr_cap.codecs[13];
              hdmiChannels = 2;
@@ -305,7 +295,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
                  free(params);
              return BAD_VALUE;
         }
-        if (dtsTranscode) {
+        if (handle->type & TRANSCODE_FORMAT) {
              property_get("ro.build.modelid",dtsModelId,"0");
              ALOGD("from property modelId=%s,length=%d\n",
                 dtsModelId, strlen(dtsModelId));
@@ -328,10 +318,28 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
         handle->handle->flags &= ~(PCM_STEREO | PCM_MONO | PCM_QUAD | PCM_5POINT1);
         handle->handle->flags |= PCM_7POINT1;
         handle->channels = 8;
+    } else if(handle->type & TRANSCODE_FORMAT) {
+        struct snd_pcm_transcode_param transcode_param;
+        property_get("ro.build.modelid",dtsModelId,"0");
+        ALOGD("from property modelId=%s,length=%d\n",
+            dtsModelId, strlen(dtsModelId));
+        transcode_param.modelIdLength = strlen(dtsModelId);
+        transcode_param.modelId = (__u8 *)dtsModelId;
+        ALOGD("passing to driver modelId=%s,length=%d\n",
+             transcode_param.modelId,
+             transcode_param.modelIdLength);
+        transcode_param.transcode_dts = 1;
+        transcode_param.session_type = INVALID_SESSION;
+        transcode_param.operation = INVALID_STREAM;
+        if (ioctl(handle->handle->fd, SNDRV_PCM_CONFIGURE_TRANSCODE, &transcode_param)) {
+            ALOGE("SNDRV_COMPRESS_SET_PARAMS,failed Error no %d \n", errno);
+            err = -errno;
+            return err;
+        }
     }
     if(handle->sampleRate > 48000) {
         ALOGE("Sample rate >48000, opening the driver with 48000Hz");
-        handle->sampleRate     = 48000;
+        handle->sampleRate = 48000;
     }
     if(handle->channels > 8)
         handle->channels = 8;
@@ -444,8 +452,7 @@ status_t ALSADevice::setSoftwareParams(alsa_handle_t *handle)
              params->start_threshold = params->start_threshold * 2;
          params->stop_threshold = INT_MAX;
      }
-    if (handle->type == COMPRESSED_FORMAT ||
-            handle->type == COMPRESSED_PASSTHROUGH_FORMAT) {
+    if (handle->type & COMPRESSED_FORMAT) {
         params->period_step = 1;
         params->avail_min = handle->channels - 1 ? periodSize/2 : periodSize/4;
         params->start_threshold = handle->channels - 1 ? periodSize : periodSize/2;
@@ -1196,7 +1203,13 @@ int  ALSADevice::getUseCaseType(const char *useCase)
         !strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_TUNNEL2,
            strlen(SND_USE_CASE_MOD_PSEUDO_TUNNEL2)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_TUNNEL3,
-           strlen(SND_USE_CASE_MOD_PSEUDO_TUNNEL3))) {
+           strlen(SND_USE_CASE_MOD_PSEUDO_TUNNEL3)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_MUSIC2,
+           strlen(SND_USE_CASE_MOD_PSEUDO_MUSIC2)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_MUSIC3,
+           strlen(SND_USE_CASE_MOD_PSEUDO_MUSIC3)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_MUSIC4,
+           strlen(SND_USE_CASE_MOD_PSEUDO_MUSIC4))) {
         return USECASE_TYPE_RX;
     } else if (!strncmp(useCase, SND_USE_CASE_VERB_HIFI_REC,
            strlen(SND_USE_CASE_VERB_HIFI_REC)) ||
@@ -1766,19 +1779,19 @@ status_t ALSADevice::setPlaybackVolume(int value, char *useCase)
     return err;
 }
 
-status_t ALSADevice::setPlaybackFormat(const char *value, int device, int dtsTranscode)
+status_t ALSADevice::setPlaybackFormat(const char *value, int device)
 {
     status_t err = NO_ERROR;
     if (device == AudioSystem::DEVICE_OUT_SPDIF) {
         err = setMixerControl("SEC RX Format",value);
-        if (!dtsTranscode && !strncmp(value, "Compr", sizeof(value)))
+        if (!strncmp(value, "Compr", sizeof(value)))
             err = setMixerControl("SEC RX Rate", "Variable");
         else
             err = setMixerControl("SEC RX Rate", "Default");
     }
     else if(device == AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
         err = setMixerControl("HDMI RX Format",value);
-        if (!dtsTranscode && !strncmp(value, "Compr", sizeof(value)))
+        if (!strncmp(value, "Compr", sizeof(value)))
             err = setMixerControl("HDMI RX Rate", "Variable");
         else
             err = setMixerControl("HDMI RX Rate", "Default");
