@@ -382,7 +382,6 @@ ssize_t AudioBroadcastStreamALSA::write(const void *buffer, size_t bytes,
                                         int64_t timestamp, int audiotype)
 {
     ALOGV("write");
-    Mutex::Autolock autoLock(mLock);
     int period_size;
     char *use_case;
 
