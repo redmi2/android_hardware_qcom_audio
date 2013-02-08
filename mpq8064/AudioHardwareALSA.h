@@ -142,6 +142,7 @@ class AudioBitstreamSM;
 #define SIGNAL_PLAYBACK_THREAD 2
 //Values to exit poll via eventfd
 #define KILL_EVENT_THREAD 1
+#define POLL_FD_MODIFIED 3
 #define KILL_PLAYBACK_THREAD 1
 #define KILL_CAPTURE_THREAD 1
 #define NUM_FDS 2
@@ -545,6 +546,7 @@ private:
     Mutex               mLock;
     Mutex               mSyncLock;
     Mutex               mControlLock;
+    Mutex               mRoutingLock;
     uint32_t            mFrameCount;
     uint32_t            mSampleRate;
     uint32_t            mChannels;
@@ -581,6 +583,17 @@ private:
     int32_t             mHdmiFormat;
     uint64_t            hw_ptr[2];
     uint32_t            mA2dpUseCase;
+    struct pollfd       pfd[NUM_AUDIOSESSION_FDS];
+    //Structure to hold mem buffer information
+    class BuffersAllocated {
+    public:
+        BuffersAllocated(void *buf1, int32_t nSize) :
+        memBuf(buf1), memBufsize(nSize), bytesToWrite(0)
+        {}
+        void* memBuf;
+        int32_t memBufsize;
+        uint32_t bytesToWrite;
+    };
 
     AudioHardwareALSA  *mParent;
     alsa_handle_t *     mPcmRxHandle;
@@ -602,19 +615,21 @@ private:
     status_t            closeDevice(alsa_handle_t *pDevice);
     status_t            doRouting(int devices);
     void                createThreadsForTunnelDecode();
-    void                bufferAlloc(alsa_handle_t *handle);
-    void                bufferDeAlloc();
+    void                bufferAlloc(alsa_handle_t *handle, int bufIndex);
+    void                bufferDeAlloc(int bufIndex);
     bool                isReadyToPostEOS(int errPoll, void *fd);
     status_t            resetBufferQueue();
     status_t            drainTunnel();
     status_t            openTunnelDevice(int devices);
+    void                copyBuffers(alsa_handle_t *destHandle, List<BuffersAllocated> filledQueue);
+    void                initFilledQueue(alsa_handle_t *handle, int queueIndex, int consumedIndex);
     // make sure the event thread also exited
     void                requestAndWaitForEventThreadExit();
     int32_t             writeToCompressedDriver(char *buffer, int bytes);
     static void *       eventThreadWrapper(void *me);
     void                eventThreadEntry();
     void                updateOutputFormat();
-    void                updateRoutingFlags();
+    void                updateRoutingFlags(int devices);
     void                setSpdifHdmiRoutingFlags(int devices);
     status_t            setPlaybackFormat();
     void                setChannelMap(alsa_handle_t *handle);
@@ -627,20 +642,11 @@ private:
     bool                mPostedEOS;
     void*               mFirstAACBuffer;
     int32_t             mFirstAACBufferLength;
-    //Structure to hold mem buffer information
-    class BuffersAllocated {
-    public:
-        BuffersAllocated(void *buf1, int32_t nSize) :
-        memBuf(buf1), memBufsize(nSize), bytesToWrite(0)
-        {}
-        void* memBuf;
-        int32_t memBufsize;
-        uint32_t bytesToWrite;
-    };
+    #define DECODEQUEUEINDEX     0
+    #define PASSTHRUQUEUEINDEX   1
     List<BuffersAllocated> mInputMemEmptyQueue[2];
     List<BuffersAllocated> mInputMemFilledQueue[2];
     List<BuffersAllocated> mInputBufPool[2];
-    int mBuffPoolInitDone;
 
     //Declare all the threads
     pthread_t mEventThread;
@@ -725,6 +731,7 @@ public:
 private:
     Mutex               mLock;
     Mutex               mSyncLock;
+    Mutex               mControlLock;
     uint32_t            mFrameCount;
     uint32_t            mSampleRate;
     uint32_t            mChannels;
@@ -826,6 +833,7 @@ private:
     struct              pollfd mPlaybackPfd[NUM_FDS];
     Mutex               mInputMemMutex;
     Mutex               mWriteCvMutex;
+    Mutex               mRoutingLock;
     Condition           mWriteCv;
     int                 mPlaybackfd;
     bool                mKillPlaybackThread;
