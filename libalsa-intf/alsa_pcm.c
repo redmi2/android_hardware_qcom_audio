@@ -1011,8 +1011,10 @@ int pcm_set_channel_map(struct pcm *pcm, struct mixer *mixer,
         return -1;
     }
     strlcpy(control_name, "Playback Channel Map", sizeof(control_name));
-    sprintf(device_num, "%d", pcm->device_no);
-    strcat(control_name, device_num);
+    if(pcm != NULL) {
+        sprintf(device_num, "%d", pcm->device_no);
+        strcat(control_name, device_num);
+    }
     ALOGV("pcm_set_channel_map: control name:%s", control_name);
     ctl = mixer_get_control(mixer, control_name, 0);
     if(ctl == NULL) {
