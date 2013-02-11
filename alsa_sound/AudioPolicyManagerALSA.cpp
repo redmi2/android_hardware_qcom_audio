@@ -1056,7 +1056,7 @@ status_t AudioPolicyManager::checkAndSetVolume(int stream,
             voiceVolume = 1.0;
         }
 
-        if (voiceVolume != mLastVoiceVolume && output == mPrimaryOutput) {
+        if (voiceVolume >= 0 && output == mPrimaryOutput) {
             mpClientInterface->setVoiceVolume(voiceVolume, delayMs);
             mLastVoiceVolume = voiceVolume;
         }
