@@ -138,6 +138,8 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     char hdmiFormat[20];
     char dtsModelId[128];
     int hdmiChannels = 8;
+    char dtsPPparam[20];
+    int dtsPPval = -1;
     EDID_AUDIO_INFO info = { 0 };
 
     if (handle->devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
@@ -235,6 +237,27 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
                 compr_params.codec.dts.modelId,
                 compr_params.codec.dts.modelIdLength);
              compr_params.codec.id = compr_cap.codecs[5];
+
+             property_get("dts.pp.mix_lfe_to_front", dtsPPparam, "-1");
+             dtsPPval = atoi(dtsPPparam);
+             if(!(dtsPPval == 0 || dtsPPval == 1))
+                 dtsPPval = -1;
+             compr_params.codec.options.dts.mix_lfe_to_front = dtsPPval;
+             property_get("dts.pp.drc_ratio",dtsPPparam,"-1");
+             dtsPPval = atoi(dtsPPparam);
+             if(!(dtsPPval >= 0 && dtsPPval <= 100))
+                 dtsPPval = -1;
+             compr_params.codec.options.dts.drc_ratio = dtsPPval;
+             property_get("dts.pp.enable_dialnorm",dtsPPparam,"-1");
+             dtsPPval = atoi(dtsPPparam);
+             if(!(dtsPPval == 0 || dtsPPval == 1))
+                 dtsPPval = -1;
+             compr_params.codec.options.dts.enable_dialnorm = dtsPPval;
+             property_get("dts.pp.parse_rev2aux",dtsPPparam,"-1");
+             dtsPPval = atoi(dtsPPparam);
+             if(!(dtsPPval == 0 || dtsPPval == 1))
+                 dtsPPval = -1;
+             compr_params.codec.options.dts.parse_rev2aux = dtsPPval;
         } else if(format == AUDIO_FORMAT_DTS_LBR && handle->type == COMPRESSED_FORMAT) {
              ALOGV("DTS LBR CODEC");
              property_get("ro.build.modelid", dtsModelId, "0");
@@ -246,6 +269,22 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
                 compr_params.codec.dts.modelId,
                 compr_params.codec.dts.modelIdLength);
              compr_params.codec.id = compr_cap.codecs[6];
+             property_get("dts.pp.mix_lfe_to_front",dtsPPparam,"-1");
+             dtsPPval = atoi(dtsPPparam);
+             if(!(dtsPPval == 0 || dtsPPval == 1))
+                 dtsPPval = -1;
+             compr_params.codec.options.dts.mix_lfe_to_front = dtsPPval;
+             compr_params.codec.options.dts.drc_ratio = -1;
+             property_get("dts.pp.enable_dialnorm",dtsPPparam,"-1");
+             dtsPPval = atoi(dtsPPparam);
+             if(!(dtsPPval == 0 || dtsPPval == 1))
+                 dtsPPval = -1;
+             compr_params.codec.options.dts.enable_dialnorm = dtsPPval;
+             property_get("dts.pp.parse_rev2aux",dtsPPparam,"-1");
+             dtsPPval = atoi(dtsPPparam);
+             if(!(dtsPPval == 0 || dtsPPval == 1))
+                 dtsPPval = -1;
+             compr_params.codec.options.dts.parse_rev2aux = dtsPPval;
         } else if(format == AUDIO_FORMAT_DTS
                  && handle->type == COMPRESSED_PASSTHROUGH_FORMAT) {
              ALOGV("DTS PASSTHROUGH CODEC");
