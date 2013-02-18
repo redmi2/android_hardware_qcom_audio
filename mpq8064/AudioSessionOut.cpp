@@ -2340,8 +2340,8 @@ void AudioSessionOutALSA::setPCMChannelMap(alsa_handle_t *handle)
         channelMap[3] = PCM_CHANNEL_LFE;
         channelMap[4] = PCM_CHANNEL_LB;
         channelMap[5] = PCM_CHANNEL_RB;
-        channelMap[6] = PCM_CHANNEL_RLC;
-        channelMap[7] = PCM_CHANNEL_RRC;
+        channelMap[6] = PCM_CHANNEL_FLC;
+        channelMap[7] = PCM_CHANNEL_FRC;
         break;
     default:
         ALOGE("un supported channels for setting channel map");
