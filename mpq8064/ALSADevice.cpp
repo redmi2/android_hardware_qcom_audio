@@ -132,8 +132,9 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
         if (AudioUtil::getHDMIAudioSinkCaps(&info)) {
             int channel_count = 0;
             for (int i = 0; i < info.nAudioBlocks && i < MAX_EDID_BLOCKS; i++) {
-                if (info.AudioBlocksArray[i].nChannels > channel_count &&
-                          info.AudioBlocksArray[i].nChannels <= MAX_HDMI_CHANNEL_CNT) {
+                if (info.AudioBlocksArray[i].nFormatId == LPCM &&
+                    info.AudioBlocksArray[i].nChannels > channel_count &&
+                    info.AudioBlocksArray[i].nChannels <= MAX_HDMI_CHANNEL_CNT) {
                     channel_count = info.AudioBlocksArray[i].nChannels;
                 }
             }
