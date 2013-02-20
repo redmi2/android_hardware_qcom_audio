@@ -1035,10 +1035,12 @@ uint32_t AudioPolicyManager::setOutputDevice(audio_io_handle_t output, audio_dev
 
     // Do not change the routing if:
     //  - the requested device is 0
-    //  - the requested device is the same as current device and force is not specified.
+    // if the requested device is the same as current device, allow routing as current outputDesc
+    // might not be updated with current active device always. In such cases if device stored in
+    // outputDesc is same as newDevice it will still not allow routing from current device.
     // Doing this check here allows the caller to call setOutputDevice() without conditions
-    if ((device == 0 || device == prevDevice) && !force) {
-        ALOGV("setOutputDevice() setting same device %04x or null device for output %d", device, output);
+    if (device == 0) {
+        ALOGV("setOutputDevice() setting null device for output %d", output);
         return muteWaitMs;
     }
 
