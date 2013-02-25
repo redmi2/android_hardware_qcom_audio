@@ -625,7 +625,8 @@ static int snd_use_case_apply_voice_acdb(snd_use_case_mgr_t *uc_mgr,
 int use_case_index)
 {
     card_mctrl_t *ctrl_list;
-    int list_size, index, verb_index, ret = 0, voice_acdb = 0, rx_id, tx_id;
+    struct snd_ucm_ident_node *dev_node = NULL;
+    int list_size, index,index_list, verb_index, ret = 0, voice_acdb = 0, rx_id, tx_id;
     char *ident_value = NULL;
 
     /* Check if voice call use case/modifier exists */
@@ -679,64 +680,72 @@ int use_case_index)
         uc_mgr->card_ctxt_ptr->use_case_verb_list[verb_index].device_ctrls;
         list_size =
         snd_ucm_get_size_of_list(uc_mgr->card_ctxt_ptr->dev_list_head);
-        for (index = 0; index < list_size; index++) {
-            if ((ident_value =
-                snd_ucm_get_value_at_index(uc_mgr->card_ctxt_ptr->dev_list_head,
-                index))) {
-                if (strncmp(ident_value, ctrl_list[use_case_index].case_name,
-                    (strlen(ctrl_list[use_case_index].case_name)+1))) {
-                    break;
+        for (index_list = 0; index_list < list_size; index_list++) {
+            if ((dev_node =
+                snd_ucm_get_device_node(uc_mgr->card_ctxt_ptr->dev_list_head,
+                index_list))) {
+                if (dev_node->capability == CAP_TX && dev_node->active == 1 && ctrl_list[use_case_index].capability == CAP_RX) {
+                    ident_value = snd_ucm_get_value_at_index(uc_mgr->card_ctxt_ptr->dev_list_head,
+                    index_list);
+                } else if (dev_node->capability == CAP_RX && dev_node->active == 1 && ctrl_list[use_case_index].capability == CAP_TX) {
+                      ident_value = snd_ucm_get_value_at_index(uc_mgr->card_ctxt_ptr->dev_list_head,
+                    index_list);
                 }
-                free(ident_value);
-                ident_value = NULL;
+            }
+            ALOGV("index_list %d ident_value %s",index_list,ident_value);
+            index=0;
+            if (ident_value != NULL) {
+                while(strncmp(ctrl_list[index].case_name, ident_value,
+                   (strlen(ident_value)+1))) {
+                    if (!strncmp(ctrl_list[index].case_name, SND_UCM_END_OF_LIST,
+                        strlen(SND_UCM_END_OF_LIST))) {
+                        ret = -EINVAL;
+                        break;
+                    }
+                  index++;
+                }
+                ALOGV("index %d ctrl_list[index].case_name %s",index,ctrl_list[index].case_name);
+
+                if (ret < 0) {
+                    ALOGE("No valid device found: %s",ident_value);
+                } else {
+                    if (ctrl_list[use_case_index].capability == CAP_RX) {
+                        rx_id = ctrl_list[use_case_index].acdb_id;
+                        tx_id = ctrl_list[index].acdb_id;
+                    } else {
+                        rx_id = ctrl_list[index].acdb_id;
+                        tx_id = ctrl_list[use_case_index].acdb_id;
+                    }
+                    if(rx_id == DEVICE_SPEAKER_RX_ACDB_ID &&
+                       tx_id == DEVICE_HANDSET_TX_ACDB_ID) {
+                       tx_id = DEVICE_SPEAKER_TX_ACDB_ID;
+                    } else if (rx_id == DEVICE_SPEAKER_RX_ACDB_ID &&
+                         tx_id == DEVICE_HANDSET_TX_FV5_ACDB_ID) {
+                       tx_id = DEVICE_SPEAKER_TX_FV5_ACDB_ID;
+                    }
+
+
+                    if(acdb_validate_voc_cal_dev_pair(rx_id,tx_id)!=1){
+                          ALOGE("Invalid Pair rx id %d tx id %d",uc_mgr->current_rx_device,uc_mgr->current_tx_device);
+                          free(ident_value);
+                          ident_value = NULL;
+                          continue;
+                    }else{
+                          uc_mgr->current_rx_device = rx_id;
+                          uc_mgr->current_tx_device = tx_id;
+                          ALOGD("Voice acdb: rx_id %d tx_id %d",rx_id,tx_id);
+                          acdb_loader_send_voice_cal(uc_mgr->current_rx_device,
+                             uc_mgr->current_tx_device);
+                          break;
+                    }
+                 }
+                 free(ident_value);
+                 ident_value = NULL;
             }
         }
-        index = 0;
-        if (ident_value != NULL) {
-            while(strncmp(ctrl_list[index].case_name, ident_value,
-                  (strlen(ident_value)+1))) {
-                if (!strncmp(ctrl_list[index].case_name, SND_UCM_END_OF_LIST,
-                    strlen(SND_UCM_END_OF_LIST))) {
-                    ret = -EINVAL;
-                    break;
-                }
-                index++;
-            }
-            if (ret < 0) {
-                ALOGE("No valid device found: %s",ident_value);
-            } else {
-                if (ctrl_list[use_case_index].capability == CAP_RX) {
-                    rx_id = ctrl_list[use_case_index].acdb_id;
-                    tx_id = ctrl_list[index].acdb_id;
-                } else {
-                    rx_id = ctrl_list[index].acdb_id;
-                    tx_id = ctrl_list[use_case_index].acdb_id;
-                }
-                if(rx_id == DEVICE_SPEAKER_RX_ACDB_ID &&
-                   tx_id == DEVICE_HANDSET_TX_ACDB_ID) {
-                    tx_id = DEVICE_SPEAKER_TX_ACDB_ID;
-                } else if (rx_id == DEVICE_SPEAKER_RX_ACDB_ID &&
-                           tx_id == DEVICE_HANDSET_TX_FV5_ACDB_ID) {
-                    tx_id = DEVICE_SPEAKER_TX_FV5_ACDB_ID;
-                }
-
-                if ((rx_id != uc_mgr->current_rx_device) ||
-                    (tx_id != uc_mgr->current_tx_device)) {
-                    uc_mgr->current_rx_device = rx_id;
-                    uc_mgr->current_tx_device = tx_id;
-                    ALOGD("Voice acdb: rx id %d tx id %d",
-                          uc_mgr->current_rx_device,
-                          uc_mgr->current_tx_device);
-                    acdb_loader_send_voice_cal(uc_mgr->current_rx_device,
-                        uc_mgr->current_tx_device);
-                } else {
-                    ALOGV("Voice acdb: Required acdb already pushed \
-                         rx id %d tx id %d", uc_mgr->current_rx_device,
-                         uc_mgr->current_tx_device);
-                }
-            }
-            free(ident_value);
-            ident_value = NULL;
+        if(ident_value!=NULL){
+           free(ident_value);
+           ident_value = NULL;
         }
     } else {
         ALOGV("No voice use case found");
