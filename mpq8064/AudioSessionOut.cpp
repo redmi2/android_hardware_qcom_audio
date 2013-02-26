@@ -1392,12 +1392,12 @@ status_t AudioSessionOutALSA::flush()
     if (mCompreRxHandle) {
         struct pcm * local_handle = mCompreRxHandle->handle;
         ALOGV("Paused case, %d",mTunnelPaused);
-        if (!mTunnelPaused) {
+        if (!mTunnelPaused && mCompreRxHandle->handle->start == 1) {
             if ((err = ioctl(local_handle->fd, SNDRV_PCM_IOCTL_PAUSE,1)) < 0) {
                 ALOGE("Audio Pause failed");
                 return err;
             }
-            if (mSecCompreRxHandle) {
+            if (mSecCompreRxHandle && (mSecCompreRxHandle->handle->start == 1)) {
                 local_handle = mSecCompreRxHandle->handle;
                 if ((err = ioctl(local_handle->fd, SNDRV_PCM_IOCTL_PAUSE,1)) < 0) {
                         ALOGE("Audio Pause failed");
@@ -1407,7 +1407,26 @@ status_t AudioSessionOutALSA::flush()
             if ((err = drainTunnel()) != OK)
                 return err;
         } else {
-            mTunnelSeeking = true;
+            if (mTunnelPaused)
+                mTunnelSeeking = true;
+            else {
+                 ALOGW("Audio is not started yet, clearing Queue without drain");
+                 mCompreRxHandle->handle->sync_ptr->c.control.appl_ptr = 0;
+                 if (mSecCompreRxHandle)
+                     mSecCompreRxHandle->handle->sync_ptr->c.control.appl_ptr = 0;
+
+                 {
+                     Mutex::Autolock autoLock(mSyncLock);
+
+                     mCompreRxHandle->handle->sync_ptr->flags = 0;
+                     sync_ptr(mCompreRxHandle->handle);
+                     if (mSecCompreRxHandle) {
+                         mSecCompreRxHandle->handle->sync_ptr->flags = 0;
+                         sync_ptr(mSecCompreRxHandle->handle);
+                     }
+                 }
+                 resetBufferQueue();
+            }
         }
         mSkipWrite = true;
         mWriteCv.signal();
