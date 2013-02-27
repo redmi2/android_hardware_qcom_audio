@@ -40,7 +40,6 @@ namespace android_audio_legacy
 {
 
 // ----------------------------------------------------------------------------
-
 ALSAStreamOps::ALSAStreamOps(AudioHardwareALSA *parent, alsa_handle_t *handle) :
     mParent(parent),
     mHandle(handle)
@@ -74,6 +73,8 @@ ALSAStreamOps::~ALSAStreamOps()
                 break;
             }
     }
+	if (!(mHandle->devices & AudioSystem::DEVICE_OUT_ALL))
+	    mParent->mInputStreamInstanceAlive = false;
 }
 
 // use emulated popcount optimization
@@ -114,6 +115,12 @@ status_t ALSAStreamOps::set(int      *format,
                     break;
             }
         } else {
+            if(mParent->mInputStreamInstanceAlive)
+            {
+                ALOGE("More than one instance of recording not supported");
+                return -EBUSY;
+            }
+            mParent->mInputStreamInstanceAlive = true;;
             switch(mHandle->channels) {
 #ifdef QCOM_SSR_ENABLED
                 // For 5.1 recording
