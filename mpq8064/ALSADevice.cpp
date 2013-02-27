@@ -409,7 +409,8 @@ int ALSADevice::getDeviceType(uint32_t devices, uint32_t mode)
 {
      int ret = 0;
 
-     if(devices & AudioSystem::DEVICE_OUT_ALL)
+     if((devices & AudioSystem::DEVICE_OUT_ALL) &&
+         !(devices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET))
        ret = DEVICE_TYPE_RX;
      if(devices & AudioSystem::DEVICE_IN_ALL)
        ret |= DEVICE_TYPE_TX;
@@ -1304,6 +1305,11 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input)
                     return strdup(SND_USE_CASE_DEV_ANC_HEADSET); /* ANC HEADSET RX */
                 else
                     return strdup(SND_USE_CASE_DEV_HEADPHONES); /* HEADSET RX */
+#ifdef QCOM_USBAUDIO_ENABLED
+        } else if ((devices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET) ||
+                  (devices & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)) {
+             return strdup(SND_USE_CASE_DEV_USB_PROXY_RX); /* PROXY RX */
+#endif
         } else if (devices & AudioSystem::DEVICE_OUT_SPEAKER) {
                 return strdup(SND_USE_CASE_DEV_SPEAKER); /* SPEAKER RX */
         } else if (devices & AudioSystem::DEVICE_OUT_ANC_HEADSET ||
@@ -1374,6 +1380,10 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input)
                  return strdup(SND_USE_CASE_DEV_BTSCO_WB_TX); /* BTSCO TX*/
              else
                  return strdup(SND_USE_CASE_DEV_BTSCO_NB_TX); /* BTSCO TX*/
+#ifdef QCOM_USBAUDIO_ENABLED
+        } else if (devices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) {
+                return strdup(SND_USE_CASE_DEV_USB_PROXY_TX); /* USB PROXY TX */
+#endif
         } else if (devices & AudioSystem::DEVICE_IN_DEFAULT) {
             if (!strncmp(mic_type, "analog", 6)) {
                 return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
@@ -1843,10 +1853,17 @@ int ALSADevice::getDevices(uint32_t devices, uint32_t mode, char **rxDevice, cha
         } else if (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE) {
             devices = devices | (AudioSystem::DEVICE_OUT_ANC_HEADPHONE |
                       AudioSystem::DEVICE_IN_BUILTIN_MIC);
+#ifdef QCOM_USBAUDIO_ENABLED
+        } else if ((devices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET ) ||
+                  (devices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET )) {
+            devices = devices | (AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET |
+                      AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET);
+#endif
         } else if (devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
             devices = devices | (AudioSystem::DEVICE_OUT_AUX_DIGITAL |
                       AudioSystem::DEVICE_IN_AUX_DIGITAL);
-        } else if (devices & AudioSystem::DEVICE_OUT_PROXY) {
+        } else if ((devices & AudioSystem::DEVICE_OUT_PROXY) ||
+                  (devices & AudioSystem::DEVICE_IN_PROXY)) {
             devices = devices | (AudioSystem::DEVICE_OUT_PROXY |
                       AudioSystem::DEVICE_IN_PROXY);
         } else if (devices & AudioSystem::DEVICE_OUT_ALL_A2DP) {

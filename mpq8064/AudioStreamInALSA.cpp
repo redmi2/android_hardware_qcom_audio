@@ -1,7 +1,7 @@
 /* AudioStreamInALSA.cpp
  **
  ** Copyright 2008-2009 Wind River Systems
- ** Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+ ** Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
  **
  ** Licensed under the Apache License, Version 2.0 (the "License");
  ** you may not use this file except in compliance with the License.
@@ -136,8 +136,20 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                                  strlen(SND_USE_CASE_VERB_IP_VOICECALL))) ||
             (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP,
                                   strlen(SND_USE_CASE_MOD_PLAY_VOIP)))) {
+#ifdef QCOM_USBAUDIO_ENABLED
+            if((mDevices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) ||
+               (mDevices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)) {
+                mDevices |= AudioSystem::DEVICE_IN_PROXY;
+            }
+#endif
             mHandle->mode = AudioSystem::MODE_IN_COMMUNICATION;
         } else {
+#ifdef QCOM_USBAUDIO_ENABLED
+            if((mHandle->devices == AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET)||
+               (mHandle->devices == AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)){
+                mDevices = AudioSystem::DEVICE_IN_PROXY;
+            }
+#endif
             mHandle->mode = mParent->mode();
         }
         mHandle->activeDevice = mDevices;
@@ -157,8 +169,38 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
 
             return 0;
         }
+#ifdef QCOM_USBAUDIO_ENABLED
+        if((mHandle->devices == AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET)||
+           (mHandle->devices == AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)){
+            if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
+               (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+                mParent->musbRecordingState |= USBRECBIT_VOIPCALL;
+            } else {
+                mParent->startUsbRecordingIfNotStarted();
+                mParent->musbRecordingState |= USBRECBIT_REC;
+            }
+        }
+#endif
         mParent->mLock.unlock();
     }
+#ifdef QCOM_USBAUDIO_ENABLED
+    if(((mDevices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) ||
+       (mDevices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)) &&
+       (!mParent->musbRecordingState)) {
+        mParent->mLock.lock();
+        ALOGD("Starting UsbRecording thread");
+        mParent->startUsbRecordingIfNotStarted();
+        if(!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL) ||
+           !strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP)) {
+            ALOGD("Enabling voip recording bit");
+            mParent->musbRecordingState |= USBRECBIT_VOIPCALL;
+        }else{
+            ALOGD("Enabling HiFi Recording bit");
+            mParent->musbRecordingState |= USBRECBIT_REC;
+        }
+        mParent->mLock.unlock();
+    }
+#endif
 
     period_size = mHandle->periodSize;
     int read_pending = bytes;
@@ -209,19 +251,41 @@ status_t AudioStreamInALSA::close()
 {
     Mutex::Autolock autoLock(mParent->mLock);
 
+    ALOGD("close");
     if((!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,
                              strlen(SND_USE_CASE_VERB_IP_VOICECALL))) ||
         (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP,
                              strlen(SND_USE_CASE_MOD_PLAY_VOIP)))) {
 
         if((mParent->mVoipStreamCount)) {
+ #ifdef QCOM_USBAUDIO_ENABLED
+            ALOGD("musbRecordingState: %d, mVoipStreamCount:%d",mParent->musbRecordingState,
+                  mParent->mVoipStreamCount );
+            if(mParent->mVoipStreamCount == 1) {
+                ALOGE("Deregistering VOIP Call bit, musbPlaybackState:%d,"
+                       "musbRecordingState:%d", mParent->musbPlaybackState, mParent->musbRecordingState);
+                mParent->musbPlaybackState &= ~USBPLAYBACKBIT_VOIPCALL;
+                mParent->musbRecordingState &= ~USBRECBIT_VOIPCALL;
+                mParent->closeUsbRecordingIfNothingActive();
+                mParent->closeUsbPlaybackIfNothingActive();
+            }
+#endif
                return NO_ERROR;
         }
         mParent->mVoipStreamCount = 0;
         mParent->mVoipMicMute = 0;
+#ifdef QCOM_USBAUDIO_ENABLED
+    } else {
+        ALOGD("Deregistering REC bit, musbRecordingState:%d", mParent->musbRecordingState);
+        mParent->musbRecordingState &= ~USBRECBIT_REC;
+#endif
      }
-
     ALOGD("close");
+#ifdef QCOM_USBAUDIO_ENABLED
+    mParent->closeUsbRecordingIfNothingActive();
+#endif
+
+
     ALSAStreamOps::close();
 
     if (mPowerLock) {
@@ -235,6 +299,7 @@ status_t AudioStreamInALSA::close()
 status_t AudioStreamInALSA::standby()
 {
     Mutex::Autolock autoLock(mParent->mLock);
+    ALOGD("standby");
     if((!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,
                              strlen(SND_USE_CASE_VERB_IP_VOICECALL))) ||
         (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP,
@@ -245,6 +310,13 @@ status_t AudioStreamInALSA::standby()
     ALOGD("standby");
 
     mHandle->module->standby(mHandle);
+
+ #ifdef QCOM_USBAUDIO_ENABLED
+    //TBD: Before or after release_wake_lock?
+    ALOGD("Checking for musbRecordingState %d", mParent->musbRecordingState);
+    mParent->musbRecordingState &= ~USBRECBIT_REC;
+    mParent->closeUsbRecordingIfNothingActive();
+#endif
 
     if (mPowerLock) {
         release_wake_lock ("AudioInLock");

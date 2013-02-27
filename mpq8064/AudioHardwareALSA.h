@@ -29,6 +29,9 @@
 #include <system/audio.h>
 #include <hardware/audio.h>
 #include <utils/threads.h>
+#ifdef QCOM_USBAUDIO_ENABLED
+#include <AudioUsbALSA.h>
+#endif
 #include <sys/poll.h>
 #include <sys/eventfd.h>
 
@@ -107,6 +110,20 @@ class AudioBitstreamSM;
 #define TTY_VCO         0x00000040
 #define TTY_HCO         0x00000080
 #define TTY_CLEAR       0xFFFFFF0F
+
+#ifdef QCOM_USBAUDIO_ENABLED
+static int USBPLAYBACKBIT_MUSIC = (1 << 0);
+static int USBPLAYBACKBIT_VOICECALL = (1 << 1);
+static int USBPLAYBACKBIT_VOIPCALL = (1 << 2);
+static int USBPLAYBACKBIT_FM = (1 << 3);
+static int USBPLAYBACKBIT_LPA = (1 << 4);
+static int USBPLAYBACKBIT_TUNNEL = (1 << 5);
+
+static int USBRECBIT_REC = (1 << 0);
+static int USBRECBIT_VOICECALL = (1 << 1);
+static int USBRECBIT_VOIPCALL = (1 << 2);
+static int USBRECBIT_FM = (1 << 3);
+#endif
 
 #define SAMPLES_PER_CHANNEL             1536*2
 #define MAX_INPUT_CHANNELS_SUPPORTED    8
@@ -1107,6 +1124,19 @@ private:
 protected:
     virtual status_t    dump(int fd, const Vector<String16>& args);
     status_t            doRouting(int device);
+#ifdef QCOM_USBAUDIO_ENABLED
+    void                closeUSBPlayback();
+    void                closeUSBRecording();
+    void                closeUsbRecordingIfNothingActive();
+    void                closeUsbPlaybackIfNothingActive();
+    void                startUsbPlaybackIfNotStarted();
+    void                startUsbRecordingIfNotStarted();
+
+    AudioUsbALSA        *mAudioUsbALSA;
+
+    int musbPlaybackState;
+    int musbRecordingState;
+#endif
 
     friend class AudioBroadcastStreamALSA;
     friend class AudioSessionOutALSA;

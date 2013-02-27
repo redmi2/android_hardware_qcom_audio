@@ -7,6 +7,7 @@ include $(CLEAR_VARS)
 LOCAL_ARM_MODE := arm
 LOCAL_CFLAGS := -D_POSIX_SOURCE
 LOCAL_CFLAGS += -DQCOM_MPQ_BROADCAST
+LOCAL_CFLAGS += -DQCOM_USBAUDIO_ENABLED
 
 LOCAL_SRC_FILES := \
   AudioHardwareALSA.cpp 	\
@@ -18,7 +19,8 @@ LOCAL_SRC_FILES := \
   ALSAStreamOps.cpp		\
   ALSADevice.cpp		\
   audio_hw_hal.cpp		\
-  AudioUtil.cpp
+  AudioUtil.cpp                 \
+  AudioUsbALSA.cpp
 
 LOCAL_STATIC_LIBRARIES := \
     libmedia_helper \
@@ -61,6 +63,7 @@ include $(BUILD_SHARED_LIBRARY)
 include $(CLEAR_VARS)
 
 LOCAL_CFLAGS := -D_POSIX_SOURCE
+LOCAL_CFLAGS += -DQCOM_USBAUDIO_ENABLED
 
 ifeq ($(BOARD_HAVE_BLUETOOTH),true)
   LOCAL_CFLAGS += -DWITH_A2DP
