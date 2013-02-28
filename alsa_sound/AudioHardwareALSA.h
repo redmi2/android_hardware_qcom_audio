@@ -742,7 +742,6 @@ public:
     status_t    stopPlaybackOnExtOut_l(uint32_t activeUsecase);
     bool        suspendPlaybackOnExtOut_l(uint32_t activeUsecase);
     status_t    isExtOutDevice(int device);
-
     /**This method dumps the state of the audio hardware */
     //virtual status_t dumpState(int fd, const Vector<String16>& args);
 
@@ -830,6 +829,7 @@ protected:
     int mCallState;
     int mIsFmActive;
     int mVoiceSessionId;
+    bool mInputStreamInstanceAlive;
     bool mBluetoothVGS;
     bool mFusion3Platform;
 #ifdef QCOM_USBAUDIO_ENABLED
