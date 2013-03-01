@@ -1744,6 +1744,15 @@ status_t AudioSessionOutALSA::openDevice(char *useCase, bool bIsUseCase, int dev
         }
         else
             alsa_handle.type = COMPRESSED_FORMAT;
+
+        if (mSampleRate <= 16000) {
+            ALOGD("low frequency in tunnel mode, reducing buff size to 1/4th");
+            // make sure that buffersize is 32 byte aligned
+            // and greater minimum value supported in driver
+            mInputBufferSize = 32*((int)(mInputBufferSize + 2*32)/(int)(4*32));
+            alsa_handle.bufferSize = mInputBufferSize * mInputBufferCount;
+            alsa_handle.periodSize = mInputBufferSize;
+        }
     }
     else
        alsa_handle.type = PCM_FORMAT;
