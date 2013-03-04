@@ -811,12 +811,9 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
         //FM stream to speaker.
         ALOGV("getDeviceForStrategy() STRATEGY_MEDIA");
         if (mForceUse[AudioSystem::FOR_MEDIA] != AudioSystem::FORCE_SPEAKER) {
-            //handle proxy device begin
-            device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_PROXY;
-            if(device2 != 0) {
-                ALOGV("getDeviceForStrategy() STRATEGY_MEDIA use DEVICE_OUT_PROXY:%x",device2);
-                // No combo device allowed with proxy device
-                device = 0;
+            if (strategy != STRATEGY_SONIFICATION) {
+                //no sonification on WFD sink
+                device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_PROXY;
             }
 
             if ((mForceUse[AudioSystem::FOR_MEDIA] != AudioSystem::FORCE_NO_BT_A2DP) &&
