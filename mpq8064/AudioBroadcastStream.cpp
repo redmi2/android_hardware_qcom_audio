@@ -1005,6 +1005,11 @@ status_t AudioBroadcastStreamALSA::openPcmDevice(int devices)
     mPcmRxHandle = &(*it);
     mBufferSize = mPcmRxHandle->periodSize;
 
+    if(mUseMS11Decoder && (mPcmRxHandle->channels > 2))
+        setChannelMap(mPcmRxHandle);
+    else if(mPcmRxHandle->channels > 2)
+        setPCMChannelMap(mPcmRxHandle);
+
     mPcmWriteTempBuffer = (char *) malloc(mBufferSize);
     if(mPcmWriteTempBuffer == NULL) {
         ALOGE("Memory allocation of temp buffer to write pcm to driver failed");
@@ -1013,6 +1018,92 @@ status_t AudioBroadcastStreamALSA::openPcmDevice(int devices)
 
     return NO_ERROR;
 }
+
+void AudioBroadcastStreamALSA::setChannelMap(alsa_handle_t *handle)
+{
+    char channelMap[8];
+    status_t status = NO_ERROR;
+
+    memset(channelMap, 0, sizeof(channelMap));
+    switch (handle->channels) {
+    case 3:
+    case 4:
+    case 5:
+        ALOGE("TODO: Investigate and add appropriate channel map appropriately");
+        break;
+    case 6:
+        channelMap[0] = PCM_CHANNEL_FL;
+        channelMap[1] = PCM_CHANNEL_FR;
+        channelMap[2] = PCM_CHANNEL_FC;
+        channelMap[3] = PCM_CHANNEL_LFE;
+        channelMap[4] = PCM_CHANNEL_LB;
+        channelMap[5] = PCM_CHANNEL_RB;
+        break;
+    case 7:
+    case 8:
+        ALOGE("TODO: Investigate and add appropriate channel map appropriately");
+        break;
+    default:
+        ALOGE("un supported channels for setting channel map");
+        return;
+    }
+
+    status = mALSADevice->setChannelMap(handle, sizeof(channelMap), channelMap);
+    if(status)
+        ALOGE("set channel map failed. Default channel map is used instead");
+
+    return;
+}
+
+void AudioBroadcastStreamALSA::setPCMChannelMap(alsa_handle_t *handle)
+{
+    char channelMap[8];
+    status_t status = NO_ERROR;
+
+    memset(channelMap, 0, sizeof(channelMap));
+    switch (handle->channels) {
+    case 3:
+    case 4:
+        channelMap[0] = PCM_CHANNEL_FL;
+        channelMap[1] = PCM_CHANNEL_FR;
+        channelMap[2] = PCM_CHANNEL_LB;
+        channelMap[3] = PCM_CHANNEL_RB;
+    case 5:
+        ALOGE("TODO: Investigate and add appropriate channel map appropriately");
+        break;
+    case 6:
+        channelMap[0] = PCM_CHANNEL_FL;
+        channelMap[1] = PCM_CHANNEL_FR;
+        channelMap[2] = PCM_CHANNEL_FC;
+        channelMap[3] = PCM_CHANNEL_LFE;
+        channelMap[4] = PCM_CHANNEL_LB;
+        channelMap[5] = PCM_CHANNEL_RB;
+        break;
+    case 7:
+        ALOGE("TODO: Investigate and add appropriate channel map appropriately");
+        break;
+    case 8:
+        channelMap[0] = PCM_CHANNEL_FL;
+        channelMap[1] = PCM_CHANNEL_FR;
+        channelMap[2] = PCM_CHANNEL_FC;
+        channelMap[3] = PCM_CHANNEL_LFE;
+        channelMap[4] = PCM_CHANNEL_LB;
+        channelMap[5] = PCM_CHANNEL_RB;
+        channelMap[6] = PCM_CHANNEL_FLC;
+        channelMap[7] = PCM_CHANNEL_FRC;
+        break;
+    default:
+        ALOGE("un supported channels for setting channel map");
+        return;
+    }
+
+    status = mALSADevice->setChannelMap(handle, sizeof(channelMap), channelMap);
+    if(status)
+        ALOGE("set channel map failed. Default channel map is used instead");
+
+    return;
+}
+
 
 status_t AudioBroadcastStreamALSA::openTunnelDevice(int devices)
 {
