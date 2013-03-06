@@ -407,14 +407,20 @@ status_t ALSADevice::setSoftwareParams(alsa_handle_t *handle)
 
 int ALSADevice::getDeviceType(uint32_t devices, uint32_t mode)
 {
+     char *rxDevice = NULL, *txDevice = NULL;
      int ret = 0;
 
+     devices = getDevices(devices, mode, &rxDevice, &txDevice);
      if((devices & AudioSystem::DEVICE_OUT_ALL) &&
          !(devices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET))
        ret = DEVICE_TYPE_RX;
      if(devices & AudioSystem::DEVICE_IN_ALL)
        ret |= DEVICE_TYPE_TX;
 
+     if (rxDevice)
+         free(rxDevice);
+     if (txDevice)
+         free(txDevice);
      return ret;
 
 }
@@ -442,7 +448,8 @@ void ALSADevice::switchDevice(uint32_t devices, uint32_t mode)
                           strlen(SND_USE_CASE_MOD_PLAY_TUNNEL3))) &&
            (strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_MUSIC4,
                           strlen(SND_USE_CASE_MOD_PLAY_MUSIC4)))) {
-            if(getUseCaseType(it->useCase) & getDeviceType(devices, mode))
+            if(getUseCaseType(it->useCase) ==
+               (getUseCaseType(it->useCase) & getDeviceType(devices, mode)))
                 switchDeviceUseCase(&(*it), devices, mode);
         }
     }
