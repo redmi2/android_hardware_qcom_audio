@@ -52,6 +52,7 @@ public:
 
         // indicates to the audio policy manager that the input starts being used.
         virtual status_t startInput(audio_io_handle_t input);
+        virtual status_t stopInput(audio_io_handle_t input);
 
         // return appropriate device for streams handled by the specified strategy according to current
         // phone state, connected devices...
