@@ -239,6 +239,7 @@ static card_mapping_t card_mapping_list[] = {
 #define SND_USE_CASE_VERB_HIFI3       "HiFi3"
 #define SND_USE_CASE_VERB_HIFI_TUNNEL2    "HiFi Tunnel2"
 #define SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL    "HiFi Pseudo Tunnel"
+#define SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL1    "HiFi Tunnel1Pseudo"
 
 #define SND_USE_CASE_DEV_FM_TX           "FM Tx"
 #define SND_USE_CASE_DEV_ANC_HEADSET     "ANC Headset"
@@ -316,15 +317,19 @@ static card_mapping_t card_mapping_list[] = {
 #define SND_USE_CASE_MOD_PLAY_TUNNEL     "Play Tunnel"
 #define SND_USE_CASE_MOD_PLAY_LOWLATENCY_MUSIC     "Play Lowlatency Music"
 #define SND_USE_CASE_MOD_PLAY_MUSIC2       "Play Music2"
+#define SND_USE_CASE_MOD_PLAY_MUSIC3       "Play Music3"
+#define SND_USE_CASE_MOD_PLAY_MUSIC4       "Play Music4"
 #define SND_USE_CASE_MOD_PLAY_MI2S       "Play MI2S"
 #define SND_USE_CASE_MOD_PLAY_VOLTE   "Play VoLTE"
 #define SND_USE_CASE_MOD_CAPTURE_MUSIC2       "Capture Music2"
 #define SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED    "Capture Music Compressed"
-#define SND_USE_CASE_MOD_PLAY_MUSIC3       "Play Music3"
 #define SND_USE_CASE_MOD_PLAY_TUNNEL1     "Play Tunnel1"
 #define SND_USE_CASE_MOD_PLAY_TUNNEL2     "Play Tunnel2"
-#define SND_USE_CASE_MOD_PSEUDO_TUNNEL     "Pseudo Tunnel"
-
+#define SND_USE_CASE_MOD_PLAY_TUNNEL3     "Play Tunnel3"
+#define SND_USE_CASE_PSEUDO_TUNNEL_SUFFIX  "Pseudo"
+#define SND_USE_CASE_MOD_PSEUDO_TUNNEL1    "Play Tunnel1Pseudo"
+#define SND_USE_CASE_MOD_PSEUDO_TUNNEL2    "Play Tunnel2Pseudo"
+#define SND_USE_CASE_MOD_PSEUDO_TUNNEL3    "Play Tunnel3Pseudo"
 
 /* List utility functions for maintaining enabled devices and modifiers */
 static int snd_ucm_add_ident_to_list(struct snd_ucm_ident_node **head, const char *value);
