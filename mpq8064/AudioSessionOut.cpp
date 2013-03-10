@@ -1903,36 +1903,36 @@ status_t AudioSessionOutALSA::doRouting(int devices)
                 ALOGV("poll fd2 set to -1");
                 bufferDeAlloc(PASSTHRUQUEUEINDEX);
             }
-        }
-        /*Device handling for the DTS transcode*/
-        if (!mDtsTranscode && mTranscodeHandle) {
-            Mutex::Autolock autoLock(mLock);
-            closeDevice(mTranscodeHandle);
-            free(mTranscodeHandle);
-            mTranscodeHandle = NULL;
-            struct snd_compr_routing params;
-            params.session_type = TRANSCODE_SESSION;
-            params.operation = DISCONNECT_STREAM;
-            if (ioctl(mCompreRxHandle->handle->fd, SNDRV_COMPRESS_SET_ROUTING, &params) < 0) {
-                ALOGE("disconnect stream failed");
+            /*Device handling for the DTS transcode*/
+            if (!mDtsTranscode && mTranscodeHandle) {
+                Mutex::Autolock autoLock(mLock);
+                closeDevice(mTranscodeHandle);
+                free(mTranscodeHandle);
+                mTranscodeHandle = NULL;
+                struct snd_compr_routing params;
+                params.session_type = TRANSCODE_SESSION;
+                params.operation = DISCONNECT_STREAM;
+                if (ioctl(mCompreRxHandle->handle->fd, SNDRV_COMPRESS_SET_ROUTING, &params) < 0) {
+                    ALOGE("disconnect stream failed");
+                }
             }
-        }
-        if ((mDtsTranscode && mTranscodeHandle == NULL)) {
-            Mutex::Autolock autoLock(mLock);
-            status = openTunnelDevice(mTranscodeDevices);
-            if(status != NO_ERROR) {
-                ALOGE("Error opening Transocde device in doRouting");
-                return BAD_VALUE;
+            if ((mDtsTranscode && mTranscodeHandle == NULL)) {
+                Mutex::Autolock autoLock(mLock);
+                status = openTunnelDevice(mTranscodeDevices);
+                if(status != NO_ERROR) {
+                    ALOGE("Error opening Transocde device in doRouting");
+                    return BAD_VALUE;
+                }
+                struct snd_compr_routing params;
+                params.session_type = TRANSCODE_SESSION;
+                params.operation = CONNECT_STREAM;
+                if (ioctl(mCompreRxHandle->handle->fd, SNDRV_COMPRESS_SET_ROUTING, &params) < 0) {
+                    ALOGE("Connect stream failed");
+                }
             }
-            struct snd_compr_routing params;
-            params.session_type = TRANSCODE_SESSION;
-            params.operation = CONNECT_STREAM;
-            if (ioctl(mCompreRxHandle->handle->fd, SNDRV_COMPRESS_SET_ROUTING, &params) < 0) {
-                ALOGE("Connect stream failed");
-            }
-        }
-        mALSADevice->switchDeviceUseCase(mCompreRxHandle,
+            mALSADevice->switchDeviceUseCase(mCompreRxHandle,
                   devices & ~mSecDevices & ~mTranscodeDevices, mParent->mode());
+        }
     } else {
         /*
            Handles the following
