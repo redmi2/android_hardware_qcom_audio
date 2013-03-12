@@ -897,6 +897,8 @@ private:
     void                playbackThreadEntry();
     static void *       playbackThreadWrapper(void *me);
     void                allocatePlaybackPollFd();
+    void                setChannelMap(alsa_handle_t *handle);
+    void                setPCMChannelMap(alsa_handle_t *handle);
     status_t            openMS11Instance();
     ssize_t             write_l(char *buffer, size_t bytes);
     void                copyBitstreamInternalBuffer(char *buffer, size_t bytes);
