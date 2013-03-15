@@ -1,7 +1,7 @@
 /* ALSAStreamOps.cpp
  **
  ** Copyright 2008-2009 Wind River Systems
- ** Copyright (c) 2011, The Linux Foundation. All rights reserved.
+ ** Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
  **
  ** Licensed under the Apache License, Version 2.0 (the "License");
  ** you may not use this file except in compliance with the License.
@@ -34,10 +34,15 @@
 #include <media/AudioRecord.h>
 #include <hardware_legacy/power.h>
 
+#include "AudioUtil.h"
 #include "AudioHardwareALSA.h"
 
 namespace android_audio_legacy
 {
+
+// unused 'enumVal;' is to catch error at compile time if enumVal ever changes
+// or applied on a non-existent enum
+#define ENUM_TO_STRING(var, enumVal) {var = #enumVal; enumVal;}
 
 // ----------------------------------------------------------------------------
 
@@ -101,6 +106,13 @@ status_t ALSAStreamOps::set(int      *format,
         *channels = 0;
         if (mHandle->devices & AudioSystem::DEVICE_OUT_ALL) {
             switch(mHandle->channels) {
+                case 8:
+                case 7:
+                case 6:
+                case 5:
+                    *channels |= audio_channel_out_mask_from_count(mHandle->channels);
+                    break;
+                    // Do not fall through
                 case 4:
                     *channels |= AudioSystem::CHANNEL_OUT_BACK_LEFT;
                     *channels |= AudioSystem::CHANNEL_OUT_BACK_RIGHT;
@@ -194,7 +206,10 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
     int device;
     status_t err = NO_ERROR;
     if (param.getInt(key, device) == NO_ERROR) {
-        // Ignore routing if device is 0.
+        // reset to speaker when disconnecting HDMI to avoid timeout due to write errors
+        if ((device == 0) && (mDevices == AudioSystem::DEVICE_OUT_AUX_DIGITAL)) {
+                    device = AudioSystem::DEVICE_OUT_SPEAKER;
+        }
         if(device) {
             ALOGD("setParameters(): keyRouting with device %d", device);
             if(device & AudioSystem::DEVICE_OUT_ALL_A2DP) {
@@ -249,7 +264,41 @@ String8 ALSAStreamOps::getParameters(const String8& keys)
         }
 #endif
     }
-    ALOGV("getParameters() %s", param.toString().string());
+    key = String8(AUDIO_PARAMETER_STREAM_SUP_CHANNELS);
+    if (param.get(key, value) == NO_ERROR) {
+        ALOGE("AUDIO_PARAMETER_STREAM_SUP_CHANNELS key found..");
+        EDID_AUDIO_INFO info = { 0 };
+        bool first = true;
+        value = String8();
+        if (AudioUtil::getHDMIAudioSinkCaps(&info)) {
+            for (int i = 0; i < info.nAudioBlocks && i < MAX_EDID_BLOCKS; i++) {
+                String8 append;
+                switch (info.AudioBlocksArray[i].nChannels) {
+                //Do not handle stereo output in Multi-channel cases
+                //Stereo case is handled in normal playback path
+                case 6:
+                    ENUM_TO_STRING(append, AUDIO_CHANNEL_OUT_5POINT1);
+                    ALOGD("adding AUDIO_CHANNEL_OUT_5POINT1  string");
+                    break;
+                case 8:
+                    ENUM_TO_STRING(append, AUDIO_CHANNEL_OUT_7POINT1);
+                    ALOGD("adding AUDIO_CHANNEL_OUT_7POINT1  string");
+                    break;
+                default:
+                    ALOGD("Unsupported number of channels %d", info.AudioBlocksArray[i].nChannels);
+                    break;
+                }
+                if (!append.isEmpty()) {
+                    value += (first ? append : String8("|") + append);
+                    first = false;
+                }
+            }
+        } else {
+            ALOGE("Failed to get HDMI sink capabilities");
+        }
+        param.add(key, value);
+    }
+    ALOGD("ALSAStreamOps::getParameters() %s", param.toString().string());
     return param.toString();
 }
 
@@ -308,6 +357,13 @@ uint32_t ALSAStreamOps::channels() const
 
     if (mDevices & AudioSystem::DEVICE_OUT_ALL)
         switch(count) {
+            case 8:
+            case 7:
+            case 6:
+            case 5:
+                channels |=audio_channel_out_mask_from_count(count);
+                break;
+                // Do not fall through
             case 4:
                 channels |= AudioSystem::CHANNEL_OUT_BACK_LEFT;
                 channels |= AudioSystem::CHANNEL_OUT_BACK_RIGHT;

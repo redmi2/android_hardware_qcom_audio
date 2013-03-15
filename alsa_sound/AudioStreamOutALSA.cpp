@@ -1,7 +1,7 @@
 /* AudioStreamOutALSA.cpp
  **
  ** Copyright 2008-2009 Wind River Systems
- ** Copyright (c) 2011, The Linux Foundation. All rights reserved.
+ ** Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
  **
  ** Licensed under the Apache License, Version 2.0 (the "License");
  ** you may not use this file except in compliance with the License.
@@ -113,31 +113,36 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
 
     int write_pending = bytes;
 
-    if((strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) &&
+    if((mHandle->handle == NULL) && (mHandle->rxHandle == NULL) &&
+         (strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) &&
        (strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
         mParent->mLock.lock();
-        /* PCM handle might be closed and reopened immediately to flush
-         * the buffers, recheck and break if PCM handle is valid */
-        if (mHandle->handle == NULL && mHandle->rxHandle == NULL) {
-            ALOGV("mDevices =0x%x", mDevices);
-            if(mDevices &  AudioSystem::DEVICE_OUT_ALL_A2DP) {
-                ALOGV("StreamOut write - mRouteAudioToA2dp = %d ", mParent->mRouteAudioToA2dp);
-                mParent->mRouteAudioToA2dp = true;
-            }
+
+        ALOGD("mHandle->useCase: %s", mHandle->useCase);
             snd_use_case_get(mHandle->ucMgr, "_verb", (const char **)&use_case);
             if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
-                if(!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)){
-                     strlcpy(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,sizeof(mHandle->useCase));
-                 }
-                 else {
-                     strlcpy(mHandle->useCase, SND_USE_CASE_VERB_HIFI, sizeof(mHandle->useCase));
-                 }
+
+            if(!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP)){
+                strlcpy(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,
+                        sizeof(SND_USE_CASE_VERB_IP_VOICECALL));
+            } else if(!strcmp(mHandle->useCase,SND_USE_CASE_MOD_PLAY_MUSIC2)) {
+                strlcpy(mHandle->useCase, SND_USE_CASE_VERB_HIFI2,
+                        sizeof(SND_USE_CASE_MOD_PLAY_MUSIC2));
+            } else if (!strcmp(mHandle->useCase,SND_USE_CASE_MOD_PLAY_MUSIC)){
+                strlcpy(mHandle->useCase, SND_USE_CASE_VERB_HIFI,
+                        sizeof(SND_USE_CASE_MOD_PLAY_MUSIC));
+                }
             } else {
-                if(!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP)) {
-                    strlcpy(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP,sizeof(mHandle->useCase));
-                 } else {
-                     strlcpy(mHandle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC, sizeof(mHandle->useCase));
-                 }
+            if(!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)){
+                strlcpy(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP,
+                        sizeof(SND_USE_CASE_MOD_PLAY_VOIP));
+            } else if(!strcmp(mHandle->useCase,SND_USE_CASE_VERB_HIFI2)) {
+                strlcpy(mHandle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC2,
+                        sizeof(SND_USE_CASE_MOD_PLAY_MUSIC2));
+            } else if (!strcmp(mHandle->useCase,SND_USE_CASE_VERB_HIFI)){
+                strlcpy(mHandle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC,
+                        sizeof(SND_USE_CASE_MOD_PLAY_MUSIC));
+                }
             }
             free(use_case);
             if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
@@ -165,6 +170,7 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
                   mHandle->module->route(mHandle, mDevices , mParent->mode());
             }
             if (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI) ||
+                !strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI2) ||
                 !strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) {
                 snd_use_case_set(mHandle->ucMgr, "_verb", mHandle->useCase);
             } else {
@@ -208,8 +214,6 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
             }
         }
         mParent->mLock.unlock();
-    }
-
 #ifdef QCOM_USBAUDIO_ENABLED
     if(((mDevices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET) ||
         (mDevices & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)) &&

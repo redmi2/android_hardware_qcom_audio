@@ -32,7 +32,8 @@ LOCAL_SRC_FILES := \
   audio_hw_hal.cpp              \
   AudioUsbALSA.cpp              \
   AudioSessionOut.cpp           \
-  ALSADevice.cpp
+  ALSADevice.cpp                \
+  AudioUtil.cpp
 
 LOCAL_STATIC_LIBRARIES := \
     libmedia_helper \
