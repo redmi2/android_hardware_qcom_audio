@@ -40,12 +40,12 @@ LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/audio-acdb-util
 LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/audio-codecs
 LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/audio-parsers
 LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/libalsa-intf
-LOCAL_C_INCLUDES += vendor/qcom/proprietary/mm-audio/audio-parsers/inc
+LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/audio-parsers/inc
 LOCAL_C_INCLUDES += hardware/libhardware/include
 LOCAL_C_INCLUDES += hardware/libhardware_legacy/include
 LOCAL_C_INCLUDES += system/core/include
-LOCAL_C_INCLUDES += vendor/qcom/proprietary/mm-audio/audio-codecs/ms11
-LOCAL_C_INCLUDES += vendor/qcom/proprietary/mm-audio/audio-codecs/ms11/exec_layer
+LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/audio-codecs/ms11
+LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/audio-codecs/ms11/exec_layer
 
 LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
 LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
