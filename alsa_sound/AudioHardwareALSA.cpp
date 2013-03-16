@@ -151,6 +151,7 @@ AudioHardwareALSA::AudioHardwareALSA() :
         ALOGE("Failed to open ucm instance: %d", errno);
     } else {
         ALOGI("ucm instance opened: %u", (unsigned)mUcMgr);
+        mUcMgr->isFusion3Platform = mFusion3Platform;
     }
 #ifdef QCOM_CSDCLIENT_ENABLED
     if (mFusion3Platform) {

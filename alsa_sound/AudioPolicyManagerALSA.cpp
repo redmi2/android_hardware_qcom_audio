@@ -340,6 +340,13 @@ void AudioPolicyManager::setPhoneState(int state)
         setStreamMute(AudioSystem::RING, true, mPrimaryOutput);
     }
 
+    // Ignore the delay to enable voice call on this target as the enabling the
+    // voice call has enough delay to make sure the ringtone audio completely
+    // played out
+    if (state == AudioSystem::MODE_IN_CALL && oldState == AudioSystem::MODE_RINGTONE) {
+        delayMs = 40;
+    }
+
     // change routing is necessary
     setOutputDevice(mPrimaryOutput, newDevice, force, delayMs);
 
