@@ -1,7 +1,7 @@
 /* ALSADevice.cpp
  **
  ** Copyright 2009 Wind River Systems
- ** Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+ ** Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
  **
  ** Licensed under the Apache License, Version 2.0 (the "License");
  ** you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@
 #include <utils/Log.h>
 #include <cutils/properties.h>
 #include <linux/ioctl.h>
+#include "AudioUtil.h"
 #include "AudioHardwareALSA.h"
 #include <media/AudioRecord.h>
 #ifdef QCOM_CSDCLIENT_ENABLED
@@ -34,6 +35,7 @@ extern "C" {
 #define BTSCO_RATE_16KHZ 16000
 #define USECASE_TYPE_RX 1
 #define USECASE_TYPE_TX 2
+#define MAX_HDMI_CHANNEL_CNT 8
 
 #define AFE_PROXY_PERIOD_SIZE 3072
 #define KILL_A2DP_THREAD 1
@@ -116,6 +118,35 @@ int ALSADevice::deviceName(alsa_handle_t *handle, unsigned flags, char **value)
     ret = snd_use_case_get(handle->ucMgr, ident, (const char **)value);
     ALOGD("Device value returned is %s", (*value));
     return ret;
+}
+status_t ALSADevice::setHDMIChannelCount()
+{
+    status_t err = NO_ERROR;
+    int channel_count = 0;
+    const char *channel_cnt_str = NULL;
+    EDID_AUDIO_INFO info = { 0 };
+
+    if (AudioUtil::getHDMIAudioSinkCaps(&info)) {
+        for (int i = 0; i < info.nAudioBlocks && i < MAX_EDID_BLOCKS; i++) {
+            if (info.AudioBlocksArray[i].nChannels > channel_count &&
+                  info.AudioBlocksArray[i].nChannels <= MAX_HDMI_CHANNEL_CNT) {
+                channel_count = info.AudioBlocksArray[i].nChannels;
+            }
+        }
+    }
+
+    switch (channel_count) {
+    case 8: channel_cnt_str = "Eight"; break;
+    case 7: channel_cnt_str = "Seven"; break;
+    case 6: channel_cnt_str = "Six"; break;
+    case 5: channel_cnt_str = "Five"; break;
+    case 4: channel_cnt_str = "Four"; break;
+    case 3: channel_cnt_str = "Three"; break;
+    default: channel_cnt_str = "Two"; break;
+    }
+    ALOGD("HDMI channel count: %s", channel_cnt_str);
+    setMixerControl("HDMI_RX Channels",channel_cnt_str);
+    return err;
 }
 
 status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
@@ -275,8 +306,8 @@ status_t ALSADevice::setSoftwareParams(alsa_handle_t *handle)
           params->start_threshold = periodSize/2;
           params->stop_threshold = INT_MAX;
      } else {
-         params->avail_min = periodSize/2;
-         params->start_threshold = channels * (periodSize/4);
+         params->avail_min = periodSize/(channels * 2);
+         params->start_threshold = periodSize/(channels * 2);
          params->stop_threshold = INT_MAX;
      }
     params->silence_threshold = 0;
@@ -557,6 +588,13 @@ status_t ALSADevice::open(alsa_handle_t *handle)
     char *devName = NULL;
     unsigned flags = 0;
     int err = NO_ERROR;
+    if(handle->devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+        err = setHDMIChannelCount();
+        if(err != OK) {
+            ALOGE("setHDMIChannelCount err = %d", err);
+            return err;
+        }
+    }
 
     close(handle);
 
@@ -576,6 +614,8 @@ status_t ALSADevice::open(alsa_handle_t *handle)
         flags |= PCM_MMAP;
         flags |= DEBUG_ON;
     } else if ((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI)) ||
+        (!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI2)) ||
+        (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC2)) ||
         (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC))) {
         ALOGE("Music case");
         flags = PCM_OUT;
@@ -585,19 +625,21 @@ status_t ALSADevice::open(alsa_handle_t *handle)
 
     if (handle->channels == 1) {
         flags |= PCM_MONO;
-    } 
-#ifdef QCOM_SSR_ENABLED
+    }
     else if (handle->channels == 4 ) {
         flags |= PCM_QUAD;
     } else if (handle->channels == 6 ) {
+#ifdef QCOM_SSR_ENABLED
         if (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC, strlen(SND_USE_CASE_VERB_HIFI_REC))
             || !strncmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC))) {
             flags |= PCM_QUAD;
         } else {
             flags |= PCM_5POINT1;
         }
-    } 
+#else
+        flags |= PCM_5POINT1;
 #endif
+    }
     else {
         flags |= PCM_STEREO;
     }
@@ -1122,6 +1164,8 @@ int ALSADevice::getUseCaseType(const char *useCase)
     ALOGE("use case is %s\n", useCase);
     if (!strncmp(useCase, SND_USE_CASE_VERB_HIFI,
            MAX_LEN(useCase, SND_USE_CASE_VERB_HIFI)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_HIFI2,
+            MAX_LEN(useCase, SND_USE_CASE_VERB_HIFI2)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER,
             MAX_LEN(useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
@@ -1130,6 +1174,8 @@ int ALSADevice::getUseCaseType(const char *useCase)
             MAX_LEN(useCase, SND_USE_CASE_VERB_DIGITAL_RADIO)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC,
             MAX_LEN(useCase, SND_USE_CASE_MOD_PLAY_MUSIC)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC2,
+            MAX_LEN(useCase, SND_USE_CASE_MOD_PLAY_MUSIC2)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_LPA,
             MAX_LEN(useCase, SND_USE_CASE_MOD_PLAY_LPA)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL,
@@ -1283,6 +1329,9 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
             } else {
                 return strdup(SND_USE_CASE_DEV_SPEAKER_HEADSET); /* COMBO SPEAKER+HEADSET RX */
             }
+        } else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
+            ((devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL))) {
+            return strdup(SND_USE_CASE_DEV_HDMI_SPEAKER);
 #ifdef QCOM_ANC_HEADSET_ENABLED
         } else if ((devices & AudioSystem::DEVICE_OUT_PROXY) &&
                    ((devices & AudioSystem::DEVICE_OUT_ANC_HEADSET)||

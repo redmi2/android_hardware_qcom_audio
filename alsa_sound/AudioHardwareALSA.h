@@ -1,7 +1,7 @@
 /* AudioHardwareALSA.h
  **
  ** Copyright 2008-2010, Wind River Systems
- ** Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+ ** Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
  **
  ** Licensed under the Apache License, Version 2.0 (the "License");
  ** you may not use this file except in compliance with the License.
@@ -67,6 +67,8 @@ class AudioHardwareALSA;
 #define VOICE_LATENCY         85333
 #define DEFAULT_BUFFER_SIZE   2048
 #define DEFAULT_IN_BUFFER_SIZE   320
+//4032 = 336(kernel buffer size) * 2(bytes pcm_16) * 6(number of channels)
+#define DEFAULT_MULTI_CHANNEL_BUF_SIZE    4032
 #define FM_BUFFER_SIZE        1024
 
 #define VOIP_SAMPLING_RATE_8K 8000
@@ -230,6 +232,7 @@ public:
     //TODO:check if this needs to be public
     void     disableDevice(alsa_handle_t *handle);
     char *getUCMDeviceFromAcdbId(int acdb_id);
+    status_t setHDMIChannelCount();
 
 protected:
     friend class AudioHardwareALSA;
