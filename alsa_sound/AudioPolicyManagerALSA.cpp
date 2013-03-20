@@ -1195,7 +1195,6 @@ audio_devices_t AudioPolicyManager::getNewDevice(audio_io_handle_t output, bool 
 
     AudioOutputDescriptor *outputDesc = mOutputs.valueFor(output);
     AudioOutputDescriptor *primaryOutputDesc = mOutputs.valueFor(mPrimaryOutput);
-
     // check the following by order of priority to request a routing change if necessary:
     // 1: the strategy enforced audible is active on the output:
     //      use device for strategy enforced audible
@@ -1209,13 +1208,12 @@ audio_devices_t AudioPolicyManager::getNewDevice(audio_io_handle_t output, bool 
     //      use device for strategy media
     // 6: the strategy DTMF is active on the output:
     //      use device for strategy DTMF
-    if (outputDesc->isUsedByStrategy(STRATEGY_ENFORCED_AUDIBLE)) {
+    if ((primaryOutputDesc->isUsedByStrategy(STRATEGY_ENFORCED_AUDIBLE))) {
         device = getDeviceForStrategy(STRATEGY_ENFORCED_AUDIBLE, fromCache);
     } else if (isInCall() ||
-                    outputDesc->isUsedByStrategy(STRATEGY_PHONE)) {
+                (primaryOutputDesc->isUsedByStrategy(STRATEGY_PHONE))) {
         device = getDeviceForStrategy(STRATEGY_PHONE, fromCache);
-    } else if (outputDesc->isUsedByStrategy(STRATEGY_SONIFICATION) ||
-               (primaryOutputDesc->isUsedByStrategy(STRATEGY_SONIFICATION))) {
+    } else if (outputDesc->isUsedByStrategy(STRATEGY_SONIFICATION)){
         device = getDeviceForStrategy(STRATEGY_SONIFICATION, fromCache);
     } else if (outputDesc->isUsedByStrategy(STRATEGY_SONIFICATION_RESPECTFUL)) {
         device = getDeviceForStrategy(STRATEGY_SONIFICATION_RESPECTFUL, fromCache);
@@ -1423,21 +1421,14 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
         uint32_t device2 = AUDIO_DEVICE_NONE;
         if (mForceUse[AudioSystem::FOR_MEDIA] != AudioSystem::FORCE_SPEAKER) {
             if (strategy != STRATEGY_SONIFICATION) {
+#ifdef QCOM_PROXY_DEVICE_ENABLED
+                // no sonification on WFD sink
+                device2 = mAvailableOutputDevices & AUDIO_DEVICE_OUT_PROXY;
+#else
                 // no sonification on remote submix (e.g. WFD)
                 device2 = mAvailableOutputDevices & AUDIO_DEVICE_OUT_REMOTE_SUBMIX;
-            }
-#ifdef QCOM_PROXY_DEVICE_ENABLED
-            //handle proxy device begin
-            if ((device2 == AUDIO_DEVICE_NONE) ||
-                (device2 == AUDIO_DEVICE_OUT_REMOTE_SUBMIX)) {
-                device2 = mAvailableOutputDevices & AUDIO_DEVICE_OUT_PROXY;
-                if(device2 != 0) {
-                    ALOGV("getDeviceForStrategy() STRATEGY_MEDIA use DEVICE_OUT_PROXY:%x",device2);
-                    // No combo device allowed with proxy device
-                    device = 0;
-                }
-            }
 #endif
+            }
             if ((device2 == AUDIO_DEVICE_NONE) &&
                     (mForceUse[AudioSystem::FOR_MEDIA] != AudioSystem::FORCE_NO_BT_A2DP) &&
                     !mA2dpSuspended) {
