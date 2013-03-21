@@ -885,6 +885,10 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
             device = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_SPEAKER;
         }
 
+        if (isInCall()) {
+            // when in call, get the device for Phone strategy
+            device = getDeviceForStrategy(STRATEGY_PHONE, false /*fromCache*/);
+        }
 
         } break;
 
