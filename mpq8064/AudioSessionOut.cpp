@@ -549,6 +549,17 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
                 mObserver->postEOS(0);
             return -1;
         }
+        if (mSpdifFormat != COMPRESSED_FORMAT && mHdmiFormat != COMPRESSED_FORMAT) {
+            ALOGD("Setting Compressed volume to %d (available range is 0 to 0x2000)\n", mStreamVol);
+            err = mCompreRxHandle->module->setPlaybackVolume(mStreamVol,
+                                                 mCompreRxHandle->useCase);
+            if(err){
+               ALOGE("setPlaybackVolume returned error %d",err);
+               if (mObserver)
+                   mObserver->postEOS(0);
+               return -1;
+            }
+        }
         mWMAConfigDataSet = true;
         return bytes;
     }
