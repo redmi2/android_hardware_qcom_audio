@@ -171,7 +171,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
         }
 #ifdef QCOM_USBAUDIO_ENABLED
         if((mHandle->devices == AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET)||
-           (mHandle->devices == AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)){
+           (mHandle->devices == AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)) {
             if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
                (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
                 mParent->musbRecordingState |= USBRECBIT_VOIPCALL;
@@ -184,8 +184,8 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
         mParent->mLock.unlock();
     }
 #ifdef QCOM_USBAUDIO_ENABLED
-    if(((mDevices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) ||
-       (mDevices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)) &&
+    if(((mHandle->devices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) ||
+       (mHandle->devices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)) &&
        (!mParent->musbRecordingState)) {
         mParent->mLock.lock();
         ALOGD("Starting UsbRecording thread");

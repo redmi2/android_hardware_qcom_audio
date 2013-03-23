@@ -56,6 +56,8 @@ ALSADevice::ALSADevice() {
     int callMode = AudioSystem::MODE_NORMAL;
 
     char value[128];
+    char platform[10];
+    FILE *fp;
     property_get("persist.audio.handset.mic",value,"0");
     strlcpy(mic_type, value, sizeof(mic_type));
     property_get("persist.audio.fluence.mode",value,"0");
@@ -66,6 +68,15 @@ ALSADevice::ALSADevice() {
     }
     strlcpy(curRxUCMDevice, "None", sizeof(curRxUCMDevice));
     strlcpy(curTxUCMDevice, "None", sizeof(curTxUCMDevice));
+
+    if ((fp = fopen("/sys/devices/system/soc/soc0/hw_platform", "r")) != NULL) {
+        fscanf(fp, "%s", platform);
+        fclose(fp);
+    }
+    if(!strncmp(platform, "DTV", sizeof(platform)))
+        mHardwarePlatform = DTV_PLATFORM;
+    else
+       mHardwarePlatform = DEFAULT_PLATFORM;
 
     mMixer = mixer_open("/dev/snd/controlC0");
     mProxyParams.mExitRead = false;
@@ -407,20 +418,14 @@ status_t ALSADevice::setSoftwareParams(alsa_handle_t *handle)
 
 int ALSADevice::getDeviceType(uint32_t devices, uint32_t mode)
 {
-     char *rxDevice = NULL, *txDevice = NULL;
      int ret = 0;
 
-     devices = getDevices(devices, mode, &rxDevice, &txDevice);
-     if((devices & AudioSystem::DEVICE_OUT_ALL) &&
-         !(devices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET))
-       ret = DEVICE_TYPE_RX;
+     devices = getDevices(devices, NULL, NULL);
+     if(devices & AudioSystem::DEVICE_OUT_ALL)
+        ret = DEVICE_TYPE_RX;
      if(devices & AudioSystem::DEVICE_IN_ALL)
-       ret |= DEVICE_TYPE_TX;
+        ret |= DEVICE_TYPE_TX;
 
-     if (rxDevice)
-         free(rxDevice);
-     if (txDevice)
-         free(txDevice);
      return ret;
 
 }
@@ -460,9 +465,10 @@ void ALSADevice::switchDeviceUseCase(alsa_handle_t *handle,
 {
     char *use_case = NULL;
     uint32_t activeDevices = handle->activeDevice;
-    uint32_t switchTodevices = devices;
+    uint32_t switchTodevices;
     bool bIsUseCaseSet = false;
 
+    switchTodevices = devices = updateDevices(handle->useCase, devices);
     ALOGV("switchDeviceUseCase curdevices = %d usecase %s devices = %d, mode = %d",
            handle->activeDevice, handle->useCase, devices, mode);
 
@@ -683,7 +689,6 @@ status_t ALSADevice::startVoipCall(alsa_handle_t *handle)
 
      /* first write required start dsp */
      memset(&voc_pkt,0,sizeof(voc_pkt));
-     pcm_write(handle->handle,&voc_pkt,handle->handle->period_size);
      handle->rxHandle = handle->handle;
      if(devName) {
          free(devName);
@@ -732,7 +737,6 @@ status_t ALSADevice::startVoipCall(alsa_handle_t *handle)
 
      /* first read required start dsp */
      memset(&voc_pkt,0,sizeof(voc_pkt));
-     pcm_read(handle->handle,&voc_pkt,handle->handle->period_size);
 
      if(devName) {
          free(devName);
@@ -1202,17 +1206,17 @@ void ALSADevice::disableDevice(alsa_handle_t *handle)
     {
         while (devices != 0) {
             int deviceToDisable = devices & (-devices);
-            int actualDevices = getDevices(deviceToDisable, handle->mode, &rxDevice, &txDevice);
+            int actualDevices = getDevices(deviceToDisable, &rxDevice, &txDevice);
 
             for (ALSAHandleList::iterator it = mDeviceList->begin(); it != mDeviceList->end(); ++it) {
                 if (it->useCase != NULL) {
                     if (strcmp(it->useCase, handle->useCase)) {
-                        if ((&(*it)) != handle && handle->activeDevice && it->activeDevice && (it->activeDevice & actualDevices)) {
+                        if ((&(*it)) != handle && handle->activeDevice && it->activeDevice && (getDevices(it->activeDevice, NULL, NULL) & actualDevices)) {
                             ALOGD("disableRxDevice - false use case %s active Device %d deviceToDisable %d",
                                   it->useCase, it->activeDevice, deviceToDisable);
-                            if(getDeviceType(it->activeDevice & actualDevices, 0) & DEVICE_TYPE_RX)
+                            if(getDeviceType(getDevices(it->activeDevice, NULL, NULL) & actualDevices, 0) & DEVICE_TYPE_RX)
                                 disableRxDevice = false;
-                            if(getDeviceType(it->activeDevice & actualDevices, 0) & DEVICE_TYPE_TX)
+                            if(getDeviceType(getDevices(it->activeDevice, NULL, NULL) & actualDevices, 0) & DEVICE_TYPE_TX)
                                 disableTxDevice = false;
                         }
                     }
@@ -1257,7 +1261,7 @@ void ALSADevice::enableDevice(alsa_handle_t *handle, bool bIsUseCaseSet)
     ALOGD("enableDevice %d bIsUseCaseSet %d", handle->activeDevice, bIsUseCaseSet);
     while (devices != 0) {
         int deviceToEnable = devices & (-devices);
-        getDevices(deviceToEnable, handle->mode, &rxDevice, &txDevice);
+        getDevices(deviceToEnable, &rxDevice, &txDevice);
         if(rxDevice != NULL) {
             usecase_type = getUseCaseType(handle->useCase);
             if (usecase_type & USECASE_TYPE_RX) {
@@ -1315,7 +1319,7 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input)
 #ifdef QCOM_USBAUDIO_ENABLED
         } else if ((devices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET) ||
                   (devices & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)) {
-             return strdup(SND_USE_CASE_DEV_USB_PROXY_RX); /* PROXY RX */
+                return strdup(SND_USE_CASE_DEV_USB_PROXY_RX); /* PROXY RX */
 #endif
         } else if (devices & AudioSystem::DEVICE_OUT_SPEAKER) {
                 return strdup(SND_USE_CASE_DEV_SPEAKER); /* SPEAKER RX */
@@ -1389,7 +1393,10 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input)
                  return strdup(SND_USE_CASE_DEV_BTSCO_NB_TX); /* BTSCO TX*/
 #ifdef QCOM_USBAUDIO_ENABLED
         } else if (devices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) {
-                return strdup(SND_USE_CASE_DEV_USB_PROXY_TX); /* USB PROXY TX */
+                if(mHardwarePlatform == DTV_PLATFORM)
+                    return strdup(SND_USE_CASE_DEV_SPEAKER_USB_PROXY_TX);
+                else
+                    return strdup(SND_USE_CASE_DEV_USB_PROXY_TX); /* USB PROXY TX */
 #endif
         } else if (devices & AudioSystem::DEVICE_IN_DEFAULT) {
             if (!strncmp(mic_type, "analog", 6)) {
@@ -1829,57 +1836,89 @@ status_t ALSADevice::setHDMIChannelCount(int channels)
     return err;
 }
 
-int ALSADevice::getDevices(uint32_t devices, uint32_t mode, char **rxDevice, char **txDevice)
-{
-    ALOGV("%s: device %d", __FUNCTION__, devices);
-
-    if ((mode == AudioSystem::MODE_IN_CALL)  || (mode == AudioSystem::MODE_IN_COMMUNICATION)) {
-        if ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
-            (devices & AudioSystem::DEVICE_IN_WIRED_HEADSET)) {
-            devices = devices | (AudioSystem::DEVICE_OUT_WIRED_HEADSET |
-                      AudioSystem::DEVICE_IN_WIRED_HEADSET);
-        } else if (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE) {
-            devices = devices | (AudioSystem::DEVICE_OUT_WIRED_HEADPHONE |
-                      AudioSystem::DEVICE_IN_BUILTIN_MIC);
-        } else if ((devices & AudioSystem::DEVICE_OUT_EARPIECE) ||
-                  (devices & AudioSystem::DEVICE_IN_BUILTIN_MIC)) {
-            devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
-                      AudioSystem::DEVICE_OUT_EARPIECE);
-        } else if (devices & AudioSystem::DEVICE_OUT_SPEAKER) {
-            devices = devices | (AudioSystem::DEVICE_IN_DEFAULT |
-                       AudioSystem::DEVICE_OUT_SPEAKER);
-        } else if ((devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO) ||
-                   (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_HEADSET) ||
-                   (devices & AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET)) {
-            devices = devices | (AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET |
-                      AudioSystem::DEVICE_OUT_BLUETOOTH_SCO);
-        } else if ((devices & AudioSystem::DEVICE_OUT_ANC_HEADSET) ||
-                   (devices & AudioSystem::DEVICE_IN_ANC_HEADSET)) {
-            devices = devices | (AudioSystem::DEVICE_OUT_ANC_HEADSET |
-                      AudioSystem::DEVICE_IN_ANC_HEADSET);
-        } else if (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE) {
-            devices = devices | (AudioSystem::DEVICE_OUT_ANC_HEADPHONE |
-                      AudioSystem::DEVICE_IN_BUILTIN_MIC);
-#ifdef QCOM_USBAUDIO_ENABLED
-        } else if ((devices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET ) ||
-                  (devices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET )) {
-            devices = devices | (AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET |
-                      AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET);
-#endif
-        } else if (devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
-            devices = devices | (AudioSystem::DEVICE_OUT_AUX_DIGITAL |
-                      AudioSystem::DEVICE_IN_AUX_DIGITAL);
-        } else if ((devices & AudioSystem::DEVICE_OUT_PROXY) ||
-                  (devices & AudioSystem::DEVICE_IN_PROXY)) {
-            devices = devices | (AudioSystem::DEVICE_OUT_PROXY |
-                      AudioSystem::DEVICE_IN_PROXY);
-        } else if (devices & AudioSystem::DEVICE_OUT_ALL_A2DP) {
-            ALOGE("getDevices:: Invalid A2DP Combination for mode %d", mode);
+uint32_t ALSADevice::updateDevices(const char * use_case, uint32_t devices) {
+    if (strncmp(use_case, SND_USE_CASE_MOD_PLAY_VOIP,
+               strlen(SND_USE_CASE_MOD_PLAY_VOIP)) &&
+        strncmp(use_case, SND_USE_CASE_VERB_IP_VOICECALL,
+               strlen(SND_USE_CASE_VERB_IP_VOICECALL))) {
+        ALOGD("devices = %x mHardwarePlatform = %d", devices, mHardwarePlatform);
+        if ((devices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET) ||
+             (devices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET)) {
+           devices &= ~(AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET);
+           devices |= (AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET);
+           if(mHardwarePlatform == DTV_PLATFORM)
+               devices |= AudioSystem::DEVICE_OUT_SPEAKER;
+           else
+               devices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+           if (getUseCaseType(use_case) == USECASE_TYPE_TX)
+               devices = devices & AudioSystem::DEVICE_IN_ALL;
+           else
+               devices = devices & AudioSystem::DEVICE_OUT_ALL;
         }
     }
 
-    *rxDevice = getUCMDevice(devices & AudioSystem::DEVICE_OUT_ALL, 0);
-    *txDevice = getUCMDevice(devices & AudioSystem::DEVICE_IN_ALL, 1);
+    if ((devices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET) ||
+        (devices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET)) {
+        devices &= ~(AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET);
+        devices |= (AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET);
+    }
+
+    return devices;
+}
+
+int ALSADevice::getDevices(uint32_t devices, char **rxDevice, char **txDevice)
+{
+    ALOGV("%s: device %x", __FUNCTION__, devices);
+
+    if ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
+        (devices & AudioSystem::DEVICE_IN_WIRED_HEADSET)) {
+        devices = devices | (AudioSystem::DEVICE_OUT_WIRED_HEADSET |
+                  AudioSystem::DEVICE_IN_WIRED_HEADSET);
+    } else if (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE) {
+        devices = devices | (AudioSystem::DEVICE_OUT_WIRED_HEADPHONE |
+                  AudioSystem::DEVICE_IN_BUILTIN_MIC);
+    } else if ((devices & AudioSystem::DEVICE_OUT_EARPIECE) ||
+              (devices & AudioSystem::DEVICE_IN_BUILTIN_MIC)) {
+        devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
+                  AudioSystem::DEVICE_OUT_EARPIECE);
+    } else if (devices & AudioSystem::DEVICE_OUT_SPEAKER) {
+        devices = devices | (AudioSystem::DEVICE_IN_DEFAULT |
+                   AudioSystem::DEVICE_OUT_SPEAKER);
+    } else if ((devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO) ||
+               (devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO_HEADSET) ||
+               (devices & AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET)) {
+        devices = devices | (AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET |
+                  AudioSystem::DEVICE_OUT_BLUETOOTH_SCO);
+    } else if ((devices & AudioSystem::DEVICE_OUT_ANC_HEADSET) ||
+               (devices & AudioSystem::DEVICE_IN_ANC_HEADSET)) {
+        devices = devices | (AudioSystem::DEVICE_OUT_ANC_HEADSET |
+                  AudioSystem::DEVICE_IN_ANC_HEADSET);
+    } else if (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE) {
+        devices = devices | (AudioSystem::DEVICE_OUT_ANC_HEADPHONE |
+                  AudioSystem::DEVICE_IN_BUILTIN_MIC);
+#ifdef QCOM_USBAUDIO_ENABLED
+    } else if ((devices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) ||
+             (devices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)) {
+        devices |= AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET;
+        if(mHardwarePlatform == DTV_PLATFORM)
+            devices |= AudioSystem::DEVICE_OUT_SPEAKER;
+        else
+            devices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+#endif
+    } else if (devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+        devices = devices | (AudioSystem::DEVICE_OUT_AUX_DIGITAL |
+                  AudioSystem::DEVICE_IN_AUX_DIGITAL);
+    } else if ((devices & AudioSystem::DEVICE_OUT_PROXY) ||
+              (devices & AudioSystem::DEVICE_IN_PROXY)) {
+        devices = devices | (AudioSystem::DEVICE_OUT_PROXY |
+                  AudioSystem::DEVICE_IN_PROXY);
+    } else if (devices & AudioSystem::DEVICE_OUT_ALL_A2DP) {
+        ALOGE("getDevices:: Invalid A2DP Combination");
+    }
+    if(rxDevice != NULL)
+        *rxDevice = getUCMDevice(devices & AudioSystem::DEVICE_OUT_ALL, 0);
+    if(txDevice != NULL)
+        *txDevice = getUCMDevice(devices & AudioSystem::DEVICE_IN_ALL, 1);
 
     return devices;
 }
@@ -1990,18 +2029,20 @@ int ALSADevice::setUseCase(alsa_handle_t *handle, bool bIsUseCaseSet)
 {
     char altUseCase[MAX_STR_LEN] = "";
     int ret = 0;
+    uint32_t devices;
 
     // check for Conflicts if usecase is already set
     ALOGD("setUseCase device = %d", handle->activeDevice);
     if (!bIsUseCaseSet) {
         ret = checkAndGetAvailableUseCase(handle, altUseCase);
-        if (ret > 0 && altUseCase[0] != '\0'){
+        if (ret > 0 && altUseCase[0] != '\0') {
             strlcpy(handle->useCase, altUseCase, sizeof(handle->useCase));
         } else if (ret < 0) {
             ALOGV("no valid match for usecase found,req usecase %s", handle->useCase);
             return -1;
         }
     }
+    handle->devices = handle->activeDevice = updateDevices(handle->useCase, handle->devices);
     enableDevice(handle, bIsUseCaseSet);
 
    return 0;
