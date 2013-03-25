@@ -37,6 +37,8 @@ public:
 
         virtual void setPhoneState(int state);
 
+        virtual audio_devices_t getDeviceForInputSource(int inputSource);
+
         virtual ~AudioPolicyManager() {}
 
 };
