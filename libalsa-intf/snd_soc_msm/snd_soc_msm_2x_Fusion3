@@ -3062,6 +3062,7 @@ SectionModifier
 	# ALSA PCMs
 	PlaybackPCM 5
 	CapturePCM 6
+EndSection
 SectionModifier
         Name "Play Music2"
 
