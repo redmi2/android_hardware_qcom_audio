@@ -3991,6 +3991,21 @@ SectionDevice
 EndSection
 
 SectionDevice
+        Name "USB PROXY Rx"
+        Comment "USB Rx device"
+
+        EnableSequence
+        EndSequence
+
+        DisableSequence
+        EndSequence
+
+        ACDBID  18:1
+        EffectsMixerCTL "SRS SS3D HDMI"
+
+EndSection
+
+SectionDevice
 	Name "HDMI SPDIF"
 	Comment "HDMI + SPDIF Rx combo device"
 
@@ -4739,6 +4754,20 @@ SectionDevice
 
 EndSection
 
+SectionDevice
+        Name "SPEAKER USB PROXY Tx"
+
+        EnableSequence
+        EndSequence
+
+        DisableSequence
+        EndSequence
+
+       ACDBID       44:2
+       EffectsMixerCTL "SRS SS3D"
+
+EndSection
+
 SectionModifier
 	Name "Play Music"
 	Comment "Modifier for music playback"
@@ -5436,6 +5465,57 @@ SectionModifier
 	# ALSA PCMs
 	PlaybackPCM 3
 	CapturePCM 3
+
+EndSection
+
+SectionModifier
+        Name "Play VOIPUSB PROXY Rx"
+
+        EnableSequence
+        EndSequence
+
+        DisableSequence
+                'HDMI_RX_Voice Mixer Voip':1:0
+		'Voip_Tx Mixer AFE_PCM_TX_Voip':1:0
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 3
+        CapturePCM 3
+
+EndSection
+
+SectionModifier
+        Name "Play VOIPUSB PROXY Tx"
+
+        EnableSequence
+                'HDMI_RX_Voice Mixer Voip':1:1
+		'Voip_Tx Mixer AFE_PCM_TX_Voip':1:1
+        EndSequence
+
+        DisableSequence
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 3
+        CapturePCM 3
+
+EndSection
+
+SectionModifier
+        Name "Play VOIPSPEAKER USB PROXY Tx"
+
+        EnableSequence
+		'SLIM_0_RX_Voice Mixer Voip':1:1
+                'Voip_Tx Mixer AFE_PCM_TX_Voip':1:1
+        EndSequence
+
+        DisableSequence
+        EndSequence
+
+        # ALSA PCMs
+        PlaybackPCM 3
+        CapturePCM 3
 
 EndSection
 

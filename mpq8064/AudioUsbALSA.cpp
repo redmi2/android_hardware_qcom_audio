@@ -413,12 +413,18 @@ void AudioUsbALSA::RecordingThreadEntry() {
     u_int8_t *srcUsb_addr = NULL;
     u_int8_t *dstProxy_addr = NULL;
     int err;
+    int attempts = 0;
     const char *fn = "/data/RecordPcm.pcm";
     filed = open(fn, O_WRONLY | O_CREAT | O_TRUNC | O_APPEND, 0664);
     pfdProxyRecording[0].fd = -1;
     pfdUsbRecording[0].fd = -1 ;
+    do {
+        err = getCap((char *)"Capture:", mchannelsCapture, msampleRateCapture);
+        if (!err)
+           break;
+        usleep(100000);
+    } while(attempts++ < 5);
 
-    err = getCap((char *)"Capture:", mchannelsCapture, msampleRateCapture);
     if (err) {
         ALOGE("ERROR: Could not get capture capabilities from usb device");
         return;

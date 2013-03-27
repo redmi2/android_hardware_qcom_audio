@@ -509,7 +509,7 @@ void AudioHardwareALSA::closeUsbRecordingIfNothingActive(){
     ALOGV("closeUsbRecordingIfNothingActive, musbRecordingState: %d", musbRecordingState);
     if(!musbRecordingState && mAudioUsbALSA != NULL) {
         ALOGD("Closing USB Recording Session as no stream is active");
-        mAudioUsbALSA->setkillUsbRecordingThread(true);
+        mAudioUsbALSA->exitRecordingThread(SIGNAL_EVENT_KILLTHREAD);
     }
 }
 
@@ -732,37 +732,29 @@ status_t AudioHardwareALSA::doRouting(int device)
     else if(!(device & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET) &&
             !(device & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET) &&
             !(device & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) &&
-             (musbPlaybackState || musbRecordingState)){
-                //USB unplugged
-                mALSADevice->route((uint32_t)device, newMode);
-                ALOGD("USB UNPLUGGED, setting musbPlaybackState to 0");
-                closeUSBRecording();
-                closeUSBPlayback();
+             (musbPlaybackState || musbRecordingState)) {
+        //USB unplugged
+        mALSADevice->route((uint32_t)device, newMode);
+        ALOGD("USB UNPLUGGED, setting musbPlaybackState to 0");
+        closeUSBRecording();
+        closeUSBPlayback();
     } else if((device & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
-                  (device & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)){
-                    ALOGD("Routing everything to prox now");
-                    ALSAHandleList::iterator it;
-                    if (device != mCurDevice) {
-                        if(musbPlaybackState)
-                            closeUSBPlayback();
-                    }
-                    mALSADevice->route((uint32_t)device, newMode);
+              (device & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET) ||
+              (device & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET)) {
+        ALSAHandleList::iterator it;
 
-                    for(it = mDeviceList.begin(); it != mDeviceList.end(); ++it) {
-                        if((!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
-                                   (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL))) {
-                                    ALOGD("doRouting: Tunnel Player device switch to proxy");
-                                    startUsbPlaybackIfNotStarted();
-                                    musbPlaybackState |= USBPLAYBACKBIT_TUNNEL;
-                                    break;
-                        } else if((!strcmp(it->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO)) ||
-                                 (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_FM))) {
-                                    ALOGD("doRouting: FM device switch to proxy");
-                                    startUsbPlaybackIfNotStarted();
-                                    musbPlaybackState |= USBPLAYBACKBIT_FM;
-                                    break;
-                        }
-                    }
+        ALOGD("Starting UsbRecording thread");
+        for(it = mDeviceList.begin(); it != mDeviceList.end(); ++it) {
+            if((!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_VOIP, MAX_UC_LEN))) {
+                ALOGD("doRouting: Tunnel Player device switch to proxy");
+                startUsbRecordingIfNotStarted();
+                musbRecordingState |= USBRECBIT_VOIPCALL;
+            } else if(!strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC, MAX_UC_LEN)) {
+                startUsbRecordingIfNotStarted();
+                musbRecordingState |= USBRECBIT_REC;
+            }
+        }
+        mALSADevice->route((uint32_t)device, newMode);
     }
 #endif
     else {

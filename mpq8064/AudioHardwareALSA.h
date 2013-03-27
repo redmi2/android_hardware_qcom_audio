@@ -353,7 +353,8 @@ private:
     status_t    setMixerControl(const char *name, unsigned int value, int index);
     status_t    setMixerControl(const char *name, const char *value);
     status_t    setMixerControlExt(const char *name, int count, char **setValues);
-    int         getDevices(uint32_t devices, uint32_t mode,
+    uint32_t    updateDevices(const char *use_case, uint32_t devices);
+    int         getDevices(uint32_t devices,
                                     char **rxDevice, char **txDevice);
     int         getDeviceType(uint32_t devices, uint32_t mode);
     void        enableDevice(alsa_handle_t *handle, bool bIsUseCaseSet);
@@ -369,7 +370,7 @@ private:
     int         btsco_samplerate;
     int         callMode;
     int         mWMA_params[8];
-
+    int         mHardwarePlatform;
     struct mixer*  mMixer;
     ALSAUseCaseList mUseCaseList;
     ALSAHandleList  *mDeviceList;
@@ -391,6 +392,10 @@ private:
         struct pollfd mPfdProxy[NUM_FDS];
         long mFrames;
         long mBufferTime;
+    };
+    enum {
+       DTV_PLATFORM = 0,
+       DEFAULT_PLATFORM,
     };
     struct proxy_params mProxyParams;
 };
