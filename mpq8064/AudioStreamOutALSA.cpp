@@ -199,11 +199,11 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
             write_pending = period_size;
         }
         if((mParent->mVoipStreamCount) && (mHandle->rxHandle != 0)) {
-            n = pcm_write(mHandle->rxHandle,
+            n = mParent->hw_pcm_write(mHandle->rxHandle,
                      (char *)buffer + sent,
                       period_size);
         } else if (mHandle->handle != 0){
-            n = pcm_write(mHandle->handle,
+            n = mParent->hw_pcm_write(mHandle->handle,
                      (char *)buffer + sent,
                       period_size);
         }
