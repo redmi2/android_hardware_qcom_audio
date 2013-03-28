@@ -801,7 +801,7 @@ protected:
     void                setInChannels(int device);
 
     void                disableVoiceCall(char* verb, char* modifier, int mode, int device);
-    void                enableVoiceCall(char* verb, char* modifier, int mode, int device);
+    status_t            enableVoiceCall(char* verb, char* modifier, int mode, int device);
     bool                routeVoiceCall(int device, int	newMode);
     bool                routeVoLTECall(int device, int newMode);
     bool                routeSGLTECall(int device, int newMode);
