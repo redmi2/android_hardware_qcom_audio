@@ -36,6 +36,7 @@ extern "C" {
 #include "alsa_ucm.h"
 #include "alsa_audio.h"
 #include <pthread.h>
+#include <stdbool.h>
 #define SND_UCM_END_OF_LIST "end"
 
 /* ACDB Device ID macros */
@@ -171,6 +172,7 @@ struct snd_use_case_mgr {
     int current_rx_device;
     card_ctxt_t *card_ctxt_ptr;
     pthread_t thr;
+    bool isFusion3Platform;
 };
 
 #define MAX_NUM_CARDS (sizeof(card_list)/sizeof(char *))
