@@ -192,12 +192,14 @@ AudioBroadcastStreamALSA::~AudioBroadcastStreamALSA()
             free(mPcmWriteTempBuffer);
     }
 
-    if(mCompreRxHandle) {
+    if(mCompreRxHandle)
         closeDevice(mCompreRxHandle);
-        if(mCompreWriteTempBuffer)
-            free(mCompreWriteTempBuffer);
-    }
 
+    if(mSecCompreRxHandle)
+        closeDevice(mSecCompreRxHandle);
+
+    if(mCompreWriteTempBuffer)
+        free(mCompreWriteTempBuffer);
     if (mRouteAudioToA2dp) {
         ALOGD("stopA2dpPlayback_l for broadcast usecase %x", mA2dpUseCase);
         status_t status = mParent->stopA2dpPlayback_l(mA2dpUseCase);
@@ -453,6 +455,10 @@ status_t AudioBroadcastStreamALSA::standby()
         mCompreRxHandle->module->standby(mCompreRxHandle);
     }
 
+    if(mSecCompreRxHandle) {
+        mSecCompreRxHandle->module->standby(mSecCompreRxHandle);
+    }
+
     if(mPcmTxHandle) {
         mPcmTxHandle->module->standby(mPcmTxHandle);
         mALSADevice->removeUseCase(mPcmTxHandle, "MI2S");
@@ -534,10 +540,14 @@ void AudioBroadcastStreamALSA::initialization()
     mBufferSize        = DEFAULT_BUFFER_SIZE;
     mStreamVol         = 0x2000;
     mPowerLock         = false;
-    hw_ptr             = 0;
+    hw_ptr[0]          = 0;
+    hw_ptr[1]          = 0;
+    mSecDevices        = 0;
+    mPCMDevices        = 0;
     // device handles
     mPcmRxHandle       = NULL;
     mCompreRxHandle    = NULL;
+    mSecCompreRxHandle = NULL;
     mPcmTxHandle       = NULL;
     mCompreTxHandle    = NULL;
     mCaptureHandle     = NULL;
@@ -554,6 +564,7 @@ void AudioBroadcastStreamALSA::initialization()
     mRoutePCMMChToDSP        = false;
     mUseMS11Decoder          = false;
     mUseTunnelDecoder        = false;
+    mUseDualTunnel           = false;
     mDtsTranscode            = false;
     mRoutePcmAudio           = false;
     mRoutingSetupDone        = false;
@@ -667,6 +678,8 @@ void AudioBroadcastStreamALSA::setCaptureFlagsBasedOnConfig()
 
 void AudioBroadcastStreamALSA::setRoutingFlagsBasedOnConfig()
 {
+    mUseDualTunnel = false;
+    mSecDevices = 0;
     mCaptureFromProxy = false;
     if(mAudioSource == QCOM_AUDIO_SOURCE_ANALOG_BROADCAST) {
         mRoutePCMStereoToDSP = true;
@@ -683,7 +696,7 @@ void AudioBroadcastStreamALSA::setRoutingFlagsBasedOnConfig()
             } else {
                 mRoutePCMMChToDSP = true;
 //                mUseMS11Decoder = true;
-// NOTE: enable this is compressed AC3 data is required over SPDIF/HDMI 
+// NOTE: enable this is compressed AC3 data is required over SPDIF/HDMI
             }
         } else {
             if(mFormat == AudioSystem::AC3 || mFormat == AudioSystem::AC3_PLUS ||
@@ -715,7 +728,13 @@ void AudioBroadcastStreamALSA::setRoutingFlagsBasedOnConfig()
         mCaptureFromProxy = true;
 
     setSpdifHdmiRoutingFlags(mDevices);
-
+    mPCMDevices = mDevices;
+    if(mSpdifFormat == COMPRESSED_FORMAT) {
+        mPCMDevices &= ~AudioSystem::DEVICE_OUT_SPDIF;
+    }
+    if(mHdmiFormat == COMPRESSED_FORMAT) {
+        mPCMDevices &= ~AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+    }
     if((((mSpdifFormat == PCM_FORMAT) ||
        (mSpdifFormat == COMPRESSED_FORCED_PCM_FORMAT)) &&
        (mDevices & (AudioSystem::DEVICE_OUT_SPDIF))) ||
@@ -727,9 +746,20 @@ void AudioBroadcastStreamALSA::setRoutingFlagsBasedOnConfig()
              AudioSystem::DEVICE_OUT_AUX_DIGITAL)))) {
         mRoutePcmAudio = true;
     }
-    if(mUseTunnelDecoder)
+    if(mUseTunnelDecoder) {
         mRoutePcmAudio = false;
+        mPCMDevices = 0;
+    }
 
+    if((mDevices & AudioSystem::DEVICE_OUT_SPDIF) &&
+        (mDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) && (mSpdifFormat != mHdmiFormat))
+        mUseDualTunnel=true;
+
+    if(mSpdifFormat == COMPRESSED_FORMAT)
+        mSecDevices |= AudioSystem::DEVICE_OUT_SPDIF;
+    if(mHdmiFormat == COMPRESSED_FORMAT)
+        mSecDevices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+    ALOGD("mPCMDevices = 0x%x, mUseDualTunnel = %d, mSecDevices = 0x%x", mPCMDevices, mUseDualTunnel, mSecDevices);
     return;
 }
 
@@ -968,15 +998,6 @@ status_t AudioBroadcastStreamALSA::openPcmDevice(int devices)
     char *use_case;
     status_t status = NO_ERROR;
 
-    if(mSpdifFormat == COMPRESSED_FORMAT) {
-        devices = devices & ~AudioSystem::DEVICE_OUT_SPDIF;
-    }
-    if(mHdmiFormat == COMPRESSED_FORMAT) {
-        devices = devices & ~AudioSystem::DEVICE_OUT_AUX_DIGITAL;
-    }
-    if(mCaptureFromProxy) {
-        devices = AudioSystem::DEVICE_OUT_PROXY;
-    }
     status = setPlaybackFormat();
     if(status != NO_ERROR) {
         ALOGE("setPlaybackFormat Failed");
@@ -1109,6 +1130,7 @@ status_t AudioBroadcastStreamALSA::openTunnelDevice(int devices)
 {
     ALOGV("openTunnelDevice");
     char *use_case;
+    use_case = NULL;
     status_t status = NO_ERROR;
     if(mCaptureFromProxy) {
         devices = AudioSystem::DEVICE_OUT_PROXY;
@@ -1120,16 +1142,16 @@ status_t AudioBroadcastStreamALSA::openTunnelDevice(int devices)
         ALOGE("setPlaybackFormat Failed");
         return BAD_VALUE;
     }
-    if (devices & ~mTranscodeDevices) {
-        hw_ptr = 0;
+    if (mCompreRxHandle == NULL && (devices & ~mSecDevices & ~mTranscodeDevices)) {
+        hw_ptr[0] = 0;
         snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
         if ((use_case == NULL) || (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
                 strlen(SND_USE_CASE_VERB_INACTIVE)))) {
             status = openRoutingDevice(SND_USE_CASE_VERB_HIFI_TUNNEL2, true,
-                         devices & ~mTranscodeDevices);
+                         devices & ~mSecDevices & ~mTranscodeDevices);
         } else {
             status = openRoutingDevice(SND_USE_CASE_MOD_PLAY_TUNNEL2, false,
-                         devices & ~mTranscodeDevices);
+                         devices & ~mSecDevices & ~mTranscodeDevices);
         }
         ALSAHandleList::iterator it = mParent->mDeviceList.end(); it--;
         mCompreRxHandle = &(*it);
@@ -1157,28 +1179,64 @@ status_t AudioBroadcastStreamALSA::openTunnelDevice(int devices)
         mALSADevice->setUseCase(mTranscodeHandle, false);
         mALSADevice->configureTranscode(mTranscodeHandle);
     }
-    if(use_case) {
+    if(use_case != NULL) {
         free(use_case);
         use_case = NULL;
     }
     if(status != NO_ERROR) {
         return status;
     }
-    if (devices & ~mTranscodeDevices) {
+    if (mCompreRxHandle !=NULL && (devices & ~mSecDevices & ~mTranscodeDevices)) {
         //prepare the driver for playback
         status = pcm_prepare(mCompreRxHandle->handle);
         if (status) {
             ALOGE("PCM Prepare failed - playback err = %d", status);
             return status;
         }
-        bufferAlloc(mCompreRxHandle);
+        bufferAlloc(mCompreRxHandle, DECODEQUEUEINDEX);
         mBufferSize = mCompreRxHandle->periodSize;
+    }
+    //Check and open if Secound Tunnel is also required
+    if(mSecCompreRxHandle == NULL && mSecDevices) {
+        hw_ptr[1] = 0;
+        ALOGE("opening passthrough session");
+        snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
+        if ((use_case == NULL) || (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
+                                 strlen(SND_USE_CASE_VERB_INACTIVE)))) {
+            status = openRoutingDevice(SND_USE_CASE_VERB_HIFI_TUNNEL2, true, mSecDevices);
+        } else {
+            status = openRoutingDevice(SND_USE_CASE_MOD_PLAY_TUNNEL2, false, mSecDevices);
+        }
+        if(use_case) {
+            free(use_case);
+            use_case = NULL;
+        }
+        if(status != NO_ERROR) {
+            return status;
+        }
+        ALSAHandleList::iterator it = mParent->mDeviceList.end(); it--;
+        mSecCompreRxHandle = &(*it);
+        //mmap the buffers for second playback
+        status_t err = mmap_buffer(mSecCompreRxHandle->handle);
+        if(err) {
+            ALOGE("MMAP buffer failed - playback err = %d", err);
+            return err;
+        }
+        //prepare the driver for second playback
+        status = pcm_prepare(mSecCompreRxHandle->handle);
+        if (status) {
+            ALOGE("PCM Prepare failed - playback err = %d", err);
+            return status;
+        }
+        bufferAlloc(mSecCompreRxHandle, PASSTHRUQUEUEINDEX);
+        if(mCompreRxHandle == NULL) mBufferSize = mSecCompreRxHandle->periodSize;
+        ALOGD("Buffer allocated");
+    }
+    if (devices && mCompreWriteTempBuffer == NULL) {
+        mCompreWriteTempBuffer = (char *) malloc(mBufferSize);
         if (mCompreWriteTempBuffer == NULL) {
-            mCompreWriteTempBuffer = (char *) malloc(mBufferSize);
-            if (mCompreWriteTempBuffer == NULL) {
-                ALOGE("Memory allocation of temp buffer to write pcm to driver failed");
-                return BAD_VALUE;
-            }
+            ALOGE("Memory allocation of temp buffer to write pcm to driver failed");
+            return BAD_VALUE;
         }
     }
 
@@ -1246,15 +1304,21 @@ status_t AudioBroadcastStreamALSA::openRoutingDevice(char *useCase,
         if (mUseMS11Decoder == true)
             alsa_handle.type = COMPRESSED_PASSTHROUGH_FORMAT;
         else if (mFormat == AUDIO_FORMAT_DTS || mFormat == AUDIO_FORMAT_DTS_LBR) {
-            if (((mSpdifFormat == COMPRESSED_FORMAT) &&
-                (mDevices & (AudioSystem::DEVICE_OUT_SPDIF))) ||
-                ((mHdmiFormat == COMPRESSED_FORMAT) &&
-                (mDevices & (AudioSystem::DEVICE_OUT_AUX_DIGITAL))))
-                alsa_handle.type = COMPRESSED_PASSTHROUGH_FORMAT;
+            if(mUseDualTunnel) {
+                if(((mSpdifFormat == COMPRESSED_FORMAT) || (mHdmiFormat == COMPRESSED_FORMAT))
+                    && devices == mSecDevices)
+                    alsa_handle.type = COMPRESSED_PASSTHROUGH_FORMAT;
+                else
+                    alsa_handle.type = COMPRESSED_FORMAT;
+            }
+            else if (((mSpdifFormat == COMPRESSED_FORMAT) &&
+                    (mDevices & (AudioSystem::DEVICE_OUT_SPDIF))) ||
+                    ((mHdmiFormat == COMPRESSED_FORMAT) &&
+                    (mDevices & (AudioSystem::DEVICE_OUT_AUX_DIGITAL))))
+                    alsa_handle.type = COMPRESSED_PASSTHROUGH_FORMAT;
             else
                 alsa_handle.type = COMPRESSED_FORMAT;
-        } else
-            alsa_handle.type = COMPRESSED_FORMAT;
+        }
     }
     else
        alsa_handle.type = PCM_FORMAT;
@@ -1391,12 +1455,29 @@ void AudioBroadcastStreamALSA::allocatePlaybackPollFd()
 {
     ALOGV("allocatePlaybackPollFd");
     if(mPlaybackfd == -1) {
-        mPlaybackPfd[0].fd     = mCompreRxHandle->handle->timer_fd;
-        mPlaybackPfd[0].events = POLLIN | POLLERR | POLLNVAL;
+        if (mCompreRxHandle) {
+            mPlaybackPfd[0].fd     = mCompreRxHandle->handle->timer_fd;
+            mPlaybackPfd[0].events = POLLIN | POLLERR | POLLNVAL;
+        }
+        else {
+            mPlaybackPfd[0].fd = -1;
+            mPlaybackPfd[0].events = (POLLIN | POLLERR | POLLNVAL);
+                ALOGV("poll fd0 set to -1");
+        }
+        if (mSecCompreRxHandle) {
+            mPlaybackPfd[2].fd = mSecCompreRxHandle->handle->timer_fd;
+            mPlaybackPfd[2].events = (POLLIN | POLLERR | POLLNVAL);
+            ALOGV("poll fd2 set to valid mSecCompreRxHandle fd =%d \n", mPlaybackPfd[2].fd);
+        }
+        else {
+            mPlaybackPfd[2].fd = -1;
+            mPlaybackPfd[2].events = (POLLIN | POLLERR | POLLNVAL);
+                ALOGV("poll fd2 set to -1");
+        }
         mPlaybackfd            = eventfd(0,0);
         mPlaybackPfd[1].fd     = mPlaybackfd;
         mPlaybackPfd[1].events = POLLIN | POLLERR | POLLNVAL;
-        ALOGD("mPlaybackPfd[0].fd %d mPlaybackPfd[1].fd %d", mPlaybackPfd[0].fd, mPlaybackPfd[1].fd);
+        ALOGD("mPlaybackPfd[0].fd %d mPlaybackPfd[1].fd %d mPlaybackPfd[2].fd %d", mPlaybackPfd[0].fd, mPlaybackPfd[1].fd, mPlaybackPfd[2].fd);
     }
 }
 
@@ -1561,29 +1642,18 @@ status_t AudioBroadcastStreamALSA::doRoutingSetup()
     if(mTimeStampModeSet)
         mOutputMetadataLength = sizeof(output_metadata_handle_t);
     if(mRoutePcmAudio) {
-        status = openPcmDevice(mDevices);
+        ALOGV("Open pcm session, mPCMDevices = 0x%x", mPCMDevices);
+        status = openPcmDevice(mPCMDevices);
         if(status != NO_ERROR) {
             ALOGE("PCM device open failure");
             return status;
         }
     }
-    if((mUseTunnelDecoder) ||
-       ((mSpdifFormat == COMPRESSED_FORMAT) && (mDevices & (AudioSystem::DEVICE_OUT_SPDIF))) ||
-       ((mHdmiFormat == COMPRESSED_FORMAT) && (mDevices & (AudioSystem::DEVICE_OUT_AUX_DIGITAL)))) {
-        if((mSpdifFormat == COMPRESSED_FORMAT) &&
-           (mHdmiFormat == COMPRESSED_FORMAT))
-            devices = AudioSystem::DEVICE_OUT_SPDIF |
-                         AudioSystem::DEVICE_OUT_AUX_DIGITAL;
-        else if(mSpdifFormat == COMPRESSED_FORMAT)
-            devices = AudioSystem::DEVICE_OUT_SPDIF;
-        else if(mHdmiFormat == COMPRESSED_FORMAT)
-            devices = AudioSystem::DEVICE_OUT_AUX_DIGITAL;
-        else
-            devices = mDevices;
+    if(mUseTunnelDecoder || mSecDevices) {
         if(mCaptureFromProxy)
             devices |= AudioSystem::DEVICE_OUT_PROXY;
         if(mFormat != AUDIO_FORMAT_WMA && mFormat != AUDIO_FORMAT_WMA_PRO) {
-            status = openTunnelDevice(devices);
+            status = openTunnelDevice(devices & ~ mPCMDevices);
             if(status != NO_ERROR) {
                 ALOGE("Tunnel device open failure");
                 return status;
@@ -1613,6 +1683,8 @@ status_t AudioBroadcastStreamALSA::doRoutingSetup()
             handle = mPcmRxHandle;
         else if (mCompreRxHandle && (mCompreRxHandle->devices & AudioSystem::DEVICE_OUT_PROXY))
             handle = mCompreRxHandle;
+        else if (mSecCompreRxHandle && (mSecCompreRxHandle->devices & AudioSystem::DEVICE_OUT_PROXY))
+            handle = mSecCompreRxHandle;
         if (handle) {
             mA2dpUseCase = mParent->useCaseStringToEnum(handle->useCase);
             ALOGD("startA2dpPlayback_l - usecase %x", mA2dpUseCase);
@@ -1720,6 +1792,9 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
 {
     int err_poll = 0;
     int avail = 0;
+    bool freeBuffer = false;
+    bool mCompreCBk = false;
+    bool mSecCompreCBk = false;
     androidSetThreadPriority(gettid(), ANDROID_PRIORITY_AUDIO);
     prctl(PR_SET_NAME, (unsigned long)"HAL Audio EventThread", 0, 0, 0);
 
@@ -1734,9 +1809,10 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
     if(!mKillPlaybackThread)
         allocatePlaybackPollFd();
 
-    while(!mKillPlaybackThread && ((err_poll = poll(mPlaybackPfd, NUM_FDS, 3000)) >=0)) {
+    while(!mKillPlaybackThread && ((err_poll = poll(mPlaybackPfd, NUM_PLAYBACK_FDS, 3000)) >=0)) {
         ALOGD("pfd[0].revents = %d", mPlaybackPfd[0].revents);
         ALOGD("pfd[1].revents = %d", mPlaybackPfd[1].revents);
+        ALOGD("pfd[2].revents = %d", mPlaybackPfd[2].revents);
         if (err_poll == EINTR)
             ALOGE("Timer is intrrupted");
 
@@ -1766,73 +1842,124 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
         }
 
         struct snd_timer_tread rbuf[4];
-        read(mPlaybackPfd[0].fd, rbuf, sizeof(struct snd_timer_tread) * 4 );
-        if((mPlaybackPfd[0].revents & POLLERR) ||
-           (mPlaybackPfd[0].revents & POLLNVAL)) {
-            mPlaybackPfd[0].revents = 0;
-            mPlaybackPfd[1].revents = 0;
-            ALOGD("pfd 0 poll err");
-            mRoutingLock.unlock();
-            continue;
+        mCompreCBk = false;
+        mSecCompreCBk = false;
+        if (mCompreRxHandle) {
+            if (mPlaybackPfd[0].revents & POLLIN ) {
+                mPlaybackPfd[0].revents = 0;
+                read(mPlaybackPfd[0].fd, rbuf, sizeof(struct snd_timer_tread) * 4 );
+                mCompreCBk=true;
+                freeBuffer=true;
+                ALOGV("calling free compre buf");
+            }
         }
-
-        if (mPlaybackPfd[0].revents & POLLIN && !mKillPlaybackThread) {
-            mPlaybackPfd[0].revents = 0;
+        if (mSecCompreRxHandle) {
+            if (mPlaybackPfd[2].revents & POLLIN) {
+                read(mPlaybackPfd[2].fd, rbuf, sizeof(struct snd_timer_tread) * 4 );
+                mPlaybackPfd[2].revents = 0;
+                mSecCompreCBk=true;
+                freeBuffer=true;
+                ALOGV("calling free sec compre buf");
+            }
+        }
+        if(freeBuffer && !mKillPlaybackThread) {
             mPlaybackPfd[1].revents = 0;
             if (isSessionPaused) {
                 mRoutingLock.unlock();
                 continue;
             }
             ALOGV("After an event occurs");
-            {
-                Mutex::Autolock autoLock(mSyncLock);
-                mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN |
-                                                            SNDRV_PCM_SYNC_PTR_HWSYNC | SNDRV_PCM_SYNC_PTR_APPL);
-                sync_ptr(mCompreRxHandle->handle);
+            if(mCompreCBk) {
+                {
+                    Mutex::Autolock autoLock(mSyncLock);
+                    mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN |
+                        SNDRV_PCM_SYNC_PTR_HWSYNC | SNDRV_PCM_SYNC_PTR_APPL);
+                    sync_ptr(mCompreRxHandle->handle);
+                }
+                while(hw_ptr[0] < mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr) {
+                    if (mInputMemFilledQueue[0].empty()) {
+                        ALOGD("Filled queue is empty");
+                        break;
+                    }
+                    mInputMemMutex.lock();
+                    BuffersAllocated buf = *(mInputMemFilledQueue[0].begin());
+                    mInputMemFilledQueue[0].erase(mInputMemFilledQueue[0].begin());
+
+
+                    mInputMemEmptyQueue[0].push_back(buf);
+                    ALOGV("playback thread :Empty Queue[0] size() = %d, Filled Queue[0] size() = %d ",
+                        mInputMemEmptyQueue[0].size(), mInputMemFilledQueue[0].size());
+                    mInputMemMutex.unlock();
+                    hw_ptr[0] += mCompreRxHandle->bufferSize/(2*mCompreRxHandle->channels);
+                    {
+                        Mutex::Autolock autoLock(mSyncLock);
+                        mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN |
+                            SNDRV_PCM_SYNC_PTR_HWSYNC | SNDRV_PCM_SYNC_PTR_APPL);
+                        sync_ptr(mCompreRxHandle->handle);
+                    }
+                    ALOGD("hw_ptr[0] = %lld status.hw_ptr = %ld appl_ptr = %ld", hw_ptr[0], mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,
+                            mCompreRxHandle->handle->sync_ptr->c.control.appl_ptr);
+                }
             }
-            while(hw_ptr < mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr) {
-                if (mInputMemFilledQueue.empty()) {
+            if(mSecCompreCBk) {
+                {
+                    Mutex::Autolock autoLock(mSyncLock);
+                    mSecCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN |
+                        SNDRV_PCM_SYNC_PTR_HWSYNC | SNDRV_PCM_SYNC_PTR_APPL);
+                    sync_ptr(mSecCompreRxHandle->handle);
+                }
+                while(hw_ptr[1] < mSecCompreRxHandle->handle->sync_ptr->s.status.hw_ptr) {
+                if (mInputMemFilledQueue[1].empty()) {
                     ALOGD("Filled queue is empty");
                     break;
                 }
                 mInputMemMutex.lock();
-                BuffersAllocated buf = *(mInputMemFilledQueue.begin());
-                mInputMemFilledQueue.erase(mInputMemFilledQueue.begin());
-
-                if (mInputMemFilledQueue.empty() && mPlaybackReachedEOS) {
-                    ALOGE("Queue Empty");
-                    ALOGD("Audio Drain DONE ++");
-                    if ( ioctl(mCompreRxHandle->handle->fd, SNDRV_COMPRESS_DRAIN) < 0 ) {
-                        ALOGE("Audio Drain failed");
-                    }
-                    ALOGD("Audio Drain DONE --");
-                    //post the EOS To Player
-//NOTE: In Broadcast stream, EOS is not available yet. This can be for
-//      furture use
-                    if (mObserver)
-                        mObserver->postEOS(0);
-                }
-
-                mInputMemEmptyQueue.push_back(buf);
-
-                ALOGV("playback thread :Empty Queue size() = %d, Filled Queue size() = %d ",
-                     mInputMemEmptyQueue.size(), mInputMemFilledQueue.size());
+                BuffersAllocated buf = *(mInputMemFilledQueue[1].begin());
+                mInputMemFilledQueue[1].erase(mInputMemFilledQueue[1].begin());
+                mInputMemEmptyQueue[1].push_back(buf);
+                ALOGV("playback thread :Empty Queue[1] size() = %d, Filled Queue[1] size() = %d ",
+                    mInputMemEmptyQueue[1].size(), mInputMemFilledQueue[1].size());
                 mInputMemMutex.unlock();
-                mWriteCv.signal();
-                hw_ptr += mCompreRxHandle->bufferSize/(2*mCompreRxHandle->channels);
+                hw_ptr[1] += mSecCompreRxHandle->bufferSize/(2*mSecCompreRxHandle->channels);
                 {
                     Mutex::Autolock autoLock(mSyncLock);
-                    mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN |
-                                                                SNDRV_PCM_SYNC_PTR_HWSYNC | SNDRV_PCM_SYNC_PTR_APPL);
-                    sync_ptr(mCompreRxHandle->handle);
+                    mSecCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN |
+                                SNDRV_PCM_SYNC_PTR_HWSYNC | SNDRV_PCM_SYNC_PTR_APPL);
+                    sync_ptr(mSecCompreRxHandle->handle);
                 }
-                ALOGD("hw_ptr = %lld status.hw_ptr = %ld appl_ptr = %ld", hw_ptr, mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,
-                       mCompreRxHandle->handle->sync_ptr->c.control.appl_ptr);
-           }
+                ALOGD("hw_ptr[1] = %lld status.hw_ptr = %ld appl_ptr = %ld", hw_ptr[1], mSecCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,
+                    mSecCompreRxHandle->handle->sync_ptr->c.control.appl_ptr);
+                }
+            }
+            freeBuffer = false;
+            if ((mInputMemFilledQueue[0].empty() || mInputMemFilledQueue[1].empty()) && mPlaybackReachedEOS) {
+                ALOGE("Queue Empty");
+                if (mCompreRxHandle) {
+                    ALOGD("Audio Drain DONE1 ++");
+                    if ( ioctl(mCompreRxHandle->handle->fd, SNDRV_COMPRESS_DRAIN) < 0 ) {
+                        ALOGE("Audio Drain1 failed");
+                   }
+                   ALOGD("Audio Drain DONE1 --");
+                }
+                if (mSecCompreRxHandle) {
+                     ALOGD("Audio Drain DONE2 ++");
+                     if ( ioctl(mSecCompreRxHandle->handle->fd, SNDRV_COMPRESS_DRAIN) < 0 )
+                         ALOGE("Audio Drain2 failed");
+                     ALOGD("Audio Drain DONE2 --");
+                }
+                //post the EOS To Player
+                //NOTE: In Broadcast stream, EOS is not available yet. This can be for
+                //furture use
+                if (mObserver)
+                mObserver->postEOS(0);
+            }
+            else
+                mWriteCv.signal();
         } else {
             ALOGD("No event");
             mPlaybackPfd[0].revents = 0;
             mPlaybackPfd[1].revents = 0;
+            mPlaybackPfd[2].revents = 0;
         }
         mRoutingLock.unlock();
     }
@@ -1924,7 +2051,7 @@ status_t AudioBroadcastStreamALSA::closeDevice(alsa_handle_t *pHandle)
     return status;
 }
 
-void AudioBroadcastStreamALSA::bufferAlloc(alsa_handle_t *handle)
+void AudioBroadcastStreamALSA::bufferAlloc(alsa_handle_t *handle, int bufIndex)
 {
     void  *mem_buf = NULL;
     int i = 0;
@@ -1934,27 +2061,25 @@ void AudioBroadcastStreamALSA::bufferAlloc(alsa_handle_t *handle)
     int32_t nSize = local_handle->period_size;
     ALOGV("number of input buffers = %d", mInputBufferCount);
     ALOGV("memBufferAlloc calling with required size %d", nSize);
-    mInputBufPool.clear();
-    mInputMemEmptyQueue.clear();
-    mInputMemFilledQueue.clear();
+    mInputBufPool[bufIndex].clear();
+    mInputMemEmptyQueue[bufIndex].clear();
+    mInputMemFilledQueue[bufIndex].clear();
     for (i = 0; i < mInputBufferCount; i++) {
         mem_buf = (int32_t *)local_handle->addr + (nSize * i/sizeof(int));
         BuffersAllocated buf(mem_buf, nSize);
         memset(buf.memBuf, 0x0, nSize);
-        mInputMemEmptyQueue.push_back(buf);
-        mInputBufPool.push_back(buf);
+        mInputMemEmptyQueue[bufIndex].push_back(buf);
+        mInputBufPool[bufIndex].push_back(buf);
         ALOGD("MEM that is allocated - buffer is %x", (unsigned int)mem_buf);
     }
 }
 
-void AudioBroadcastStreamALSA::bufferDeAlloc()
+void AudioBroadcastStreamALSA::bufferDeAlloc(int bufIndex)
 {
-    while (!mInputBufPool.empty()) {
-        List<BuffersAllocated>::iterator it = mInputBufPool.begin();
-        BuffersAllocated &memBuffer = *it;
-        ALOGD("Removing input buffer from Buffer Pool ");
-        mInputBufPool.erase(it);
-    }
+    ALOGD("Removing input buffer from Buffer Pool ");
+    mInputMemFilledQueue[bufIndex].clear();
+    mInputMemEmptyQueue[bufIndex].clear();
+    mInputBufPool[bufIndex].clear();
 }
 
 /******************************************************************************
@@ -1989,13 +2114,26 @@ int32_t AudioBroadcastStreamALSA::writeToCompressedDriver(char *buffer, int byte
     int n = 0;
     mPlaybackCv.signal();
     mInputMemMutex.lock();
+    if(mCompreRxHandle) {
+        ALOGD("write Empty Queue[0] size() = %d, Filled Queue[0] size() = %d ",
+              mInputMemEmptyQueue[0].size(), mInputMemFilledQueue[0].size());
+    }
+    if(mSecCompreRxHandle){
+        ALOGD("write Empty Queue[1] size() = %d, Filled Queue[1] size() = %d ",
+              mInputMemEmptyQueue[1].size(), mInputMemFilledQueue[1].size());
+    }
 
-    ALOGV("write Empty Queue size() = %d, Filled Queue size() = %d ",
-              mInputMemEmptyQueue.size(), mInputMemFilledQueue.size());
-    if (mInputMemEmptyQueue.empty()) {
+    if ((mCompreRxHandle!=NULL && mInputMemEmptyQueue[0].empty()) ||
+            (mSecCompreRxHandle!=NULL && mInputMemEmptyQueue[1].empty())) {
         ALOGD("Write: waiting on mWriteCv");
-        ALOGD("hw_ptr = %lld status.hw_ptr = %ld appl_ptr = %ld", hw_ptr, mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,
-                  mCompreRxHandle->handle->sync_ptr->c.control.appl_ptr);
+        if(mCompreRxHandle) {
+            ALOGD("hw_ptr[0] = %lld status.hw_ptr = %ld appl_ptr = %ld", hw_ptr[0], mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,
+                      mCompreRxHandle->handle->sync_ptr->c.control.appl_ptr);
+        }
+        if(mSecCompreRxHandle) {
+            ALOGD("hw_ptr[1] = %lld status.hw_ptr = %ld appl_ptr = %ld", hw_ptr[1], mSecCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,
+                      mSecCompreRxHandle->handle->sync_ptr->c.control.appl_ptr);
+        }
         mLock.unlock();
         mWriteCvMutex.lock();
         mInputMemMutex.unlock();
@@ -2011,36 +2149,69 @@ int32_t AudioBroadcastStreamALSA::writeToCompressedDriver(char *buffer, int byte
         ALOGD("Write: received a signal to wake up");
     }
 
-    List<BuffersAllocated>::iterator it = mInputMemEmptyQueue.begin();
-    BuffersAllocated buf = *it;
-    if(bytes)
-        mInputMemEmptyQueue.erase(it);
+    List<BuffersAllocated>::iterator it;
+    pcm * local_handle;
+    if(mCompreRxHandle) {
+        it = mInputMemEmptyQueue[0].begin();
+        BuffersAllocated buf = *it;
+        if(bytes)
+            mInputMemEmptyQueue[0].erase(it);
 
+        memcpy(buf.memBuf, buffer, bytes);
 
-    memcpy(buf.memBuf, buffer, bytes);
+        buf.bytesToWrite = bytes;
+        if(bytes)
+            mInputMemFilledQueue[0].push_back(buf);
+        mInputMemMutex.unlock();
 
-    buf.bytesToWrite = bytes;
-    if(bytes)
-        mInputMemFilledQueue.push_back(buf);
-    mInputMemMutex.unlock();
-
-    pcm * local_handle = (struct pcm *)mCompreRxHandle->handle;
-    ALOGV("PCM write start");
-    {
-        Mutex::Autolock autoLock(mSyncLock);
-        n = pcm_write(local_handle, buf.memBuf, local_handle->period_size);
+        local_handle = (struct pcm *)mCompreRxHandle->handle;
+        ALOGV("PCM write start");
+        {
+            Mutex::Autolock autoLock(mSyncLock);
+            n = pcm_write(local_handle, buf.memBuf, local_handle->period_size);
+        }
+        ALOGV("PCM write complete");
     }
-    ALOGV("PCM write complete");
+    // write to second handle if present
+    if (mSecCompreRxHandle) {
+        if(mCompreRxHandle)
+            mInputMemMutex.lock();
+        it = mInputMemEmptyQueue[1].begin();
+        BuffersAllocated buf = *it;
+        if (bytes)
+            mInputMemEmptyQueue[1].erase(it);
+        memcpy(buf.memBuf, buffer, bytes);
+        buf.bytesToWrite = bytes;
+        if (bytes)
+            mInputMemFilledQueue[1].push_back(buf);
+        mInputMemMutex.unlock();
+        ALOGV("PCM write start to passthrough device");
+        local_handle = (struct pcm *)mSecCompreRxHandle->handle;
+        {
+            Mutex::Autolock autoLock(mSyncLock);
+            n = pcm_write(local_handle, buf.memBuf, local_handle->period_size);
+        }
+        ALOGV("PCM write complete");
+    }
     if (bytes < local_handle->period_size) {
         ALOGD("Last buffer case");
         uint64_t writeValue = SIGNAL_PLAYBACK_THREAD;
         sys_broadcast::lib_write(mPlaybackfd, &writeValue, sizeof(uint64_t));
 
         //TODO : Is this code reqd - start seems to fail?
-        if (ioctl(local_handle->fd, SNDRV_PCM_IOCTL_START) < 0)
-            ALOGE("AUDIO Start failed");
-        else
-            local_handle->start = 1;
+        if(mCompreRxHandle) {
+            if (ioctl(mCompreRxHandle->handle->fd, SNDRV_PCM_IOCTL_START) < 0)
+                ALOGE("AUDIO Start failed");
+            else
+                mCompreRxHandle->handle->start = 1;
+        }
+        if(mSecCompreRxHandle){
+            // last handle used was for secCompreRx, need to set handle to CompreRx
+            if (ioctl(mSecCompreRxHandle->handle->fd, SNDRV_PCM_IOCTL_START) < 0)
+                ALOGE("AUDIO Start failed");
+            else
+                mSecCompreRxHandle->handle->start = 1;
+        }
     }
 
     return n;
@@ -2097,16 +2268,52 @@ void AudioBroadcastStreamALSA::updatePCMCaptureMetaData(char *buf)
     return;
 }
 
+void AudioBroadcastStreamALSA::copyBuffers(alsa_handle_t *destHandle, List<BuffersAllocated> filledQueue) {
+    int32_t nSize = destHandle->periodSize;
+    List<BuffersAllocated>::iterator it;
+    int index;
+    for(it = filledQueue.begin(), index = 0; it != filledQueue.end(); it++, index++) {
+        BuffersAllocated buf = *it;
+        void * mem = (int32_t *)destHandle->handle->addr + (index*nSize/sizeof(int));
+        memcpy(mem, buf.memBuf, nSize);
+    }
+    return;
+}
+
+void AudioBroadcastStreamALSA::initFilledQueue(alsa_handle_t *handle, int queueIndex, int consumedIndex) {
+
+    struct pcm * local_handle = (struct pcm *)handle->handle;
+    int32_t nSize = local_handle->period_size;
+    void  *mem_buf = NULL;
+    int i;
+    for (i = 0; i < consumedIndex; i++) {
+        mem_buf = (int32_t *)local_handle->addr + ((nSize * i)/sizeof(int));
+        BuffersAllocated buf(mem_buf, nSize);
+        mInputMemFilledQueue[queueIndex].push_back(buf);
+        mInputBufPool[queueIndex].push_back(buf);
+    }
+
+    for (i = 0; i < mInputBufferCount - consumedIndex; i++) {
+        mem_buf = (int32_t *)local_handle->addr + ((nSize * (i + consumedIndex))/sizeof(int));
+        BuffersAllocated buf(mem_buf, nSize);
+        memset(buf.memBuf, 0x0, nSize);
+        mInputMemEmptyQueue[queueIndex].push_back(buf);
+        mInputBufPool[queueIndex].push_back(buf);
+    }
+
+}
+
 status_t AudioBroadcastStreamALSA::doRouting(int devices)
 {
     status_t status = NO_ERROR;
     char *use_case;
     Mutex::Autolock autoLock(mParent->mLock);
+//    Mutex::Autolock autoLock1(mRoutingLock);
 
     if(devices == 0)
         return status;
     bool stopA2DP = false;
-    ALOGV("doRouting: devices 0x%x, mDevices = 0x%x", devices,mDevices);
+    ALOGV("doRouting: devices 0x%x, mDevices = 0x%x, mSecDevices = 0x%x", devices,mDevices, mSecDevices);
     if(devices & AudioSystem::DEVICE_OUT_ALL_A2DP) {
         ALOGV("doRouting - Capture from Proxy");
         devices &= ~AudioSystem::DEVICE_OUT_ALL_A2DP;
@@ -2135,86 +2342,185 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
 
     int prevSpdifFormat = mSpdifFormat;
     int prevHdmiFormat = mHdmiFormat;
+    int PrevSecDevices = mSecDevices;
+    bool CloseDecSession = true;
+    bool ClosePassThSession = true;
 
     mDevices = devices;
     setRoutingFlagsBasedOnConfig();
 
     if(mUseTunnelDecoder) {
-        if(mCompreRxHandle) {
+        if(mCompreRxHandle || mSecCompreRxHandle) {
             status = setPlaybackFormat();
             if(status != NO_ERROR)
                return BAD_VALUE;
-            if(mFormat == AUDIO_FORMAT_DTS || mFormat == AUDIO_FORMAT_DTS_LBR) {
-                if((prevSpdifFormat == COMPRESSED_FORMAT && mHdmiFormat == COMPRESSED_FORMAT)
-                    || (mSpdifFormat == COMPRESSED_FORMAT && prevHdmiFormat == COMPRESSED_FORMAT)) {
-                    ALOGD("Rerouting the compressed to compressed stream");
-                    struct snd_compr_routing params;
-                    params.session_type = PASSTHROUGH_SESSION;
-                    params.operation = DISCONNECT_STREAM;
-                    if (ioctl(mCompreRxHandle->handle->fd, SNDRV_COMPRESS_SET_ROUTING, &params) < 0) {
-                        ALOGE("disconnect stream failed");
-                    }
-
-                    mALSADevice->switchDeviceUseCase(mCompreRxHandle, devices,
-                                mParent->mode());
-
-                    params.session_type = PASSTHROUGH_SESSION;
-                    params.operation = CONNECT_STREAM;
-                    if (ioctl(mCompreRxHandle->handle->fd, SNDRV_COMPRESS_SET_ROUTING, &params) < 0) {
-                        ALOGE("Connect stream failed");
-                    }
-                } else if (prevSpdifFormat == COMPRESSED_FORMAT || mHdmiFormat == COMPRESSED_FORMAT
-                    || mSpdifFormat == COMPRESSED_FORMAT || prevHdmiFormat == COMPRESSED_FORMAT) {
-                    ALOGD("Reopening the tunnel session");
+            if( devices & ~mSecDevices & ~mTranscodeDevices) {
+                CloseDecSession = false;
+                if(mCompreRxHandle == NULL) {
                     Mutex::Autolock autoLock(mRoutingLock);
                     Mutex::Autolock autoLock1(mLock);
                     uint64_t writeValue = POLL_FD_MODIFIED;
                     sys_broadcast::lib_write(mPlaybackfd, &writeValue, sizeof(uint64_t));
-                    closeDevice(mCompreRxHandle);
-                    status = openTunnelDevice(devices);
+                    status = openTunnelDevice(devices & ~mSecDevices & ~mTranscodeDevices);
                     if(status != NO_ERROR) {
                         ALOGE("Tunnel device open failure in do routing");
                         return BAD_VALUE;
                     }
-                    mPlaybackPfd[0].fd = mCompreRxHandle->handle->timer_fd;
-                    mPlaybackPfd[0].events = (POLLIN | POLLERR | POLLNVAL);
-                    mPlaybackPfd[0].revents = 0;
-                } else {
-                    ALOGD("Reroute the stream");
-                    mALSADevice->switchDeviceUseCase(mCompreRxHandle, devices,
-                            mParent->mode());
-                }
-            } else {
-                /*Device handling for the DTS transcode*/
-                if (!mDtsTranscode && mTranscodeHandle) {
-                    Mutex::Autolock autoLock(mLock);
-                    closeDevice(mTranscodeHandle);
-                    free(mTranscodeHandle);
-                    mTranscodeHandle = NULL;
-                    struct snd_compr_routing params;
-                    params.session_type = TRANSCODE_SESSION;
-                    params.operation = DISCONNECT_STREAM;
-                    if (ioctl(mCompreRxHandle->handle->fd, SNDRV_COMPRESS_SET_ROUTING, &params) < 0) {
-                        ALOGE("disconnect stream failed");
+                    if(mSecCompreRxHandle != NULL) {
+                        ALOGV("Copy buffers from passth to decode session: E");
+                        bufferDeAlloc(DECODEQUEUEINDEX);
+                        {
+                            Mutex::Autolock autoLock(mInputMemMutex);
+                            copyBuffers(mCompreRxHandle, mInputMemFilledQueue[1]);
+                            initFilledQueue(mCompreRxHandle, DECODEQUEUEINDEX, mInputMemFilledQueue[1].size());
+                        }
+                        mPlaybackPfd[0].fd = mCompreRxHandle->handle->timer_fd;
+                        mPlaybackPfd[0].events = (POLLIN | POLLERR | POLLNVAL);
+                        mPlaybackPfd[0].revents = 0;
+                        //Init the appl pointer and sync it
+                        mCompreRxHandle->handle->sync_ptr->c.control.appl_ptr =
+                                    (mInputMemFilledQueue[1].size() * mCompreRxHandle->bufferSize)/
+                                        (2*mSecCompreRxHandle->channels);
+                        mCompreRxHandle->handle->sync_ptr->flags = 0;
+                        sync_ptr(mCompreRxHandle->handle);
+                        if(!isSessionPaused) {
+                            if (ioctl(mCompreRxHandle->handle->fd, SNDRV_PCM_IOCTL_START) < 0)
+                                ALOGE("AUDIO Start failed");
+                            else
+                                mCompreRxHandle->handle->start = 1;
+                        }
+                        ALOGV("Copy buffers from passth to decode session: X");
                     }
+                    else {
+                        mPlaybackPfd[0].fd = mCompreRxHandle->handle->timer_fd;
+                        mPlaybackPfd[0].events = (POLLIN | POLLERR | POLLNVAL);
+                        mPlaybackPfd[0].revents = 0;
+                    }
+                } else {
+                    mALSADevice->switchDeviceUseCase(mCompreRxHandle, devices & ~mSecDevices & ~mTranscodeDevices,
+                                    mParent->mode());
                 }
-                mALSADevice->switchDeviceUseCase(mCompreRxHandle, devices & ~ mTranscodeDevices,
-                                 mParent->mode());
-                if ((mDtsTranscode && mTranscodeHandle == NULL)) {
-                    Mutex::Autolock autoLock(mLock);
-                    status = openTunnelDevice(mTranscodeDevices);
+            }
+            if(mSecDevices) {
+                ClosePassThSession = false;
+                if(mSecCompreRxHandle == NULL) {
+                    Mutex::Autolock autoLock(mRoutingLock);
+                    Mutex::Autolock autoLock1(mLock);
+                    uint64_t writeValue = POLL_FD_MODIFIED;
+                    sys_broadcast::lib_write(mPlaybackfd, &writeValue, sizeof(uint64_t));
+                    status = openTunnelDevice(mSecDevices);
                     if(status != NO_ERROR) {
-                        ALOGE("Error opening Transocde device in doRouting");
+                        ALOGE("Tunnel device open failure in do routing");
                         return BAD_VALUE;
                     }
-                    struct snd_compr_routing params;
-                    params.session_type = TRANSCODE_SESSION;
-                    params.operation = CONNECT_STREAM;
-                    if (ioctl(mCompreRxHandle->handle->fd, SNDRV_COMPRESS_SET_ROUTING, &params) < 0) {
-                        ALOGE("Connect stream failed");
+                    if(mCompreRxHandle != NULL) {
+                        ALOGV("Copy buffers from decode to passth session: E");
+                        bufferDeAlloc(PASSTHRUQUEUEINDEX);
+                        {
+                            Mutex::Autolock autoLock(mInputMemMutex);
+                           copyBuffers(mSecCompreRxHandle, mInputMemFilledQueue[0]);
+                            initFilledQueue(mSecCompreRxHandle, PASSTHRUQUEUEINDEX, mInputMemFilledQueue[0].size());
+                        }
+                        mPlaybackPfd[2].fd = mSecCompreRxHandle->handle->timer_fd;
+                        mPlaybackPfd[2].events = (POLLIN | POLLERR | POLLNVAL);
+                        mPlaybackPfd[2].revents = 0;
+                        mSecCompreRxHandle->handle->sync_ptr->c.control.appl_ptr =
+                                        (mInputMemFilledQueue[0].size() * mSecCompreRxHandle->bufferSize)/
+                                        (2*mCompreRxHandle->channels);
+                        mSecCompreRxHandle->handle->sync_ptr->flags = 0;
+                        sync_ptr(mSecCompreRxHandle->handle);
+                        if(!isSessionPaused) {
+                            if (ioctl(mSecCompreRxHandle->handle->fd, SNDRV_PCM_IOCTL_START) < 0)
+                            ALOGE("AUDIO Start failed");
+                            else
+                            mSecCompreRxHandle->handle->start = 1;
+                        }
+                        ALOGV("Copy buffers from decode to passth session: X");
                     }
-               }
+                    else {
+                        mPlaybackPfd[2].fd = mSecCompreRxHandle->handle->timer_fd;
+                        mPlaybackPfd[2].events = (POLLIN | POLLERR | POLLNVAL);
+                        mPlaybackPfd[2].revents = 0;
+                    }
+                }
+                else {
+                if(PrevSecDevices != mSecDevices) {
+                        ALOGD("Rerouting the compressed to compressed stream");
+                        struct snd_compr_routing params;
+                        params.session_type = PASSTHROUGH_SESSION;
+                        params.operation = DISCONNECT_STREAM;
+                        if (ioctl(mSecCompreRxHandle->handle->fd, SNDRV_COMPRESS_SET_ROUTING, &params) < 0) {
+                            ALOGE("disconnect stream failed");
+                        }
+                        mALSADevice->switchDeviceUseCase(mSecCompreRxHandle, mSecDevices,
+                        mParent->mode());
+                        params.session_type = PASSTHROUGH_SESSION;
+                        params.operation = CONNECT_STREAM;
+                        if (ioctl(mSecCompreRxHandle->handle->fd, SNDRV_COMPRESS_SET_ROUTING, &params) < 0) {
+                            ALOGE("Connect stream failed");
+                        }
+                        }
+                }
             }
+            if(mCompreRxHandle != NULL && CloseDecSession) {
+                Mutex::Autolock autoLock(mRoutingLock);
+                Mutex::Autolock autoLock1(mLock);
+                uint64_t writeValue = POLL_FD_MODIFIED;
+                status = closeDevice(mCompreRxHandle);
+                if(status != NO_ERROR) {
+                    ALOGE("Error closing compr device in doRouting");
+                    return BAD_VALUE;
+                }
+                mCompreRxHandle = NULL;
+                bufferDeAlloc(DECODEQUEUEINDEX);
+                mPlaybackPfd[0].fd = -1;
+                mPlaybackPfd[0].events = (POLLIN | POLLERR | POLLNVAL);
+                sys_broadcast::lib_write(mPlaybackfd, &writeValue, sizeof(uint64_t));
+                ALOGV("poll fd0 set to -1");
+            }
+            if(mSecCompreRxHandle != NULL && ClosePassThSession) {
+                Mutex::Autolock autoLock(mRoutingLock);
+                Mutex::Autolock autoLock1(mLock);
+                uint64_t writeValue = POLL_FD_MODIFIED;
+                status = closeDevice(mSecCompreRxHandle);
+                if(status != NO_ERROR) {
+                    ALOGE("Error closing compr device in doRouting");
+                    return BAD_VALUE;
+                }
+                mSecCompreRxHandle = NULL;
+                bufferDeAlloc(PASSTHRUQUEUEINDEX);
+                mPlaybackPfd[2].fd = -1;
+                mPlaybackPfd[2].events = (POLLIN | POLLERR | POLLNVAL);
+                sys_broadcast::lib_write(mPlaybackfd, &writeValue, sizeof(uint64_t));
+                ALOGV("poll fd2 set to -1");
+            }
+            /*Device handling for the DTS transcode*/
+            if (!mDtsTranscode && mTranscodeHandle) {
+                Mutex::Autolock autoLock(mLock);
+                closeDevice(mTranscodeHandle);
+                free(mTranscodeHandle);
+                mTranscodeHandle = NULL;
+                struct snd_compr_routing params;
+                params.session_type = TRANSCODE_SESSION;
+                params.operation = DISCONNECT_STREAM;
+                if (ioctl(mCompreRxHandle->handle->fd, SNDRV_COMPRESS_SET_ROUTING, &params) < 0) {
+                    ALOGE("disconnect stream failed");
+                }
+            }
+            if ((mDtsTranscode && mTranscodeHandle == NULL)) {
+                Mutex::Autolock autoLock(mLock);
+                status = openTunnelDevice(mTranscodeDevices);
+                if(status != NO_ERROR) {
+                    ALOGE("Error opening Transocde device in doRouting");
+                    return BAD_VALUE;
+                }
+                struct snd_compr_routing params;
+                params.session_type = TRANSCODE_SESSION;
+                params.operation = CONNECT_STREAM;
+                if (ioctl(mCompreRxHandle->handle->fd, SNDRV_COMPRESS_SET_ROUTING, &params) < 0) {
+                    ALOGE("Connect stream failed");
+                }
+           }
         }
     } else {
         /*
@@ -2223,24 +2529,17 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
            open pcm device  -- compressed out --> pcm out
            close pcm device -- pcm out --> compressed out
         */
-        int pcmDevices = devices;
-        if(mSpdifFormat == COMPRESSED_FORMAT)
-            pcmDevices = pcmDevices & ~AudioSystem::DEVICE_OUT_SPDIF;
-
-        if(mHdmiFormat == COMPRESSED_FORMAT)
-            pcmDevices = pcmDevices & ~AudioSystem::DEVICE_OUT_AUX_DIGITAL;
-
         bool closePcmDevice = false;
 
         status = setPlaybackFormat();
         if(status != NO_ERROR)
             return BAD_VALUE;
 
-        if(pcmDevices != 0) {
+        if(mPCMDevices != 0) {
             if(mPcmRxHandle == NULL) {
                 Mutex::Autolock autoLock(mLock);
                 mRoutePcmAudio = true;
-                status = openPcmDevice(pcmDevices);
+                status = openPcmDevice(mPCMDevices);
                 if(status != NO_ERROR) {
                     ALOGE("Error opening PCM device in doRouting");
                     return BAD_VALUE;
@@ -2259,7 +2558,7 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
         */
         if((mSpdifFormat == COMPRESSED_FORMAT) ||
            (mHdmiFormat == COMPRESSED_FORMAT)) {
-            int comprDevices = devices & ~pcmDevices;
+            int comprDevices = devices & ~mPCMDevices;
             if((prevSpdifFormat == COMPRESSED_FORMAT && mHdmiFormat == COMPRESSED_FORMAT)
                 || (mSpdifFormat == COMPRESSED_FORMAT && prevHdmiFormat == COMPRESSED_FORMAT)) {
                 ALOGD("Rerouting the AC3 compressed to compressed stream");
@@ -2269,29 +2568,20 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
                 struct snd_compr_routing params;
                 params.session_type = PASSTHROUGH_SESSION;
                 params.operation = DISCONNECT_STREAM;
-                if (ioctl(mCompreRxHandle->handle->fd, SNDRV_COMPRESS_SET_ROUTING, &params) < 0) {
+                if (ioctl(mSecCompreRxHandle->handle->fd, SNDRV_COMPRESS_SET_ROUTING, &params) < 0) {
                     ALOGE("disconnect stream failed");
                 }
-                mALSADevice->switchDeviceUseCase(mCompreRxHandle, devices,
+                mALSADevice->switchDeviceUseCase(mSecCompreRxHandle, devices,
                             mParent->mode());
 
                 params.session_type = PASSTHROUGH_SESSION;
                 params.operation = CONNECT_STREAM;
-                if (ioctl(mCompreRxHandle->handle->fd, SNDRV_COMPRESS_SET_ROUTING, &params) < 0) {
+                if (ioctl(mSecCompreRxHandle->handle->fd, SNDRV_COMPRESS_SET_ROUTING, &params) < 0) {
                     ALOGE("Connect stream failed");
                 }
-            } else if (mCompreRxHandle == NULL) {
+            } else if (mSecCompreRxHandle == NULL) {
                 ALOGD("Opening the tunnel session");
                 Mutex::Autolock autoLock(mLock);
-                if(closePcmDevice && mPcmRxHandle) {
-                    status_t status = closeDevice(mPcmRxHandle);
-                    if(status != NO_ERROR) {
-                        ALOGE("Error closing the pcm device in doRouting");
-                        return BAD_VALUE;
-                    }
-                    mPcmRxHandle = NULL;
-                    mRoutePcmAudio = false;
-                }
                 status= openTunnelDevice(comprDevices);
                 if(status != NO_ERROR) {
                     ALOGE("Tunnel device open failure in do routing");
@@ -2301,20 +2591,31 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
             }
         } else {
             exitFromPlaybackThread();
-            Mutex::Autolock autoLock(mLock);
-            status = closeDevice(mCompreRxHandle);
+            if(mSecCompreRxHandle != NULL) {
+                Mutex::Autolock autoLock(mLock);
+                status = closeDevice(mSecCompreRxHandle);
+                if(status != NO_ERROR) {
+                    ALOGE("Error closing compr device in doRouting");
+                    return BAD_VALUE;
+                }
+                mSecCompreRxHandle = NULL;
+                bufferDeAlloc(PASSTHRUQUEUEINDEX);
+            }
+        }
+        if(mPcmRxHandle && mPCMDevices)
+            mALSADevice->switchDeviceUseCase(mPcmRxHandle, mPCMDevices,
+                                 mParent->mode());
+        if(closePcmDevice && mPcmRxHandle) {
+            alsa_handle_t *tmp_handle;
+            tmp_handle = mPcmRxHandle;
+            mPcmRxHandle = NULL;
+            mRoutePcmAudio = false;
+            status_t status = closeDevice(tmp_handle);
             if(status != NO_ERROR) {
-                ALOGE("Error closing compr device in doRouting");
+                ALOGE("Error closing the pcm device in doRouting");
                 return BAD_VALUE;
             }
-            mCompreRxHandle = NULL;
-            bufferDeAlloc();
-            mInputMemFilledQueue.clear();
-            mInputMemEmptyQueue.clear();
         }
-        if(mPcmRxHandle && pcmDevices)
-            mALSADevice->switchDeviceUseCase(mPcmRxHandle, pcmDevices,
-                                 mParent->mode());
     }
     if(stopA2DP) {
         ALOGD("doRouting-stopA2dpPlayback_l-usecase %x", mA2dpUseCase);
@@ -2325,6 +2626,8 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
             handle = mPcmRxHandle;
         else if (mCompreRxHandle && (mCompreRxHandle->devices & AudioSystem::DEVICE_OUT_PROXY))
             handle = mCompreRxHandle;
+        else if (mSecCompreRxHandle && (mSecCompreRxHandle->devices & AudioSystem::DEVICE_OUT_PROXY))
+            handle = mSecCompreRxHandle;
         if (handle) {
             mA2dpUseCase = mParent->useCaseStringToEnum(handle->useCase);
             ALOGD("doRouting-startA2dpPlayback_l-usecase %x", mA2dpUseCase);
@@ -2366,8 +2669,14 @@ status_t AudioBroadcastStreamALSA::pause_l()
         if (ioctl(mCompreRxHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE,1) < 0) {
             ALOGE("PAUSE failed on use case %s", mCompreRxHandle->useCase);
         }
-        isSessionPaused = true;
     }
+    if(mSecCompreRxHandle){
+        if(ioctl(mSecCompreRxHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE,1) < 0)
+            ALOGE("PAUSE failed on use case %s", mSecCompreRxHandle->useCase);
+    }
+    if(mCompreRxHandle || mSecCompreRxHandle)
+        isSessionPaused = true;
+
     if (mRouteAudioToA2dp) {
         ALOGD("Pause - suspendA2dpPlayback_l - usecase %x", mA2dpUseCase);
         status_t status = mParent->suspendA2dpPlayback_l(mA2dpUseCase);
@@ -2394,12 +2703,19 @@ status_t AudioBroadcastStreamALSA::resume_l()
             ALOGE("RESUME failed for use case %s", mPcmRxHandle->useCase);
         }
     }
-    if(mCompreRxHandle) {
+    if(mCompreRxHandle || mSecCompreRxHandle) {
         if(isSessionPaused == true) {
-            if (ioctl(mCompreRxHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE,0) < 0)
-                ALOGE("RESUME failed on use case %s", mCompreRxHandle->useCase);
+            if(mCompreRxHandle) {
+                if (ioctl(mCompreRxHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE,0) < 0)
+                    ALOGE("RESUME failed on use case %s", mCompreRxHandle->useCase);
+            }
+            if(mSecCompreRxHandle){
+                if(ioctl(mSecCompreRxHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE,0) < 0)
+                    ALOGE("RESUME failed on use case %s", mSecCompreRxHandle->useCase);
+            }
+            isSessionPaused = false;
+            mWriteCv.signal();
         }
-        isSessionPaused = false;
     }
     return NO_ERROR;
 }
@@ -2449,7 +2765,7 @@ void AudioBroadcastStreamALSA::copyBitstreamInternalBuffer(char *buffer,
     //update input meta data list prior decode
     if(mPcmRxHandle)
         update_input_meta_data_list_pre_decode(PCM_OUT);
-    if(mCompreRxHandle)
+    if(mCompreRxHandle || mSecCompreRxHandle)
         update_input_meta_data_list_pre_decode(COMPRESSED_OUT);
 }
 
@@ -2487,7 +2803,7 @@ bool AudioBroadcastStreamALSA::decode(char *buffer, size_t bytes)
         if(mPcmRxHandle && mDDFirstFrameBuffered)
             update_input_meta_data_list_post_decode(PCM_OUT,
                                                     bytesConsumedInDecode);
-        if(mCompreRxHandle && mDDFirstFrameBuffered)
+        if((mCompreRxHandle  || mSecCompreRxHandle) && mDDFirstFrameBuffered)
             update_input_meta_data_list_post_decode(COMPRESSED_OUT,
                                                     bytesConsumedInDecode);
         if(!mDDFirstFrameBuffered)
@@ -2501,7 +2817,7 @@ bool AudioBroadcastStreamALSA::decode(char *buffer, size_t bytes)
                 status_t status = closeDevice(mPcmRxHandle);
                 if(status != NO_ERROR)
                     ALOGE("change in sample rate - close pcm device fail");
-                status = openPcmDevice(mDevices);
+                status = openPcmDevice(mPCMDevices);
                 if(status != NO_ERROR)
                     ALOGE("change in sample rate - open pcm device fail");
             }
@@ -2554,7 +2870,7 @@ bool AudioBroadcastStreamALSA::decode(char *buffer, size_t bytes)
             }
             mChannelStatusSet = true;
         }
-    } else if (mUseTunnelDecoder && mCompreRxHandle) {
+    } else if (mUseTunnelDecoder && (mCompreRxHandle || mSecCompreRxHandle)) {
         // Set the channel status after first frame decode/transcode
         if(bytes == 0)
             mBitstreamSM->appendSilenceToBitstreamInternalBuffer(
@@ -2757,11 +3073,12 @@ uint32_t AudioBroadcastStreamALSA::render(bool continueDecode)
             }
         }
     }
-    if((mCompreRxHandle) &&
+    if((mCompreRxHandle || mSecCompreRxHandle) &&
        ((mSpdifFormat == COMPRESSED_FORMAT) ||
         (mHdmiFormat == COMPRESSED_FORMAT) ||
         (mUseTunnelDecoder))) {
-        period_size = mCompreRxHandle->periodSize;
+        if(mCompreRxHandle) period_size = mCompreRxHandle->periodSize;
+        else if(mSecCompreRxHandle) period_size = mSecCompreRxHandle->periodSize;
         requiredSize = mBitstreamSM->getOutputBufferWritePtr(SPDIF_OUT) -
                           mBitstreamSM->getOutputBufferPtr(SPDIF_OUT);
 
@@ -2804,11 +3121,10 @@ uint32_t AudioBroadcastStreamALSA::render(bool continueDecode)
             }
         }
     }
-
     if(!continueDecode) {
         if(mPcmRxHandle)
             update_input_meta_data_list_post_write(PCM_OUT);
-        if(mCompreRxHandle)
+        if(mCompreRxHandle || mSecCompreRxHandle)
             update_input_meta_data_list_post_write(COMPRESSED_OUT);
     }
 
