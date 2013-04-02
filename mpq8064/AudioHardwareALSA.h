@@ -163,6 +163,7 @@ static int USBRECBIT_FM = (1 << 3);
 #define KILL_PLAYBACK_THREAD 1
 #define KILL_CAPTURE_THREAD 1
 #define NUM_FDS 2
+#define NUM_PLAYBACK_FDS 3
 #define NUM_AUDIOSESSION_FDS 3
 #define AFE_PROXY_SAMPLE_RATE 48000
 #define AFE_PROXY_CHANNEL_COUNT 2
@@ -202,6 +203,9 @@ static int USBRECBIT_FM = (1 << 3);
 //Required for ADTS Header Parsing
 #define ADTS_HEADER_SYNC_RESULT 0xfff0
 #define ADTS_HEADER_SYNC_MASK 0xfff6
+
+#define DECODEQUEUEINDEX     0
+#define PASSTHRUQUEUEINDEX   1
 
 static uint32_t FLUENCE_MODE_ENDFIRE   = 0;
 static uint32_t FLUENCE_MODE_BROADSIDE = 1;
@@ -665,8 +669,6 @@ private:
     bool                mPostedEOS;
     void*               mFirstAACBuffer;
     int32_t             mFirstAACBufferLength;
-    #define DECODEQUEUEINDEX     0
-    #define PASSTHRUQUEUEINDEX   1
     List<BuffersAllocated> mInputMemEmptyQueue[2];
     List<BuffersAllocated> mInputMemFilledQueue[2];
     List<BuffersAllocated> mInputBufPool[2];
@@ -765,6 +767,8 @@ private:
     uint32_t            mStreamVol;
     size_t              mBufferSize;
     int                 mCurDevice;
+    int                 mSecDevices;
+    int                 mPCMDevices;
     int                 mTranscodeDevices;
     // Capture and Routing Flags
     bool                mCapturePCMFromDSP;
@@ -773,13 +777,14 @@ private:
     bool                mRoutePCMMChToDSP;
     bool                mUseMS11Decoder;
     bool                mUseTunnelDecoder;
+    bool                mUseDualTunnel;
     bool                mRoutePcmAudio;
     bool                mRoutingSetupDone;
     bool                mSignalToSetupRoutingPath;
     int                 mInputBufferSize;
     int                 mInputBufferCount;
     int32_t             mMinBytesReqToDecode;
-    int64_t             hw_ptr;
+    int64_t             hw_ptr[2];
     bool                mDtsTranscode;
     compressed_read_metadata_t mReadMetaData;
     // HDMI and SPDIF specifics
@@ -817,6 +822,8 @@ private:
     alsa_handle_t      *mPcmRxHandle;
     // ALSA device handle to Compressed audio playback
     alsa_handle_t      *mCompreRxHandle;
+    // ALSA device handle to Sec Compressed audio playback
+    alsa_handle_t      *mSecCompreRxHandle;
     // ALSA device handle to PCM 2.0 capture from DSP
     alsa_handle_t      *mPcmTxHandle;
     // ALSA device handle to Compressed audio capture from DSP
@@ -835,7 +842,6 @@ private:
     snd_use_case_mgr_t *mUcMgr;
     AudioEventObserver *mObserver;
 
-
     //Declare all the threads
     //Capture
     pthread_t           mCaptureThread;
@@ -853,7 +859,7 @@ private:
     pthread_t           mPlaybackThread;
     Mutex               mPlaybackMutex;
     Condition           mPlaybackCv;
-    struct              pollfd mPlaybackPfd[NUM_FDS];
+    struct              pollfd mPlaybackPfd[NUM_PLAYBACK_FDS];
     Mutex               mInputMemMutex;
     Mutex               mWriteCvMutex;
     Mutex               mRoutingLock;
@@ -896,8 +902,8 @@ private:
                                           int devices);
     status_t            openPcmDevice(int devices);
     status_t            openTunnelDevice(int devices);
-    void                bufferAlloc(alsa_handle_t *handle);
-    void                bufferDeAlloc();
+    void                bufferAlloc(alsa_handle_t *handle, int bufIndex);
+    void                bufferDeAlloc(int bufIndex);
     status_t            createPlaybackThread();
     void                playbackThreadEntry();
     static void *       playbackThreadWrapper(void *me);
@@ -932,10 +938,12 @@ private:
             int32_t memBufsize;
             uint32_t bytesToWrite;
     };
-    List<BuffersAllocated> mInputMemEmptyQueue;
-    List<BuffersAllocated> mInputMemFilledQueue;
-    List<BuffersAllocated> mInputBufPool;
+    List<BuffersAllocated> mInputMemEmptyQueue[2];
+    List<BuffersAllocated> mInputMemFilledQueue[2];
+    List<BuffersAllocated> mInputBufPool[2];
 
+    void                copyBuffers(alsa_handle_t *destHandle, List<BuffersAllocated> filledQueue);
+    void                initFilledQueue(alsa_handle_t *handle, int queueIndex, int consumedIndex);
 protected:
     AudioHardwareALSA  *mParent;
     bool                mPowerLock;
