@@ -298,8 +298,8 @@ public:
     void     setVocRecMode(uint8_t mode);
     void     setVoLTEMicMute(int state);
     void     setVoLTEVolume(int vol);
-    void     setSGLTEMicMute(int state);
-    void     setSGLTEVolume(int vol);
+    void     setVoice2MicMute(int state);
+    void     setVoice2Volume(int vol);
     status_t setEcrxDevice(char *device);
     void     setInChannels(int);
     //TODO:check if this needs to be public
@@ -365,6 +365,7 @@ private:
     struct mixer*  mMixer;
     int mInChannels;
     bool mIsSglte;
+    bool mIsFmEnabled;
 #ifdef SEPERATED_AUDIO_INPUT
     int mInput_source;
 #endif
@@ -916,7 +917,7 @@ protected:
     void                enableVoiceCall(char* verb, char* modifier, int mode, int device);
     bool                routeVoiceCall(int device, int  newMode);
     bool                routeVoLTECall(int device, int newMode);
-    bool                routeSGLTECall(int device, int newMode);
+    bool                routeVoice2Call(int device, int newMode);
     friend class AudioSessionOutALSA;
     friend class AudioStreamOutALSA;
     friend class AudioStreamInALSA;
@@ -948,7 +949,7 @@ protected:
     bool                mMicMute;
     int mCSCallActive;
     int mVolteCallActive;
-    int mSGLTECallActive;
+    int mVoice2CallActive;
     int mCallState;
     int mIsFmActive;
     bool mBluetoothVGS;

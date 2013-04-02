@@ -80,6 +80,7 @@ ALSADevice::ALSADevice() {
     mBtscoSamplerate = 8000;
     mCallMode = AUDIO_MODE_NORMAL;
     mInChannels = 0;
+    mIsFmEnabled = false;
     char value[128], platform[128], baseband[128];
 
     mStatus = OK;
@@ -211,7 +212,16 @@ static bool isPlatformFusion3() {
 
 static bool shouldUseHandsetAnc(int flags, int inChannels)
 {
-    if (!isPlatformFusion3()) {
+    char prop_aanc[128] = "false";
+    int aanc_enabled = 0;
+
+    property_get("persist.aanc.enable", prop_aanc, "0");
+    if (!strncmp("true", prop_aanc, 4)) {
+        ALOGD("AANC enabled in the property\n");
+        aanc_enabled = 1;
+    }
+
+    if (!isPlatformFusion3() && !aanc_enabled) {
         return false;
     }
     return (flags & ANC_FLAG) && (inChannels == 1);
@@ -726,8 +736,7 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
     }
 #ifdef QCOM_FM_ENABLED
     if (rxDevice != NULL) {
-        if (devices & AudioSystem::DEVICE_OUT_FM)
-            setFmVolume(mFmVolume);
+        setFmVolume(mFmVolume);
     }
 #endif
     ALOGD("switchDevice: mCurTxUCMDevivce %s mCurRxDevDevice %s", mCurTxUCMDevice, mCurRxUCMDevice);
@@ -1330,7 +1339,7 @@ status_t ALSADevice::startFm(alsa_handle_t *handle)
         goto Error;
     }
 
-
+    mIsFmEnabled = true;
     setFmVolume(mFmVolume);
     if (devName) {
         free(devName);
@@ -1350,6 +1359,9 @@ Error:
 status_t ALSADevice::setFmVolume(int value)
 {
     status_t err = NO_ERROR;
+    if (!mIsFmEnabled) {
+        return INVALID_OPERATION;
+    }
 
     setMixerControl("Internal FM RX Volume",value,0);
     mFmVolume = value;
@@ -1402,6 +1414,11 @@ status_t ALSADevice::close(alsa_handle_t *handle)
                 }
             }
 #endif
+        }
+
+        if ((!strcmp(handle->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO)) ||
+            (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_FM))) {
+            mIsFmEnabled = false;
         }
         ALOGV("close rxHandle\n");
         err = pcm_close(h);
@@ -1546,10 +1563,10 @@ int ALSADevice::getUseCaseType(const char *useCase)
             MAX_LEN(useCase,SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE,
             MAX_LEN(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE)) ||
-        !strncmp(useCase, SND_USE_CASE_VERB_SGLTECALL,
-            MAX_LEN(useCase, SND_USE_CASE_VERB_SGLTECALL)) ||
-        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_SGLTE,
-            MAX_LEN(useCase, SND_USE_CASE_MOD_PLAY_SGLTE)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_VOICE2,
+            MAX_LEN(useCase, SND_USE_CASE_VERB_VOICE2)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_VOICE2,
+            MAX_LEN(useCase, SND_USE_CASE_MOD_PLAY_VOICE2)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_VOLTE,
             MAX_LEN(useCase,SND_USE_CASE_VERB_VOLTE)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_VOLTE,
@@ -2041,17 +2058,17 @@ void ALSADevice::setVoiceVolume(int vol)
     }
 }
 
-void ALSADevice::setSGLTEVolume(int vol)
+void ALSADevice::setVoice2Volume(int vol)
 {
     int err = 0;
-    ALOGD("setSGLTEVolume: volume %d", vol);
-    setMixerControl("SGLTE Rx Volume", vol, 0);
+    ALOGD("setVoice2Volume: volume %d", vol);
+    setMixerControl("Voice2 Rx Volume", vol, 0);
 
     if (isPlatformFusion3()) {
 #ifdef QCOM_CSDCLIENT_ENABLED
         err = csd_client_volume(vol);
         if (err < 0) {
-            ALOGE("setSGLTEVolume: csd_client error %d", err);
+            ALOGE("setVoice2Volume: csd_client error %d", err);
         }
 #endif
     }
@@ -2090,17 +2107,17 @@ void ALSADevice::setMicMute(int state)
     }
 }
 
-void ALSADevice::setSGLTEMicMute(int state)
+void ALSADevice::setVoice2MicMute(int state)
 {
     int err = 0;
-    ALOGD("setSGLTEMicMute: state %d", state);
-    setMixerControl("SGLTE Tx Mute", state, 0);
+    ALOGD("setVoice2MicMute: state %d", state);
+    setMixerControl("Voice2 Tx Mute", state, 0);
 
     if (isPlatformFusion3()) {
 #ifdef QCOM_CSDCLIENT_ENABLED
         err = csd_client_mic_mute(state);
         if (err < 0) {
-            ALOGE("setSGLTEMicMute: csd_client error %d", err);
+            ALOGE("setVoice2MicMute: csd_client error %d", err);
         }
 #endif
     }
