@@ -1005,6 +1005,13 @@ status_t AudioBroadcastStreamALSA::openPcmDevice(int devices)
     mPcmRxHandle = &(*it);
     mBufferSize = mPcmRxHandle->periodSize;
 
+    if(mPcmRxHandle) {
+         if(mPcmRxHandle->type == PCM_FORMAT) {
+             status = mPcmRxHandle->module->setPlaybackVolume(mStreamVol,
+                                                mPcmRxHandle->useCase);
+         }
+    }
+
     if(mUseMS11Decoder && (mPcmRxHandle->channels > 2))
         setChannelMap(mPcmRxHandle);
     else if(mPcmRxHandle->channels > 2)
@@ -1133,6 +1140,12 @@ status_t AudioBroadcastStreamALSA::openTunnelDevice(int devices)
         }
         ALSAHandleList::iterator it = mParent->mDeviceList.end(); it--;
         mCompreRxHandle = &(*it);
+
+        if(mCompreRxHandle) {
+           if(mSpdifFormat != COMPRESSED_FORMAT && mHdmiFormat != COMPRESSED_FORMAT)
+                status = mCompreRxHandle->module->setPlaybackVolume(mStreamVol,
+                                                  mCompreRxHandle->useCase);
+        }
 
         //mmap the buffers for playback
         status = mmap_buffer(mCompreRxHandle->handle);
