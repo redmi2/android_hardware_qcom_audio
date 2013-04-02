@@ -7,6 +7,7 @@ include $(CLEAR_VARS)
 LOCAL_ARM_MODE := arm
 LOCAL_CFLAGS := -D_POSIX_SOURCE
 LOCAL_CFLAGS += -DQCOM_MPQ_BROADCAST
+LOCAL_CFLAGS += -DQCOM_PROXY_DEVICE_ENABLED
 
 LOCAL_SRC_FILES := \
   AudioHardwareALSA.cpp 	\
@@ -65,7 +66,6 @@ LOCAL_CFLAGS := -D_POSIX_SOURCE
 ifeq ($(BOARD_HAVE_BLUETOOTH),true)
   LOCAL_CFLAGS += -DWITH_A2DP
 endif
-ifeq (1,0)
 LOCAL_SRC_FILES := \
     AudioPolicyManagerALSA.cpp	\
     audio_policy_hal.cpp
@@ -87,7 +87,7 @@ LOCAL_SHARED_LIBRARIES := \
 LOCAL_C_INCLUDES := hardware/libhardware_legacy/audio
 
 include $(BUILD_SHARED_LIBRARY)
-endif
+
 
 include $(call all-makefiles-under,$(LOCAL_PATH))
 endif
