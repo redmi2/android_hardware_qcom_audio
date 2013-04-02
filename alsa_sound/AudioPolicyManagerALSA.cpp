@@ -68,9 +68,6 @@ status_t AudioPolicyManager::setDeviceConnectionState(AudioSystem::audio_devices
             return BAD_VALUE;
         }
 
-        // save a copy of the opened output descriptors before any output is opened or closed
-        // by checkOutputsForDevice(). This will be needed by checkOutputForAllStrategies()
-        mPreviousOutputs = mOutputs;
         switch (state)
         {
         // handle output device connection
@@ -208,10 +205,7 @@ status_t AudioPolicyManager::setDeviceConnectionState(AudioSystem::audio_devices
                     newDevice = getDeviceForStrategy(STRATEGY_MEDIA, false);
                 }
             }
-            setOutputDevice(mOutputs.keyAt(i),
-                            getNewDevice(mOutputs.keyAt(i), true /*fromCache*/),
-                            true,
-                            0);
+            setOutputDevice(mOutputs.keyAt(i), newDevice);
         }
 
         if (device == AudioSystem::DEVICE_OUT_WIRED_HEADSET) {
