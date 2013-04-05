@@ -418,12 +418,17 @@ void AudioPolicyManager::setPhoneState(int state)
         delayMs = 40;
     }
 
+    // change routing is necessary when call state is changed
+    setOutputDevice(mPrimaryOutput, newDevice, force, delayMs);
+
     // change routing is necessary
     // Update devices for all outputs(direct, tunnel, and hdmi, etc) instead of updating only for mPrimaryOutput
     for (size_t i = 0; i < mOutputs.size(); i++) {
         audio_io_handle_t output = mOutputs.keyAt(i);
-        audio_devices_t newDevice = getNewDevice(output, false /*fromCache*/);
-        setOutputDevice(output, newDevice, (newDevice != 0));
+        if (output != mPrimaryOutput) {
+            audio_devices_t newDevice = getNewDevice(output, false /*fromCache*/);
+            setOutputDevice(output, newDevice, (newDevice != 0));
+        }
     }
 
     // if entering in call state, handle special case of active streams
