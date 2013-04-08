@@ -166,4 +166,44 @@ void AudioPolicyManager::setPhoneState(int state) {
     }
 }
 
+audio_devices_t AudioPolicyManager::getDeviceForInputSource(int inputSource)
+{
+    uint32_t device = AUDIO_DEVICE_NONE;
+
+    switch(inputSource) {
+    case AUDIO_SOURCE_DEFAULT:
+    case AUDIO_SOURCE_MIC:
+    case AUDIO_SOURCE_VOICE_RECOGNITION:
+        if (mForceUse[AudioSystem::FOR_RECORD] == AudioSystem::FORCE_BT_SCO &&
+            mAvailableInputDevices & AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET) {
+            device = AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET;
+        } else if (mAvailableInputDevices & AUDIO_DEVICE_IN_WIRED_HEADSET) {
+            device = AUDIO_DEVICE_IN_WIRED_HEADSET;
+        } else if (mAvailableInputDevices & AUDIO_DEVICE_IN_BUILTIN_MIC) {
+            device = AUDIO_DEVICE_IN_BUILTIN_MIC;
+        }
+        break;
+    case AUDIO_SOURCE_VOICE_COMMUNICATION:
+        device = AUDIO_DEVICE_IN_COMMUNICATION;
+        break;
+    case AUDIO_SOURCE_VOICE_UPLINK:
+    case AUDIO_SOURCE_VOICE_DOWNLINK:
+    case AUDIO_SOURCE_VOICE_CALL:
+        if (mAvailableInputDevices & AUDIO_DEVICE_IN_VOICE_CALL) {
+            device = AUDIO_DEVICE_IN_VOICE_CALL;
+        }
+        break;
+    case AUDIO_SOURCE_REMOTE_SUBMIX:
+        if (mAvailableInputDevices & AUDIO_DEVICE_IN_REMOTE_SUBMIX) {
+            device = AUDIO_DEVICE_IN_REMOTE_SUBMIX;
+        }
+        break;
+    default:
+        ALOGW("getDeviceForInputSource() invalid input source %d", inputSource);
+        break;
+    }
+    ALOGV("getDeviceForInputSource()input source %d, device %08x", inputSource, device);
+    return device;
+}
+
 }; // namespace androidi_audio_legacy
