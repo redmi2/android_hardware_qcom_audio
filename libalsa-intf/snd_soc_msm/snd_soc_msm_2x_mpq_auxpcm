@@ -5922,6 +5922,24 @@ SectionModifier
 
 EndSection
 
+
+SectionModifier
+        Name "Capture MusicSPEAKER USB PROXY Tx"
+
+        EnableSequence
+                'MultiMedia1 Mixer AFE_PCM_TX':1:1
+        EndSequence
+
+        DisableSequence
+                'MultiMedia1 Mixer AFE_PCM_TX':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 0
+        PlaybackPCM 0
+
+EndSection
+
 SectionModifier
         Name "Play SGLTE"
 
