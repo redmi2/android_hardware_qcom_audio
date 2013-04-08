@@ -56,7 +56,9 @@ public:
         //  where conditions are changing (setDeviceConnectionState(), setPhoneState()...) AND
         //  before updateDeviceForStrategy() is called.
         virtual audio_devices_t getDeviceForStrategy(routing_strategy strategy, bool fromCache = true);
-
+        uint32_t checkDeviceMuteStrategies(AudioOutputDescriptor *outputDesc,
+                                                       audio_devices_t prevDevice,
+                                                       uint32_t delayMs);
         virtual AudioSystem::device_connection_state getDeviceConnectionState(AudioSystem::audio_devices device,
                                                                               const char *device_address);
 
