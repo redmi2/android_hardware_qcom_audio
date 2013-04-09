@@ -460,15 +460,19 @@ int mixer_ctl_get_elem_info(struct mixer_ctl *ctl)
     return 0;
 }
 
-void mixer_ctl_get_mulvalues(struct mixer_ctl *ctl, unsigned **value, unsigned *count)
+int mixer_ctl_get_mulvalues(struct mixer_ctl *ctl, unsigned **value, unsigned *count)
 {
     struct snd_ctl_elem_value ev;
     unsigned int n;
+    int err = 0;
 
     memset(&ev, 0, sizeof(ev));
     ev.id.numid = ctl->info->id.numid;
-    if (ioctl(ctl->mixer->fd, SNDRV_CTL_IOCTL_ELEM_READ, &ev))
-        return;
+    err = ioctl(ctl->mixer->fd, SNDRV_CTL_IOCTL_ELEM_READ, &ev);
+    if (err) {
+        ALOGE("failed to read values");
+        return err;
+    }
     ALOGV("%s:", ctl->info->id.name);
 
     switch (ctl->info->type) {
@@ -516,6 +520,7 @@ void mixer_ctl_get_mulvalues(struct mixer_ctl *ctl, unsigned **value, unsigned *
         ALOGV(" ???");
     }
     ALOGV("\n");
+    return 0;
 }
 
 static long scale_int(struct snd_ctl_elem_info *ei, unsigned _percent)
@@ -567,7 +572,7 @@ int mixer_ctl_mulvalues(struct mixer_ctl *ctl, int count, char ** argv)
         break;
     case SNDRV_CTL_ELEM_TYPE_INTEGER: {
         for (n = 0; n < ctl->info->count; n++) {
-             fprintf( stderr, "Value: %d idx:%d\n", atoi(argv[n]), n);
+             ALOGV("Value: %d idx:%d\n", atoi(argv[n]), n);
              ev.value.integer.value[n] = atoi(argv[n]);
         }
         break;
@@ -575,14 +580,14 @@ int mixer_ctl_mulvalues(struct mixer_ctl *ctl, int count, char ** argv)
     case SNDRV_CTL_ELEM_TYPE_INTEGER64: {
         for (n = 0; n < ctl->info->count; n++) {
              long long value_ll = scale_int64(ctl->info, atoi(argv[n]));
-             fprintf( stderr, "ll_value = %lld\n", value_ll);
+             ALOGV("ll_value = %lld\n", value_ll);
              ev.value.integer64.value[n] = value_ll;
         }
         break;
     }
     case SNDRV_CTL_ELEM_TYPE_ENUMERATED: {
         for (n = 0; n < ctl->info->count; n++) {
-            fprintf( stderr, "Value: %d idx:%d\n", atoi(argv[n]), n);
+            ALOGV("Value: %d idx:%d\n", atoi(argv[n]), n);
             ev.value.enumerated.item[n] = (unsigned int)atoi(argv[n]);
         }
         break;
