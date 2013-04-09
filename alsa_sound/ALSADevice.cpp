@@ -73,6 +73,7 @@ ALSADevice::ALSADevice() {
     mBtscoSamplerate = 8000;
     mCallMode = AUDIO_MODE_NORMAL;
     mInChannels = 0;
+    mIsFmEnabled = false;
     char value[128], platform[128], baseband[128];
 
     property_get("persist.audio.handset.mic",value,"0");
@@ -476,8 +477,25 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
                       AudioSystem::DEVICE_IN_BUILTIN_MIC);
         } else if ((devices & AudioSystem::DEVICE_OUT_EARPIECE) ||
                   (devices & AudioSystem::DEVICE_IN_BUILTIN_MIC)) {
-            devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
-                      AudioSystem::DEVICE_OUT_EARPIECE);
+            if((mode == AudioSystem::MODE_IN_COMMUNICATION)
+                    && devices & AudioSystem::DEVICE_IN_BUILTIN_MIC) {
+                ALOGV("Current Rx device %s",mCurRxUCMDevice);
+                if(!strncmp(mCurRxUCMDevice, SND_USE_CASE_DEV_SPEAKER ,
+                        strlen(SND_USE_CASE_DEV_SPEAKER))) {
+                    devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
+                    AudioSystem::DEVICE_OUT_SPEAKER);
+                    ALOGV("Selecting Speaker: device %d",devices);
+                }
+                else{
+                    ALOGV("Selecting earpiece: device %d",devices);
+                    devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
+                    AudioSystem::DEVICE_OUT_EARPIECE);
+                }
+            }
+            else{
+                devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
+                AudioSystem::DEVICE_OUT_EARPIECE);
+            }
         } else if (devices & AudioSystem::DEVICE_OUT_SPEAKER) {
             devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
                        AudioSystem::DEVICE_OUT_SPEAKER);
@@ -639,8 +657,7 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
     }
 #ifdef QCOM_FM_ENABLED
     if (rxDevice != NULL) {
-        if (devices & AudioSystem::DEVICE_OUT_FM)
-            setFmVolume(mFmVolume);
+        setFmVolume(mFmVolume);
     }
 #endif
     ALOGD("switchDevice: mCurTxUCMDevivce %s mCurRxDevDevice %s", mCurTxUCMDevice, mCurRxUCMDevice);
@@ -737,7 +754,7 @@ status_t ALSADevice::open(alsa_handle_t *handle)
     unsigned flags = 0;
     int err = NO_ERROR;
 
-    if(handle->devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+    if(mCurDevice & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
         err = setHDMIChannelCount();
         if(err != OK) {
             ALOGE("setHDMIChannelCount err = %d", err);
@@ -1183,7 +1200,7 @@ status_t ALSADevice::startFm(alsa_handle_t *handle)
         goto Error;
     }
 
-
+    mIsFmEnabled = true;
     setFmVolume(mFmVolume);
     if (devName) {
         free(devName);
@@ -1203,6 +1220,9 @@ Error:
 status_t ALSADevice::setFmVolume(int value)
 {
     status_t err = NO_ERROR;
+    if (!mIsFmEnabled) {
+        return INVALID_OPERATION;
+    }
 
     setMixerControl("Internal FM RX Volume",value,0);
     mFmVolume = value;
@@ -1260,6 +1280,12 @@ status_t ALSADevice::close(alsa_handle_t *handle, uint32_t vsid)
             }
         }
 #endif
+
+        if ((!strcmp(handle->useCase, SND_USE_CASE_VERB_DIGITAL_RADIO)) ||
+            (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_FM))) {
+            mIsFmEnabled = false;
+        }
+
         ALOGV("close rxHandle\n");
         err = pcm_close(h);
         if(err != NO_ERROR) {
