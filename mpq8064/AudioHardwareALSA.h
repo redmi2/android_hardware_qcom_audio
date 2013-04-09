@@ -213,6 +213,11 @@ class ALSADevice;
 class ALSAControl;
 
 enum {
+    VIRTUAL_DEVICE_MASK          = (long long) 0xffffffff00000000,
+    VIRTUAL_DEVICE_SLIMBUS_VIRTUAL_PORT  = ((long long)(0x1)<<32),
+};
+
+enum {
     INVALID_FORMAT               = -1,
     PCM_FORMAT                   = 0,
     COMPRESSED_FORMAT            = 1,
@@ -222,7 +227,7 @@ enum {
 
 struct alsa_handle_t {
     ALSADevice*         module;
-    uint32_t            devices;
+    uint64_t            devices;
     char                useCase[MAX_STR_LEN];
     uint8_t             type;            // Device Node Type, i.e. PCM/COMPRESSED/PASSTHROUGH
     struct pcm *        handle;
@@ -235,7 +240,7 @@ struct alsa_handle_t {
     unsigned int        bufferSize;      // Size of sample buffer
     unsigned int        periodSize;
     struct pcm *        rxHandle;
-    uint32_t            activeDevice;
+    uint64_t            activeDevice;
     snd_use_case_mgr_t  *ucMgr;
 };
 
@@ -295,7 +300,7 @@ public:
     status_t    route(uint32_t devices, int mode);
     status_t    setChannelStatus(unsigned char *channelStatus);
     void        disableDevice(alsa_handle_t *handle);
-    char*       getUCMDevice(uint32_t devices, int input);
+    char*       getUCMDevice(uint64_t devices, int input);
     void        setVoiceVolume(int vol);
     void        setVoipVolume(int vol);
     void        setMicMute(int state);
@@ -357,10 +362,10 @@ private:
     status_t    setMixerControl(const char *name, unsigned int value, int index);
     status_t    setMixerControl(const char *name, const char *value);
     status_t    setMixerControlExt(const char *name, int count, char **setValues);
-    uint32_t    updateDevices(const char *use_case, uint32_t devices);
-    int         getDevices(uint32_t devices,
+    uint64_t    updateDevices(const char *use_case, uint64_t devices);
+    int64_t     getDevices(uint64_t devices,
                                     char **rxDevice, char **txDevice);
-    int         getDeviceType(uint32_t devices, uint32_t mode);
+    int         getDeviceType(uint64_t devices, uint32_t mode);
     void        enableDevice(alsa_handle_t *handle, bool bIsUseCaseSet);
     status_t    setCaptureHardwareParams(alsa_handle_t *handle, bool isCompressed);
     status_t    setCaptureSoftwareParams(alsa_handle_t *handle, bool isCompressed);

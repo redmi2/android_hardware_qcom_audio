@@ -20,6 +20,21 @@ SectionVerb
 EndSection
 
 SectionVerb
+	Name "HiFiSLIMBUS_VIRTUAL_PORT"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 0
+	PlaybackPCM 0
+
+EndSection
+
+SectionVerb
 	Name "HiFiSpeaker FM Tx"
 
 	EnableSequence
@@ -492,6 +507,21 @@ SectionVerb
 EndSection
 
 SectionVerb
+	Name "HiFi2SLIMBUS_VIRTUAL_PORT"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 1
+	PlaybackPCM 1
+
+EndSection
+
+SectionVerb
 	Name "HiFi2Speaker FM Tx"
 
 	EnableSequence
@@ -932,6 +962,22 @@ SectionVerb
 	PlaybackPCM 14
 
 EndSection
+
+SectionVerb
+	Name "HiFi3SLIMBUS_VIRTUAL_PORT"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 14
+	PlaybackPCM 14
+
+EndSection
+
 
 SectionVerb
 	Name "HiFi3Speaker FM Tx"
@@ -2513,6 +2559,21 @@ SectionVerb
 EndSection
 
 SectionVerb
+	Name "HiFi TunnelSLIMBUS_VIRTUAL_PORT"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 9
+
+EndSection
+
+
+SectionVerb
 	Name "HiFi TunnelSpeaker FM Tx"
 
 	EnableSequence
@@ -2931,6 +2992,21 @@ SectionVerb
 	PlaybackPCM 16
 
 EndSection
+
+SectionVerb
+	Name "HiFi Tunnel2SLIMBUS_VIRTUAL_PORT"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 16
+
+EndSection
+
 
 SectionVerb
 	Name "HiFi Tunnel2Speaker FM Tx"
@@ -3371,13 +3447,27 @@ SectionDevice
 EndSection
 
 SectionDevice
+        Name "SLIMBUS_VIRTUAL_PORT"
+        Comment "Slimbus Virtual Port"
+
+        EnableSequence
+                'SLIM RX1 MUX':0:AIF1_PB
+                'SLIM RX2 MUX':0:AIF1_PB
+                'SLIM_0_RX Channels':0:Two
+        EndSequence
+
+        DisableSequence
+                'SLIM RX1 MUX':0:ZERO
+                'SLIM RX2 MUX':0:ZERO
+        EndSequence
+
+EndSection
+
+SectionDevice
 	Name "Speaker"
 	Comment "Speaker Rx device"
 
 	EnableSequence
-		'SLIM RX1 MUX':0:AIF1_PB
-		'SLIM RX2 MUX':0:AIF1_PB
-		'SLIM_0_RX Channels':0:Two
 		'RX3 MIX1 INP1':0:RX1
 		'RX5 MIX1 INP1':0:RX2
 		'RX4 DSM MUX':0:DSM_INV
@@ -3393,8 +3483,6 @@ SectionDevice
 	EndSequence
 
 	DisableSequence
-		'SLIM RX1 MUX':0:ZERO
-		'SLIM RX2 MUX':0:ZERO
 		'RX3 MIX1 INP1':0:ZERO
 		'RX5 MIX1 INP1':0:ZERO
 		'RX4 DSM MUX':0:CIC_OUT
@@ -3416,9 +3504,6 @@ SectionDevice
 	Comment "Headset Rx device"
 
 	EnableSequence
-		'SLIM RX1 MUX':0:AIF1_PB
-		'SLIM RX2 MUX':0:AIF1_PB
-		'SLIM_0_RX Channels':0:Two
 		'RX1 MIX1 INP1':0:RX1
 		'RX2 MIX1 INP1':0:RX2
 		'HPHL DAC Switch':1:1
@@ -3430,8 +3515,6 @@ SectionDevice
 	EndSequence
 
 	DisableSequence
-		'SLIM RX1 MUX':0:ZERO
-		'SLIM RX2 MUX':0:ZERO
 		'RX1 MIX1 INP1':0:ZERO
 		'RX2 MIX1 INP1':0:ZERO
 		'HPHL DAC Switch':1:0
@@ -5067,6 +5150,23 @@ SectionModifier
 EndSection
 
 SectionModifier
+	Name "Play MusicSLIMBUS_VIRTUAL_PORT"
+	Comment "Modifier for Music playback on Slimbus VIRTUAL PORT"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 0
+	PlaybackPCM 0
+
+EndSection
+
+
+SectionModifier
 	Name "Play MusicSpeaker FM Tx"
 	Comment "Modifier for music playback"
 
@@ -5258,6 +5358,23 @@ SectionModifier
 	PlaybackPCM 1
 
 EndSection
+
+SectionModifier
+	Name "Play Music2SLIMBUS_VIRTUAL_PORT"
+	Comment "Modifier for Music playback on Slimbus VIRTUAL PORT"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 1
+	PlaybackPCM 1
+
+EndSection
+
 
 SectionModifier
 	Name "Play Music2Speaker FM Tx"
@@ -6024,6 +6141,21 @@ SectionModifier
 
 	DisableSequence
 		'SLIMBUS_0_RX Audio Mixer MultiMedia4':1:0
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 9
+
+EndSection
+
+SectionModifier
+	Name "Play Tunnel1SLIMBUS_VIRTUAL_PORT"
+	Comment "Modifier for Tunnel playback on Slimbus VIRTUAL PORT"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
 	EndSequence
 
 	# ALSA PCMs
@@ -6845,6 +6977,23 @@ SectionModifier
 EndSection
 
 SectionModifier
+	Name "Play Music3SLIMBUS_VIRTUAL_PORT"
+	Comment "Modifier for Music playback on Slimbus VIRTUAL PORT"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 14
+	PlaybackPCM 14
+
+EndSection
+
+
+SectionModifier
 	Name "Play Music3Speaker FM Tx"
 
 	EnableSequence
@@ -7283,6 +7432,22 @@ SectionModifier
 
 EndSection
 
+
+SectionModifier
+	Name "Play Tunnel2SLIMBUS_VIRTUAL_PORT"
+	Comment "Modifier for Tunnel playback on Slimbus VIRTUAL PORT"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 16
+
+EndSection
+
 SectionModifier
 	Name "Play Tunnel2FM Tx"
 
@@ -7534,6 +7699,21 @@ SectionModifier
 
         # ALSA PCMs
         PlaybackPCM 19
+
+EndSection
+
+SectionModifier
+	Name "Play Tunnel3SLIMBUS_VIRTUAL_PORT"
+	Comment "Modifier for Tunnel playback on Slimbus VIRTUAL PORT"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	PlaybackPCM 19
 
 EndSection
 

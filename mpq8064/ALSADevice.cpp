@@ -34,6 +34,7 @@
 #define DEVICE_TYPE_RX 1
 #define DEVICE_TYPE_TX 2
 #define MAX_HDMI_CHANNEL_CNT 8
+#define MAX_NO_BITS 63
 
 #define AFE_PROXY_PERIOD_SIZE 3072
 #define KILL_A2DP_THREAD 1
@@ -455,13 +456,15 @@ status_t ALSADevice::setSoftwareParams(alsa_handle_t *handle)
     return NO_ERROR;
 }
 
-int ALSADevice::getDeviceType(uint32_t devices, uint32_t mode)
+int ALSADevice::getDeviceType(uint64_t devices, uint32_t mode)
 {
      int ret = 0;
 
      devices = getDevices(devices, NULL, NULL);
      if(devices & AudioSystem::DEVICE_OUT_ALL)
         ret = DEVICE_TYPE_RX;
+     if(devices & VIRTUAL_DEVICE_MASK)
+        ret |= DEVICE_TYPE_RX;
      if(devices & AudioSystem::DEVICE_IN_ALL)
         ret |= DEVICE_TYPE_TX;
 
@@ -470,7 +473,7 @@ int ALSADevice::getDeviceType(uint32_t devices, uint32_t mode)
 }
 void ALSADevice::switchDevice(uint32_t devices, uint32_t mode)
 {
-    ALOGV("switchDevice devices = %d, mode = %d", devices,mode);
+    ALOGV("switchDevice devices = %x, mode = %d", devices,mode);
     for(ALSAHandleList::iterator it = mDeviceList->begin(); it != mDeviceList->end(); ++it) {
         if((strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
                           strlen(SND_USE_CASE_VERB_HIFI_TUNNEL))) &&
@@ -491,7 +494,11 @@ void ALSADevice::switchDevice(uint32_t devices, uint32_t mode)
            (strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL3,
                           strlen(SND_USE_CASE_MOD_PLAY_TUNNEL3))) &&
            (strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_MUSIC4,
-                          strlen(SND_USE_CASE_MOD_PLAY_MUSIC4)))) {
+                          strlen(SND_USE_CASE_MOD_PLAY_MUSIC4)))  &&
+           (strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED,
+                          strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED))) &&
+           (strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED,
+                          strlen(SND_USE_CASE_VERB_HIFI_REC_COMPRESSED)))) {
             if(getUseCaseType(it->useCase) ==
                (getUseCaseType(it->useCase) & getDeviceType(devices, mode)))
                 switchDeviceUseCase(&(*it), devices, mode);
@@ -503,23 +510,21 @@ void ALSADevice::switchDeviceUseCase(alsa_handle_t *handle,
                                               uint32_t devices, uint32_t mode)
 {
     char *use_case = NULL;
-    uint32_t activeDevices = handle->activeDevice;
-    uint32_t switchTodevices;
+    uint64_t activeDevices = handle->activeDevice;
+    uint64_t switchTodevices;
     bool bIsUseCaseSet = false;
 
-    switchTodevices = devices = updateDevices(handle->useCase, devices);
-    ALOGV("switchDeviceUseCase curdevices = %d usecase %s devices = %d, mode = %d",
-           handle->activeDevice, handle->useCase, devices, mode);
+    switchTodevices = updateDevices(handle->useCase, devices);
+    ALOGV("switchDeviceUseCase curdevices = %llx usecase %s devices = %llx, mode = %d",
+           handle->activeDevice, handle->useCase, switchTodevices, mode);
 
     //Update the active devices to the device list which needs to be derouted
-    handle->activeDevice = handle->activeDevice & (~devices);
+    handle->activeDevice = handle->activeDevice & (~switchTodevices);
 
     disableDevice(handle);
 
     //List of the devices to be enabled
-    devices = devices & (~activeDevices);
-
-    handle->activeDevice = devices;
+    handle->activeDevice = switchTodevices & (~activeDevices);
 
     snd_use_case_get(handle->ucMgr, "_verb", (const char **)&use_case);
     bIsUseCaseSet = ((use_case == NULL) ||
@@ -1233,25 +1238,35 @@ int  ALSADevice::getUseCaseType(const char *useCase)
 void ALSADevice::disableDevice(alsa_handle_t *handle)
 {
     char *rxDevice = NULL, *txDevice = NULL;
-    uint32_t devices = handle->activeDevice;
+    uint64_t devices = handle->activeDevice;
     bool disableRxDevice = true, disableTxDevice = true;
     char *use_case = NULL;
     unsigned usecase_type = 0;
+    int64_t deviceToDisable,actualDevices;
+    int bitNo=MAX_NO_BITS;
 
     snd_use_case_get(handle->ucMgr, "_verb", (const char **)&use_case);
-    ALOGD("disableDevice device = %d verb  %s mode %d use case %s",
+    ALOGD("disableDevice device = %llx verb  %s mode %d use case %s",
           devices, (use_case == NULL) ? "NULL" : use_case, handle->mode, handle->useCase);
 
     {
         while (devices != 0) {
-            int deviceToDisable = devices & (-devices);
-            int actualDevices = getDevices(deviceToDisable, &rxDevice, &txDevice);
+            // Disable devices from leftmost bit, so that if speaker is present,Slimbus virtual port
+            // is disabled first than the speaker.
+
+            for(;bitNo >= 0;bitNo--){
+                 if(deviceToDisable = (devices & (0x1<<bitNo)))
+                 break;
+            }
+
+            actualDevices = getDevices(deviceToDisable, &rxDevice, &txDevice);
+
 
             for (ALSAHandleList::iterator it = mDeviceList->begin(); it != mDeviceList->end(); ++it) {
                 if (it->useCase != NULL) {
                     if (strcmp(it->useCase, handle->useCase)) {
                         if ((&(*it)) != handle && handle->activeDevice && it->activeDevice && (getDevices(it->activeDevice, NULL, NULL) & actualDevices)) {
-                            ALOGD("disableRxDevice - false use case %s active Device %d deviceToDisable %d",
+                            ALOGD("disableRxDevice - false use case %s active Device %llx deviceToDisable %llx",
                                   it->useCase, it->activeDevice, deviceToDisable);
                             if(getDeviceType(getDevices(it->activeDevice, NULL, NULL) & actualDevices, 0) & DEVICE_TYPE_RX)
                                 disableRxDevice = false;
@@ -1261,6 +1276,8 @@ void ALSADevice::disableDevice(alsa_handle_t *handle)
                     }
                 }
             }
+
+
 
             if(rxDevice) {
                 usecase_type = getUseCaseType(handle->useCase);
@@ -1286,6 +1303,8 @@ void ALSADevice::disableDevice(alsa_handle_t *handle)
                 txDevice = NULL;
             }
             devices = devices & (~deviceToDisable);
+            disableRxDevice = true;
+            disableTxDevice = true;
         }
     }
     handle->activeDevice = 0;
@@ -1294,19 +1313,28 @@ void ALSADevice::disableDevice(alsa_handle_t *handle)
 void ALSADevice::enableDevice(alsa_handle_t *handle, bool bIsUseCaseSet)
 {
     char *rxDevice = NULL, *txDevice = NULL;
-    uint32_t devices = handle->activeDevice;
+    uint64_t devices = handle->activeDevice;
+    int64_t deviceToEnable;
     unsigned usecase_type = 0;
+    int bitNo= MAX_NO_BITS;
 
-    ALOGD("enableDevice %d bIsUseCaseSet %d", handle->activeDevice, bIsUseCaseSet);
+    ALOGD("enableDevice %llx bIsUseCaseSet %d", handle->activeDevice, bIsUseCaseSet);
     while (devices != 0) {
-        int deviceToEnable = devices & (-devices);
+
+        // Enable devices from leftmost bit, so that if speaker is present,Slimbus virtual port
+        // is enabled first than the speaker.
+        for(;bitNo >= 0;bitNo--){
+            if(deviceToEnable = (devices & (0x1<<bitNo)))
+            break;
+        }
+
+        ALOGV("%s: device %llx, to enable %llx", __FUNCTION__, devices, deviceToEnable);
         getDevices(deviceToEnable, &rxDevice, &txDevice);
         if(rxDevice != NULL) {
             usecase_type = getUseCaseType(handle->useCase);
             if (usecase_type & USECASE_TYPE_RX) {
                 if(bIsUseCaseSet) {
                     snd_use_case_set_case(handle->ucMgr, "_verb", handle->useCase, rxDevice);
-                    bIsUseCaseSet = false;
                 } else {
                     snd_use_case_set_case(handle->ucMgr, "_enamod", handle->useCase, rxDevice);
                 }
@@ -1319,7 +1347,6 @@ void ALSADevice::enableDevice(alsa_handle_t *handle, bool bIsUseCaseSet)
             if (usecase_type & USECASE_TYPE_TX) {
                 if(bIsUseCaseSet) {
                     snd_use_case_set_case(handle->ucMgr, "_verb", handle->useCase, txDevice);
-                    bIsUseCaseSet = false;
                 } else {
                     snd_use_case_set_case(handle->ucMgr, "_enamod", handle->useCase, txDevice);
                 }
@@ -1331,8 +1358,9 @@ void ALSADevice::enableDevice(alsa_handle_t *handle, bool bIsUseCaseSet)
     }
 }
 
-char* ALSADevice::getUCMDevice(uint32_t devices, int input)
+char* ALSADevice::getUCMDevice(uint64_t devices, int input)
 {
+    ALOGD("getUCMDevice:: devices %llx", devices);
     if (!input) {
         if (!(mDevSettingsFlag & TTY_OFF) &&
             (callMode == AudioSystem::MODE_IN_CALL) &&
@@ -1386,8 +1414,10 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input)
                 return strdup(SND_USE_CASE_DEV_FM_TX); /* FM Tx */
         } else if (devices & AudioSystem::DEVICE_OUT_SPDIF) {
                 return strdup(SND_USE_CASE_DEV_SPDIF);
+        } else if (devices & VIRTUAL_DEVICE_SLIMBUS_VIRTUAL_PORT) {
+                return strdup(SND_USE_CASE_DEV_SLIMBUS_VIRTUAL_PORT);
         }
-        ALOGD("No valid output device: %u", devices);
+        ALOGD("No valid output device: %llx", devices);
     } else {
         if (!(mDevSettingsFlag & TTY_OFF) &&
             (callMode == AudioSystem::MODE_IN_CALL) &&
@@ -1472,7 +1502,7 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input)
                 return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
             }
         } else {
-            ALOGD("No valid input device: %u", devices);
+            ALOGD("No valid input device: %llx", devices);
         }
     }
     return NULL;
@@ -1875,12 +1905,12 @@ status_t ALSADevice::setHDMIChannelCount(int channels)
     return err;
 }
 
-uint32_t ALSADevice::updateDevices(const char * use_case, uint32_t devices) {
+uint64_t ALSADevice::updateDevices(const char * use_case, uint64_t devices) {
     if (strncmp(use_case, SND_USE_CASE_MOD_PLAY_VOIP,
                strlen(SND_USE_CASE_MOD_PLAY_VOIP)) &&
         strncmp(use_case, SND_USE_CASE_VERB_IP_VOICECALL,
                strlen(SND_USE_CASE_VERB_IP_VOICECALL))) {
-        ALOGD("devices = %x mHardwarePlatform = %d", devices, mHardwarePlatform);
+        ALOGD("devices = %llx mHardwarePlatform = %d", devices, mHardwarePlatform);
         if ((devices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET) ||
              (devices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET)) {
            devices &= ~(AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET);
@@ -1902,12 +1932,18 @@ uint32_t ALSADevice::updateDevices(const char * use_case, uint32_t devices) {
         devices |= (AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET);
     }
 
+    if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) ||
+        (devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET)) {
+        devices |= VIRTUAL_DEVICE_SLIMBUS_VIRTUAL_PORT;
+        ALOGD("Adding virtual device, devices = %llx ", devices);
+    }
+
     return devices;
 }
 
-int ALSADevice::getDevices(uint32_t devices, char **rxDevice, char **txDevice)
+int64_t ALSADevice::getDevices(uint64_t devices, char **rxDevice, char **txDevice)
 {
-    ALOGV("%s: device %x", __FUNCTION__, devices);
+    ALOGV("%s: device %llx", __FUNCTION__, devices);
 
     if ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
         (devices & AudioSystem::DEVICE_IN_WIRED_HEADSET)) {
@@ -1955,7 +1991,8 @@ int ALSADevice::getDevices(uint32_t devices, char **rxDevice, char **txDevice)
         ALOGE("getDevices:: Invalid A2DP Combination");
     }
     if(rxDevice != NULL)
-        *rxDevice = getUCMDevice(devices & AudioSystem::DEVICE_OUT_ALL, 0);
+        *rxDevice = getUCMDevice((uint64_t)(devices & AudioSystem::DEVICE_OUT_ALL)
+                                 | (devices & VIRTUAL_DEVICE_MASK), 0);
     if(txDevice != NULL)
         *txDevice = getUCMDevice(devices & AudioSystem::DEVICE_IN_ALL, 1);
 
@@ -2071,7 +2108,7 @@ int ALSADevice::setUseCase(alsa_handle_t *handle, bool bIsUseCaseSet)
     uint32_t devices;
 
     // check for Conflicts if usecase is already set
-    ALOGD("setUseCase device = %d", handle->activeDevice);
+    ALOGD("setUseCase device = %llx", handle->activeDevice);
     if (!bIsUseCaseSet) {
         ret = checkAndGetAvailableUseCase(handle, altUseCase);
         if (ret > 0 && altUseCase[0] != '\0') {
