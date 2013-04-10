@@ -322,7 +322,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
                 free(params);
             return err;
         }
-        handle->handle->flags &= ~(PCM_STEREO | PCM_MONO | PCM_QUAD | PCM_5POINT1);
+        handle->handle->flags &= ~(PCM_STEREO | PCM_MONO | PCM_QUAD | PCM_5POINT1 | PCM_TRIPLE | PCM_PENTA | PCM_7POINT );
         handle->handle->flags |= PCM_7POINT1;
         handle->channels = 8;
     } else if(handle->type & TRANSCODE_FORMAT) {
@@ -373,6 +373,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
         param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS,
                        handle->channels * 32);
         handle->handle->format = SNDRV_PCM_FORMAT_S24_LE;
+        handle->handle->bytes_per_sample = 4;
     } else {
         param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT,
                        SNDRV_PCM_FORMAT_S16_LE);
@@ -380,6 +381,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
         param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS,
                        handle->channels * 16);
         handle->handle->format = SNDRV_PCM_FORMAT_S16_LE;
+        handle->handle->bytes_per_sample = 2;
     }
     param_set_mask(params, SNDRV_PCM_HW_PARAM_SUBFORMAT,
                    SNDRV_PCM_SUBFORMAT_STD);
@@ -431,10 +433,16 @@ status_t ALSADevice::setSoftwareParams(alsa_handle_t *handle)
 
     if(pcm->flags & PCM_MONO)
         channels = 1;
+    else if(pcm->flags & PCM_TRIPLE)
+        channels = 3;
     else if(pcm->flags & PCM_QUAD)
         channels = 4;
+    else if(pcm->flags & PCM_PENTA)
+        channels = 5;
     else if(pcm->flags & PCM_5POINT1)
         channels = 6;
+    else if(pcm->flags & PCM_7POINT)
+        channels = 7;
     else if(pcm->flags & PCM_7POINT1)
         channels = 8;
     else
@@ -685,10 +693,16 @@ status_t ALSADevice::open(alsa_handle_t *handle)
 
     if (handle->channels == 1) {
         flags |= PCM_MONO;
+    } else if (handle->channels == 3) {
+        flags |= PCM_TRIPLE;
     } else if (handle->channels == 4) {
         flags |= PCM_QUAD;
+    } else if (handle->channels == 5) {
+        flags |= PCM_PENTA;
     } else if (handle->channels == 6) {
         flags |= PCM_5POINT1;
+    } else if (handle->channels == 7) {
+        flags |= PCM_7POINT;
     } else if (handle->channels == 8) {
         flags |= PCM_7POINT1;
     } else {
@@ -2475,6 +2489,7 @@ status_t ALSADevice::openProxyDevice()
 
     //default the format to SNDRV_PCM_FORMAT_S16_LE
     mProxyParams.mProxyPcmHandle->format = SNDRV_PCM_FORMAT_S16_LE;
+    mProxyParams.mProxyPcmHandle->bytes_per_sample = 2;
     param_set_hw_refine(mProxyParams.mProxyPcmHandle, params);
 
     if (param_set_hw_params(mProxyParams.mProxyPcmHandle, params)) {
@@ -2640,10 +2655,16 @@ status_t ALSADevice::openCapture(alsa_handle_t *handle,
 
     if (handle->channels == 1)
         flags |= PCM_MONO;
+    else if (handle->channels == 3)
+        flags |= PCM_TRIPLE;
     else if (handle->channels == 4)
         flags |= PCM_QUAD;
+    else if (handle->channels == 5)
+        flags |= PCM_PENTA;
     else if (handle->channels == 6)
         flags |= PCM_5POINT1;
+    else if (handle->channels == 7)
+        flags |= PCM_7POINT;
     else if (handle->channels == 8)
         flags |= PCM_7POINT1;
     else
@@ -2800,6 +2821,10 @@ status_t ALSADevice::setCaptureHardwareParams(alsa_handle_t *handle, bool isComp
     handle->handle->channels = handle->channels;
     handle->periodSize = handle->handle->period_size;
     handle->bufferSize = handle->handle->period_size;
+    if (handle->handle->format == SNDRV_PCM_FORMAT_S24_LE)
+             handle->handle->bytes_per_sample = 4;
+    else
+             handle->handle->bytes_per_sample = 2;
 
     return NO_ERROR;
 }
@@ -2824,21 +2849,15 @@ status_t ALSADevice::setCaptureSoftwareParams(alsa_handle_t *handle,
     else
         params->tstamp_mode = SNDRV_PCM_TSTAMP_NONE;
     params->period_step = 1;
-    if (flags & PCM_MONO) {
-        params->avail_min = pcm->period_size/2;
-        params->xfer_align = pcm->period_size/2;
-    } else if (flags & PCM_QUAD) {
-        params->avail_min = pcm->period_size/8;
-        params->xfer_align = pcm->period_size/8;
-    } else if (flags & PCM_5POINT1) {
-        params->avail_min = pcm->period_size/12;
-        params->xfer_align = pcm->period_size/12;
-    } else if (flags & PCM_7POINT1) {
-        params->avail_min = pcm->period_size/16;
-        params->xfer_align = pcm->period_size/16;
+    if ((pcm->flags & PCM_MONO)||(pcm->flags & PCM_TRIPLE)||
+        (pcm->flags & PCM_QUAD)||(pcm->flags & PCM_PENTA)||
+        (pcm->flags & PCM_5POINT1) ||(pcm->flags & PCM_7POINT)||
+        (pcm->flags & PCM_7POINT1)){
+          params->avail_min = pcm->period_size/(pcm->bytes_per_sample * pcm-> channels);
+          params->xfer_align = pcm->period_size/(pcm->bytes_per_sample * pcm-> channels);
     } else {
-        params->avail_min = pcm->period_size/4;
-        params->xfer_align = pcm->period_size/4;
+          params->avail_min = pcm->period_size/(2*pcm->bytes_per_sample);
+          params->xfer_align = pcm->period_size/(2*pcm->bytes_per_sample);
     }
 
     params->start_threshold = 1;

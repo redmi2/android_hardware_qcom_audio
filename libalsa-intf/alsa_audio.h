@@ -48,6 +48,7 @@ struct pcm {
     int card_no;
     int device_no;
     int start;
+    int bytes_per_sample;
 };
 #define FORMAT(v) SNDRV_PCM_FORMAT_##v
 
@@ -59,6 +60,9 @@ struct pcm {
 #define PCM_QUAD       0x02000000
 #define PCM_5POINT1    0x04000000
 #define PCM_7POINT1    0x08000000
+#define PCM_TRIPLE     0x00001000
+#define PCM_PENTA      0x00002000
+#define PCM_7POINT     0x00004000
 
 #define PCM_44100HZ    0x00000000
 #define PCM_48000HZ    0x00100000

@@ -3310,13 +3310,22 @@ void AudioSessionOutALSA::setPCMChannelMap(alsa_handle_t *handle)
     memset(channelMap, 0, sizeof(channelMap));
     switch (handle->channels) {
     case 3:
+        channelMap[0] = PCM_CHANNEL_FL;
+        channelMap[1] = PCM_CHANNEL_FR;
+        channelMap[2] = PCM_CHANNEL_FC;
+    break;
     case 4:
         channelMap[0] = PCM_CHANNEL_FL;
         channelMap[1] = PCM_CHANNEL_FR;
         channelMap[2] = PCM_CHANNEL_LB;
         channelMap[3] = PCM_CHANNEL_RB;
+    break;
     case 5:
-        ALOGE("TODO: Investigate and add appropriate channel map appropriately");
+        channelMap[0] = PCM_CHANNEL_FL;
+        channelMap[1] = PCM_CHANNEL_FR;
+        channelMap[2] = PCM_CHANNEL_FC;
+        channelMap[3] = PCM_CHANNEL_LB;
+        channelMap[4] = PCM_CHANNEL_RB;
         break;
     case 6:
         channelMap[0] = PCM_CHANNEL_FL;
@@ -3327,7 +3336,13 @@ void AudioSessionOutALSA::setPCMChannelMap(alsa_handle_t *handle)
         channelMap[5] = PCM_CHANNEL_RB;
         break;
     case 7:
-        ALOGE("TODO: Investigate and add appropriate channel map appropriately");
+        channelMap[0] = PCM_CHANNEL_FL;
+        channelMap[1] = PCM_CHANNEL_FR;
+        channelMap[2] = PCM_CHANNEL_FC;
+        channelMap[3] = PCM_CHANNEL_LFE;
+        channelMap[4] = PCM_CHANNEL_LB;
+        channelMap[5] = PCM_CHANNEL_RB;
+        channelMap[6] = PCM_CHANNEL_FLC;
         break;
     case 8:
         channelMap[0] = PCM_CHANNEL_FL;
