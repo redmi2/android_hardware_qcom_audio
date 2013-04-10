@@ -675,6 +675,10 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
     if (param.get(key, value) == NO_ERROR) {
         if (mA2dpDevice != NULL) {
             mA2dpDevice->set_parameters(mA2dpDevice,keyValuePairs);
+            if(value=="true"){
+                 uint32_t activeUsecase = getExtOutActiveUseCases_l();
+                 status_t err = suspendPlaybackOnExtOut_l(activeUsecase);
+            }
         }
         param.remove(key);
     }
@@ -908,6 +912,8 @@ status_t AudioHardwareALSA::doRouting(int device)
     int newMode = mode();
     bool isRouted = false;
 
+    if(device)
+        mALSADevice->mCurDevice = device;
     if ((device == AudioSystem::DEVICE_IN_VOICE_CALL)
 #ifdef QCOM_FM_ENABLED
         || (device == AudioSystem::DEVICE_IN_FM_RX)
@@ -928,6 +934,18 @@ status_t AudioHardwareALSA::doRouting(int device)
     isRouted |= routeVoiceCall(device, newMode);
     isRouted |= routeVoice2Call(device, newMode);
 
+    if(((mCSCallActive == CS_ACTIVE) ||
+        (mVolteCallActive == CS_ACTIVE) ||
+        (mVoice2CallActive == CS_ACTIVE_SESSION2))&&
+       (mFusion3Platform == true) &&
+       (newMode == AudioSystem::MODE_RINGTONE)){
+      /* 1st voice call on hold but still the call state will be active as
+       * hold state is not propagated to audio stack, now if there is a MT
+       * call, then consider the MODE_IN_RINGTONE as MODE_IN_CALL
+       * */
+       ALOGE(" CS call active %d on fusion", mCSCallActive);
+      newMode = AudioSystem::MODE_IN_CALL;
+    }
     if(!isRouted) {
 #ifdef QCOM_USBAUDIO_ENABLED
         if(!(device & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET) &&
@@ -1177,6 +1195,12 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
                    (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
                     ALOGD("openOutput:  it->rxHandle %d it->handle %d",it->rxHandle,it->handle);
                     voipstream_active = true;
+                    if(mVoipStreamCount >= 2)
+                    {
+                      ALOGE("Avoid creating multiple VoIP session ");
+                      if (status) *status = err;
+                      return NULL;
+                    }
                     break;
                 }
         }
@@ -1535,6 +1559,12 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                    (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
                     ALOGD("openInput:  it->rxHandle %p it->handle %p",it->rxHandle,it->handle);
                     voipstream_active = true;
+                    if(mVoipStreamCount >= 2)
+                    {
+                      ALOGE("Avoid creating multiple VoIP session ");
+                      if (status) *status = err;
+                      return NULL;
+                    }
                     break;
                 }
         }
@@ -2031,6 +2061,7 @@ void AudioHardwareALSA::disableVoiceCall(char* verb, char* modifier, int mode,
         if((!strcmp(it->useCase, verb)) ||
            (!strcmp(it->useCase, modifier))) {
             ALOGV("Disabling voice call vsid:%d", vsid);
+            mALSADevice->setInChannels(0);
             mALSADevice->close(&(*it), vsid);
             mALSADevice->route(&(*it), (uint32_t)device, mode);
             mDeviceList.erase(it);
@@ -2446,7 +2477,6 @@ status_t AudioHardwareALSA::startPlaybackOnExtOut_l(uint32_t activeUsecase) {
 
     ALOGV("startPlaybackOnExtOut_l::usecase = %d ", activeUsecase);
     status_t err = NO_ERROR;
-
     if (!mExtOutStream) {
         ALOGE("Unable to open ExtOut stream");
         return err;
@@ -2547,14 +2577,18 @@ status_t AudioHardwareALSA::openExtOutput(int device) {
             ALOGE("openA2DPOutput failed = %d",err);
             return err;
         }
-        mExtOutStream = mA2dpStream;
+        if(!mExtOutStream) {
+            mExtOutStream = mA2dpStream;
+        }
     } else if (device & AudioSystem::DEVICE_OUT_ALL_USB) {
         err= openUsbOutput();
         if(err) {
             ALOGE("openUsbPOutput failed = %d",err);
             return err;
         }
-        mExtOutStream = mUsbStream;
+        if(!mExtOutStream) {
+            mExtOutStream = mUsbStream;
+        }
     }
     return err;
 }
@@ -2564,14 +2598,17 @@ status_t AudioHardwareALSA::closeExtOutput(int device) {
     ALOGV("closeExtOutput");
     status_t err = NO_ERROR;
     Mutex::Autolock autolock1(mExtOutMutex);
-    mExtOutStream = NULL;
     if (device & AudioSystem::DEVICE_OUT_ALL_A2DP) {
+        if(mExtOutStream == mA2dpStream)
+            mExtOutStream = NULL;
         err= closeA2dpOutput();
         if(err) {
             ALOGE("closeA2DPOutput failed = %d",err);
             return err;
         }
     } else if (device & AUDIO_DEVICE_OUT_ALL_USB) {
+        if(mExtOutStream == mUsbStream)
+            mExtOutStream = NULL;
         err= closeUsbOutput();
         if(err) {
             ALOGE("closeUsbPOutput failed = %d",err);

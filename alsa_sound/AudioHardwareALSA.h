@@ -316,6 +316,7 @@ public:
 #endif
 
     bool mSSRComplete;
+    int mCurDevice;
 protected:
     friend class AudioHardwareALSA;
 private:
@@ -362,6 +363,7 @@ private:
     struct mixer*  mMixer;
     int mInChannels;
     bool mIsSglte;
+    bool mIsFmEnabled;
 #ifdef SEPERATED_AUDIO_INPUT
     int mInput_source
 #endif
