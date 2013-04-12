@@ -57,6 +57,7 @@ struct pollfd pfdUsbRecording[1];
 #define PROXY_SUPPORTED_RATE_8000 8000
 #define PROXY_SUPPORTED_RATE_16000 16000
 #define PROXY_SUPPORTED_RATE_48000 48000
+#define AFE_PROXY_PERIOD_COUNT 32
 
 namespace android_audio_legacy
 {
@@ -321,7 +322,8 @@ void AudioUsbALSA::setkillUsbRecordingThread(bool val){
     mkillRecordingThread = val;
 }
 
-status_t AudioUsbALSA::setHardwareParams(pcm *txHandle, uint32_t sampleRate, uint32_t channels, int periodBytes)
+status_t AudioUsbALSA::setHardwareParams(pcm *txHandle, uint32_t sampleRate,
+        uint32_t channels, int periodBytes, UsbAudioPCMModes usbAudioPCMModes)
 {
     ALOGD("setHardwareParams");
     struct snd_pcm_hw_params *params;
@@ -344,6 +346,8 @@ status_t AudioUsbALSA::setHardwareParams(pcm *txHandle, uint32_t sampleRate, uin
                    SNDRV_PCM_SUBFORMAT_STD);
     ALOGV("Setting period size:%d samplerate:%d, channels: %d",periodBytes,sampleRate, channels);
     param_set_min(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, periodBytes);
+    if(usbAudioPCMModes == PROXY_RECORDING)
+        param_set_int(params, SNDRV_PCM_HW_PARAM_PERIODS, AFE_PROXY_PERIOD_COUNT);
     param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 16);
     param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS,
                   channels - 1 ? 32 : 16);
@@ -371,7 +375,7 @@ status_t AudioUsbALSA::setHardwareParams(pcm *txHandle, uint32_t sampleRate, uin
     return NO_ERROR;
 }
 
-status_t AudioUsbALSA::setSoftwareParams(pcm *pcm, bool playback)
+status_t AudioUsbALSA::setSoftwareParams(pcm *pcm, UsbAudioPCMModes usbAudioPCMModes)
 {
     ALOGD("setSoftwareParams");
     struct snd_pcm_sw_params* params;
@@ -387,9 +391,12 @@ status_t AudioUsbALSA::setSoftwareParams(pcm *pcm, bool playback)
 
     params->avail_min = (pcm->flags & PCM_MONO) ? pcm->period_size/2 : pcm->period_size/4;
 
-    if (playback) {
+    if (usbAudioPCMModes == USB_PLAYBACK) {
         params->start_threshold = (pcm->flags & PCM_MONO) ? pcm->period_size*8 : pcm->period_size*4;
         params->xfer_align = (pcm->flags & PCM_MONO) ? pcm->period_size*8 : pcm->period_size*4;
+    } else if(usbAudioPCMModes == PROXY_PLAYBACK) {
+        params->start_threshold = (pcm->flags & PCM_MONO) ? pcm->period_size*2 : pcm->period_size;
+        params->xfer_align = (pcm->flags & PCM_MONO) ? pcm->period_size*2 : pcm->period_size;
     } else {
         params->start_threshold = (pcm->flags & PCM_MONO) ? pcm->period_size/2 : pcm->period_size/4;
         params->xfer_align = (pcm->flags & PCM_MONO) ? pcm->period_size/2 : pcm->period_size/4;
@@ -397,7 +404,6 @@ status_t AudioUsbALSA::setSoftwareParams(pcm *pcm, bool playback)
     //Setting stop threshold to a huge value to avoid trigger stop being called internally
     params->stop_threshold = 0x0FFFFFFF;
 
-    params->xfer_align = (pcm->flags & PCM_MONO) ? pcm->period_size/2 : pcm->period_size/4;
     params->silence_size = 0;
     params->silence_threshold = 0;
 
@@ -452,7 +458,7 @@ void AudioUsbALSA::RecordingThreadEntry() {
     }
 
     musbRecordingHandle = configureDevice(PCM_IN|channelFlag|PCM_MMAP, (char *)"hw:1,0",
-                                         msampleRateCapture, mchannelsCapture,2048,false);
+                                         msampleRateCapture, mchannelsCapture,2048,USB_RECORDING);
     if (!musbRecordingHandle) {
         ALOGE("ERROR: Could not configure USB device for recording");
         return;
@@ -464,7 +470,7 @@ void AudioUsbALSA::RecordingThreadEntry() {
     pfdUsbRecording[0].events = POLLIN;
 
     mproxyRecordingHandle = configureDevice(PCM_OUT|channelFlag|PCM_MMAP, (char *)"hw:0,7",
-                                            msampleRateCapture, mchannelsCapture,2048,false);
+                                             msampleRateCapture, mchannelsCapture,2048,PROXY_PLAYBACK);
     if (!mproxyRecordingHandle) {
         ALOGE("ERROR: Could not configure Proxy for recording");
         {
@@ -650,7 +656,9 @@ void *AudioUsbALSA::RecordingThreadWrapper(void *me) {
     return NULL;
 }
 
-struct pcm * AudioUsbALSA::configureDevice(unsigned flags, char* hw, int sampleRate, int channelCount, int periodSize, bool playback){
+struct pcm * AudioUsbALSA::configureDevice(unsigned flags, char* hw,
+            int sampleRate, int channelCount,
+            int periodSize, UsbAudioPCMModes usbAudioPCMModes){
     int err = NO_ERROR;
     struct pcm * handle = NULL;
     handle = pcm_open(flags, hw);
@@ -666,7 +674,7 @@ struct pcm * AudioUsbALSA::configureDevice(unsigned flags, char* hw, int sampleR
     }
 
     ALOGD("Setting hardware params: sampleRate:%d, channels: %d",sampleRate, channelCount);
-    err = setHardwareParams(handle, sampleRate, channelCount,periodSize);
+    err = setHardwareParams(handle, sampleRate, channelCount,periodSize, usbAudioPCMModes);
     if (err != NO_ERROR) {
         ALOGE("ERROR: setHardwareParams failed");
         {
@@ -676,7 +684,7 @@ struct pcm * AudioUsbALSA::configureDevice(unsigned flags, char* hw, int sampleR
         }
     }
 
-    err = setSoftwareParams(handle, playback);
+    err = setSoftwareParams(handle, usbAudioPCMModes);
     if (err != NO_ERROR) {
         ALOGE("ERROR: setSoftwareParams failed");
         {
@@ -871,7 +879,8 @@ void AudioUsbALSA::PlaybackThreadEntry() {
     }
 
     musbPlaybackHandle = configureDevice(PCM_OUT|PCM_STEREO|PCM_MMAP, (char *)"hw:1,0",
-                                         msampleRatePlayback, mchannelsPlayback, USB_PERIOD_SIZE, true);
+                                         msampleRatePlayback, mchannelsPlayback,
+                                         USB_PERIOD_SIZE, USB_PLAYBACK);
     if (!musbPlaybackHandle) {
         ALOGE("ERROR: configureUsbDevice failed, returning");
         {
@@ -895,7 +904,7 @@ void AudioUsbALSA::PlaybackThreadEntry() {
     }
 
     mproxyPlaybackHandle = configureDevice(PCM_IN|PCM_STEREO|PCM_MMAP, (char *)"hw:0,8",
-                               msampleRatePlayback, mchannelsPlayback, PROXY_PERIOD_SIZE, false);
+                               msampleRatePlayback, mchannelsPlayback, PROXY_PERIOD_SIZE, PROXY_RECORDING);
     if (!mproxyPlaybackHandle) {
         ALOGE("ERROR: Could not configure Proxy, returning");
         {
