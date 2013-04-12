@@ -217,6 +217,7 @@ public:
     status_t setFmVolume(int vol);
     void     setBtscoRate(int rate);
     status_t setLpaVolume(int vol);
+    status_t setMultichannelVolume(int vol);
     void     enableWideVoice(bool flag);
     void     enableFENS(bool flag);
     void     setFlags(uint32_t flag);

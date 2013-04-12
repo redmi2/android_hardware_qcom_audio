@@ -91,11 +91,20 @@ status_t AudioStreamOutALSA::setVolume(float left, float right)
     }
     vol = lrint((volume * 0x2000)+0.5);
 
-    if(!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,
-            sizeof(mHandle->useCase)) || !strncmp(mHandle->useCase,
-            SND_USE_CASE_MOD_PLAY_VOIP, sizeof(mHandle->useCase))) {
-        ALOGV("Avoid Software volume by returning success\n");
-        return status;
+    if(mHandle) {
+        if(!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI2) ||
+           !strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC2)) {
+            ALOGD("setMultichannelVolume(%u)\n", vol);
+            ALOGD("Setting Multichannel  volume to %d (available range is 0 to 100)\n", vol);
+            mHandle->module->setMultichannelVolume(vol);
+            return status;
+        }
+        if(!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,
+                sizeof(mHandle->useCase)) || !strncmp(mHandle->useCase,
+                SND_USE_CASE_MOD_PLAY_VOIP, sizeof(mHandle->useCase))) {
+            ALOGV("Avoid Software volume by returning success\n");
+            return status;
+        }
     }
     return INVALID_OPERATION;
 }
