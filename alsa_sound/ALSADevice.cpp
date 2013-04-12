@@ -1058,6 +1058,14 @@ status_t ALSADevice::setLpaVolume(int value)
     return err;
 }
 
+status_t ALSADevice::setMultichannelVolume(int value)
+{
+    status_t err = NO_ERROR;
+
+    setMixerControl("HIFI2 RX Volume",value,0);
+
+    return err;
+}
 status_t ALSADevice::start(alsa_handle_t *handle)
 {
     status_t err = NO_ERROR;
