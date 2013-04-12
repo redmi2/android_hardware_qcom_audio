@@ -571,7 +571,7 @@ status_t AudioPolicyManager::stopOutput(audio_io_handle_t output,
                 if (curOutput != output &&
                         desc->refCount() != 0 &&
                         outputDesc->sharesHwModuleWith(desc) &&
-                        newDevice != desc->device()) {
+                        newDevice != (desc->device() & newDevice)) {
                     setOutputDevice(curOutput,
                                     getNewDevice(curOutput, false /*fromCache*/),
                                     true,
