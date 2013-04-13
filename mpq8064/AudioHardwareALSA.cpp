@@ -471,6 +471,80 @@ String8 AudioHardwareALSA::getParameters(const String8& keys)
     return param.toString();
 }
 
+int AudioHardwareALSA::buffer_data(struct pcm *pcm, void *data, unsigned count)
+{
+    int bufsize;
+    int copy = 0;
+    int i, j;
+    void *inflate_data;
+
+    if (pcm->format != SNDRV_PCM_FORMAT_S24_LE || (pcm->flags & PCM_TUNNEL))
+       return 0;
+    ALOGD("Buffering data: count =%d", count);
+    bufsize = (count/4)*3;
+    inflate_data = calloc(1, count);
+    if (pcm->buf->residue_buf == NULL)
+       pcm->buf->residue_buf = calloc(1, bufsize);
+    if (!inflate_data || !pcm->buf->residue_buf) {
+       ALOGE("Could not allocate buffer");
+       if (inflate_data != NULL)
+           free(inflate_data);
+       pcm_close(pcm);
+       return -ENOMEM;
+    }
+    memcpy(inflate_data, pcm->buf->residue_buf,
+    pcm->buf->residue_buf_ptr);
+    copy = bufsize - pcm->buf->residue_buf_ptr;
+    memcpy(inflate_data + pcm->buf->residue_buf_ptr, data, copy);
+    memcpy(pcm->buf->residue_buf, data + copy, count - copy);
+    pcm->buf->residue_buf_ptr = count - copy;
+
+    j = bufsize - 1;
+    for (i = count-1; i >= 0 && j >= 0; i--) {
+       if (i%4 == 0)
+       continue;
+       *((char *)(inflate_data) + i) = *((char *)(inflate_data) + j);
+       j--;
+    }
+    memcpy(data, inflate_data, count);
+    if (inflate_data != NULL)
+       free(inflate_data);
+    return 0;
+}
+
+
+int AudioHardwareALSA::is_buffer_available(struct pcm *pcm, void *data, int count, int format)
+{
+    int i, j, copy;
+    if (format != SNDRV_PCM_FORMAT_S24_LE || (pcm->flags & PCM_TUNNEL))
+       return 0;
+    copy = (count/4)*3;
+    if (pcm->buf->residue_buf_ptr >= copy) {
+       pcm->buf->residue_buf_ptr -= copy;
+       for (i = 0, j = 0; j < count; j++) {
+           if (j%4 == 0)
+               continue;
+           *((char *)data + j) = *((char *)pcm->buf->residue_buf + i);
+           i++;
+       }
+       ALOGD("Extra buffer available");
+       return 1;
+    }
+    return 0;
+}
+
+int AudioHardwareALSA::hw_pcm_write(struct pcm *pcm, void *data, unsigned count)
+{
+    int ret = 0, n = 0;
+    ret = buffer_data(pcm, data, count);
+    if (ret)
+        return ret;
+    do {
+        n = pcm_write(pcm, data, count);
+    } while (is_buffer_available(pcm, data, pcm->period_size, pcm->format));
+    return ret;
+}
+
 status_t AudioHardwareALSA::doRouting(int device)
 {
     Mutex::Autolock autoLock(mLock);

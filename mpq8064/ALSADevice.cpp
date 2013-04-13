@@ -158,7 +158,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     param_init(params);
 
     reqBuffSize = handle->bufferSize;
-    ALOGD("Handle type %d", (int)handle->type);
+    ALOGD("Handle type %d, format=%d", (int)handle->type, handle->format);
     if (handle->type == COMPRESSED_FORMAT || handle->type == COMPRESSED_PASSTHROUGH_FORMAT) {
         if (ioctl(handle->handle->fd, SNDRV_COMPRESS_GET_CAPS, &compr_cap)) {
             ALOGE("SNDRV_COMPRESS_GET_CAPS, failed Error no %d \n", errno);
@@ -276,6 +276,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
         handle->handle->flags &= ~(PCM_STEREO | PCM_MONO | PCM_QUAD | PCM_5POINT1);
         handle->handle->flags |= PCM_7POINT1;
         handle->channels = 8;
+        handle->handle->flags |= PCM_TUNNEL;
     }
     if(handle->sampleRate > 48000) {
         ALOGE("Sample rate >48000, opening the driver with 48000Hz");
@@ -299,15 +300,24 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     param_set_mask(params, SNDRV_PCM_HW_PARAM_ACCESS,
         (handle->handle->flags & PCM_MMAP) ? SNDRV_PCM_ACCESS_MMAP_INTERLEAVED
         : SNDRV_PCM_ACCESS_RW_INTERLEAVED);
-    param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT,
-                   SNDRV_PCM_FORMAT_S16_LE);
+    if ((handle->handle->flags & PCM_TUNNEL) || handle->format == SNDRV_PCM_FORMAT_S24_LE) {
+        param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT,
+                       SNDRV_PCM_FORMAT_S24_LE);
+        param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 32);
+        param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS,
+                       handle->channels * 32);
+        handle->handle->format = SNDRV_PCM_FORMAT_S24_LE;
+    } else {
+        param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT,
+                       SNDRV_PCM_FORMAT_S16_LE);
+        param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 16);
+        param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS,
+                       handle->channels * 16);
+    }
     param_set_mask(params, SNDRV_PCM_HW_PARAM_SUBFORMAT,
                    SNDRV_PCM_SUBFORMAT_STD);
     param_set_int(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, handle->periodSize);
 
-    param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 16);
-    param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS,
-                   handle->channels * 16);
     param_set_int(params, SNDRV_PCM_HW_PARAM_CHANNELS,
                   handle->channels);
     param_set_int(params, SNDRV_PCM_HW_PARAM_RATE, handle->sampleRate);
@@ -324,9 +334,9 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     handle->handle->buffer_size = pcm_buffer_size(params);
     handle->handle->period_size = pcm_period_size(params);
     handle->handle->period_cnt = handle->handle->buffer_size/handle->handle->period_size;
-    ALOGD("setHardwareParams: buffer_size %d, period_size %d, period_cnt %d",
+    ALOGD("setHardwareParams: buffer_size %d, period_size %d, period_cnt %d, format %d",
         handle->handle->buffer_size, handle->handle->period_size,
-        handle->handle->period_cnt);
+        handle->handle->period_cnt, handle->handle->format);
     handle->handle->rate = handle->sampleRate;
     handle->handle->channels = handle->channels;
     handle->periodSize = handle->handle->period_size;
@@ -390,7 +400,7 @@ status_t ALSADevice::setSoftwareParams(alsa_handle_t *handle)
         params->period_step = 1;
         params->avail_min = handle->channels - 1 ? periodSize/2 : periodSize/4;
         params->start_threshold = handle->channels - 1 ? periodSize : periodSize/2;
-        params->xfer_align = handle->handle->period_size/(2*channels);
+        params->xfer_align = handle->handle->period_size/(4*channels);
     }
     params->silence_threshold = 0;
     params->silence_size = 0;
@@ -1604,6 +1614,10 @@ int32_t ALSADevice::get_linearpcm_channel_status(uint32_t sampleRate,
             status = -1;
             break;
     }
+    // device is always set at 24bit, set bits at index 32 with :11 01
+    bit_index = 32;
+    set_bits(channel_status, 4, 0x0D, &bit_index);
+
     return status;
 }
 
@@ -1615,6 +1629,7 @@ int32_t ALSADevice::get_compressed_channel_status(void *audio_stream_data,
                                                   //            - AUDIO_PARSER_CODEC_DTS
 {
     unsigned char *streamPtr;
+    unsigned char bit_index = 0;
     streamPtr = (unsigned char *)audio_stream_data;
 
     if(init_audio_parser(streamPtr, audio_frame_size, codec_type) == -1)
@@ -1623,6 +1638,10 @@ int32_t ALSADevice::get_compressed_channel_status(void *audio_stream_data,
         return -1;
     }
     get_channel_status(channel_status, codec_type);
+    // device is always set at 24bit, set bits at index 32 with :11 01
+    bit_index = 32;
+    set_bits(channel_status, 4, 0x0D, &bit_index);
+
     return 0;
 }
 

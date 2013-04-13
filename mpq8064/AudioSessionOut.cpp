@@ -214,7 +214,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
         mUseTunnelDecoder = true;
         mWMAConfigDataSet = false;
 
-    } else if(format == AUDIO_FORMAT_PCM_16_BIT) {
+    } else if(format == AUDIO_FORMAT_PCM_16_BIT || format == AUDIO_FORMAT_PCM_24_BIT) {
         mMinBytesReqToDecode = PCM_BLOCK_PER_CHANNEL_MS11*mChannels-1;
 /* Enable this when Support of 6 channel to AC3 is required. Till then PCM is pass throughed
         if(channels > 2 && channels <= 6) {
@@ -755,7 +755,7 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
                         fclose(mFpDumpPCMOutput);
                     }
 #endif
-                    n = pcm_write(mPcmRxHandle->handle,
+                    n = mParent->hw_pcm_write(mPcmRxHandle->handle,
                               mBitstreamSM->getOutputBufferPtr(PCM_MCH_OUT),
                               period_size);
                     ALOGD("mPcmRxHandle - pcm_write returned with %d", n);
@@ -822,9 +822,9 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
                     fclose(mFpDumpPCMOutput);
                 }
 #endif
-                n = pcm_write(mPcmRxHandle->handle,
-                         mBitstreamSM->getInputBufferPtr(),
-                          period_size);
+                n = mParent->hw_pcm_write(mPcmRxHandle->handle,
+                                  mBitstreamSM->getInputBufferPtr(),
+                                  period_size);
                 ALOGD("pcm_write returned with %d", n);
                 if (n == -EBADFD) {
                     // Somehow the stream is in a bad state. The driver probably
@@ -1111,8 +1111,7 @@ void  AudioSessionOutALSA::eventThreadEntry() {
 
                     mInputMemEmptyQueue[0].push_back(buf);
                     mInputMemMutex.unlock();
-                    hw_ptr[0] += mCompreRxHandle->bufferSize/(2*mCompreRxHandle->channels);
-
+                    hw_ptr[0] += mCompreRxHandle->bufferSize/(4*mCompreRxHandle->channels);
                     {
                         Mutex::Autolock autoLock(mSyncLock);
                         mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN |
@@ -1144,7 +1143,7 @@ void  AudioSessionOutALSA::eventThreadEntry() {
 
                    mInputMemEmptyQueue[1].push_back(buf);
                    mInputMemMutex.unlock();
-                   hw_ptr[1] += mSecCompreRxHandle->bufferSize/(2*mSecCompreRxHandle->channels);
+                   hw_ptr[1] += mSecCompreRxHandle->bufferSize/(4*mSecCompreRxHandle->channels);
                    {
                         Mutex::Autolock autoLock(mSyncLock);
                         mSecCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN |
@@ -1714,7 +1713,6 @@ status_t AudioSessionOutALSA::openDevice(char *useCase, bool bIsUseCase, int dev
     alsa_handle.devices     = devices;
     alsa_handle.activeDevice= devices;
     alsa_handle.handle      = 0;
-    alsa_handle.format      = (mFormat == AUDIO_FORMAT_PCM_16_BIT ? SNDRV_PCM_FORMAT_S16_LE : mFormat);
     alsa_handle.channels    = mChannels;
     alsa_handle.sampleRate  = mSampleRate;
     alsa_handle.mode        = mParent->mode();
@@ -1722,6 +1720,17 @@ status_t AudioSessionOutALSA::openDevice(char *useCase, bool bIsUseCase, int dev
     alsa_handle.rxHandle    = 0;
     alsa_handle.ucMgr       = mUcMgr;
     alsa_handle.timeStampMode = SNDRV_PCM_TSTAMP_NONE;
+
+    switch(mFormat) {
+    case AUDIO_FORMAT_PCM_16_BIT:
+        alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
+        break;
+    case AUDIO_FORMAT_PCM_24_BIT:
+        alsa_handle.format = SNDRV_PCM_FORMAT_S24_LE;
+        break;
+    default:
+        alsa_handle.format = mFormat;
+    }
 
     if ((!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
                           strlen(SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
@@ -2131,7 +2140,8 @@ void AudioSessionOutALSA::setSpdifHdmiRoutingFlags(int devices)
     }
     if(!strncmp(mSpdifOutputFormat,"dts",sizeof(mSpdifOutputFormat))) {
         if(devices & AudioSystem::DEVICE_OUT_SPDIF) {
-            if(mFormat != AUDIO_FORMAT_PCM_16_BIT && mUseTunnelDecoder == true) {
+            if((mFormat != AUDIO_FORMAT_PCM_16_BIT || mFormat != AUDIO_FORMAT_PCM_24_BIT)
+                && mUseTunnelDecoder == true) {
                 mSpdifFormat = COMPRESSED_FORMAT;
                 if(mFormat != AUDIO_FORMAT_DTS && mFormat != AUDIO_FORMAT_DTS_LBR) {
                      mTranscodeDevices |= AudioSystem::DEVICE_OUT_SPDIF;

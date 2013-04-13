@@ -1727,7 +1727,7 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
                      mInputMemEmptyQueue.size(), mInputMemFilledQueue.size());
                 mInputMemMutex.unlock();
                 mWriteCv.signal();
-                hw_ptr += mCompreRxHandle->bufferSize/(2*mCompreRxHandle->channels);
+                hw_ptr += mCompreRxHandle->bufferSize/(4*mCompreRxHandle->channels);
                 {
                     Mutex::Autolock autoLock(mSyncLock);
                     mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN |
