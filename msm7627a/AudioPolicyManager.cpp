@@ -1039,7 +1039,11 @@ uint32_t AudioPolicyManager::setOutputDevice(audio_io_handle_t output, audio_dev
         return muteWaitMs;
     }
 
-    ALOGV("setOutputDevice() changing device");
+    if (device == prevDevice) {
+        ALOGV("setOutputDevice() Call routing with same device with zero delay");
+        delayMs = 0;
+    }
+    ALOGV("setOutputDevice() changing device:%x", device);
     // do the routing
     param.addInt(String8(AudioParameter::keyRouting), (int)device);
     mpClientInterface->setParameters(output, param.toString(), delayMs);
