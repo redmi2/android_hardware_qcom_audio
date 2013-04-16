@@ -585,6 +585,8 @@ status_t ALSADevice::open(alsa_handle_t *handle)
     handle->handle->flags = flags;
     ALOGD("setting hardware parameters");
 
+    //Default format initialized to SNDRV_PCM_FORMAT_S16_LE
+    handle->handle->format = SNDRV_PCM_FORMAT_S16_LE;
     err = setHardwareParams(handle);
     if (err == NO_ERROR) {
         ALOGD("setting software parameters");
@@ -2213,7 +2215,8 @@ status_t ALSADevice::openProxyDevice()
             mProxyParams.mProxyPcmHandle->channels);
     param_set_int(params, SNDRV_PCM_HW_PARAM_RATE,
             mProxyParams.mProxyPcmHandle->rate);
-
+    //default the format to SNDRV_PCM_FORMAT_S16_LE
+    mProxyParams.mProxyPcmHandle->format = SNDRV_PCM_FORMAT_S16_LE;
     param_set_hw_refine(mProxyParams.mProxyPcmHandle, params);
 
     if (param_set_hw_params(mProxyParams.mProxyPcmHandle, params)) {
