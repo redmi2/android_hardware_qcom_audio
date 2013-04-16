@@ -540,7 +540,11 @@ int AudioHardwareALSA::hw_pcm_write(struct pcm *pcm, void *data, unsigned count)
     if (ret)
         return ret;
     do {
-        n = pcm_write(pcm, data, count);
+        ret = pcm_write(pcm, data, count);
+        if (ret < 0) {
+           ALOGE("error pcm_write returned %d", n);
+           break;
+        }
     } while (is_buffer_available(pcm, data, pcm->period_size, pcm->format));
     return ret;
 }
