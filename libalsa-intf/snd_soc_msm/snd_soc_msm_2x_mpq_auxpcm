@@ -4832,7 +4832,7 @@ SectionDevice
         DisableSequence
         EndSequence
 
-       ACDBID       44:2
+       ACDBID       54:2
        EffectsMixerCTL "SRS SS3D"
 
 EndSection
@@ -4846,7 +4846,7 @@ SectionDevice
         DisableSequence
         EndSequence
 
-       ACDBID       44:2
+       ACDBID       54:2
        EffectsMixerCTL "SRS SS3D"
 
 EndSection
