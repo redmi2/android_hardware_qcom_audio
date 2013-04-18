@@ -59,6 +59,7 @@ static debug = 0;
 static uint32_t play_max_sz = 2147483648LL;
 static int format = SNDRV_PCM_FORMAT_S16_LE;
 static int period = 0;
+static int period_count = 0;
 static int compressed = 0;
 static int set_channel_map = 0;
 static char channel_map[8];
@@ -77,6 +78,7 @@ static struct option long_options[] =
     {"channel", 1, 0, 'C'},
     {"format", 1, 0, 'F'},
     {"period", 1, 0, 'B'},
+    {"period count", 1, 0, 'K'},
     {"compressed", 0, 0, 'T'},
     {"channelMap", 0, 0, 'X'},
     {0, 0, 0, 0}
@@ -141,6 +143,9 @@ static int set_params(struct pcm *pcm)
          param_set_min(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, period);
      else
          param_set_min(params, SNDRV_PCM_HW_PARAM_PERIOD_TIME, 10);
+
+     if (period_count)
+         param_set_max(params, SNDRV_PCM_HW_PARAM_PERIODS, period_count);
 
      switch (format) {
      case SNDRV_PCM_FORMAT_S16_LE:
@@ -216,6 +221,8 @@ void send_channel_map_driver(struct pcm *pcm)
         return;
     }
     ret = pcm_set_channel_map(pcm, mixer, 8, channel_map);
+    for (i=0; i<8; i++)
+        fprintf(stderr, "channel_map[%d]: %d\n", i, channel_map[i]);
     if (ret < 0)
         fprintf(stderr, "could not set channel mask\n");
     mixer_close(mixer);
@@ -364,16 +371,21 @@ static int play_file(unsigned rate, unsigned channels, int fd,
                compr_params.codec.id = SND_AUDIOCODEC_AAC;
                printf("codec -d = %x\n", SND_AUDIOCODEC_AAC);
                break;
+           case SND_AUDIOCODEC_PCM:
+               compr_params.codec.id = SND_AUDIOCODEC_PCM;
+               printf("codec -d = %x\n", SND_AUDIOCODEC_PCM);
            default:
                break;
            }
+       compr_params.codec.transcode_dts = 0;
        if (ioctl(pcm->fd, SNDRV_COMPRESS_SET_PARAMS, &compr_params)) {
           fprintf(stderr, "Aplay: SNDRV_COMPRESS_SET_PARAMS,failed Error no %d \n", errno);
           pcm_close(pcm);
           return -errno;
        }
        outputMetadataLength = sizeof(struct output_metadata_handle_t);
-    } else if (channels > 2) {
+    }
+    if (channels > 2) {
         if(set_channel_map) {
             send_channel_map_driver(pcm);
         }
@@ -605,22 +617,49 @@ start_done:
             if (remainingData < bufsize)
                 bufsize = remainingData;
         }
-        
-        while (read(fd, data, bufsize) > 0) {
-            if (hw_pcm_write(pcm, data, bufsize)){
-                fprintf(stderr, "Aplay: pcm_write failed\n");
-                free(data);
-                pcm_close(pcm);
-                return -errno;
-            }
-            memset(data, 0, bufsize);
 
-            if (data_sz && !piped) {
-                remainingData -= bufsize;
-                if (remainingData <= 0)
-                    break;
-                if (remainingData < bufsize)
-                       bufsize = remainingData;
+        if (compressed) {
+             while ((err = read(fd, data+outputMetadataLength,
+                    bufsize-outputMetadataLength)) > 0) {
+                 updateMetaData(err);
+                 memcpy(data, &outputMetadataTunnel, outputMetadataLength);
+                 if (hw_pcm_write(pcm, data, bufsize)){
+                     fprintf(stderr, "Aplay: pcm_write failed\n");
+                     free(data);
+                     pcm_close(pcm);
+                     return -errno;
+                 }
+                 memset(data, 0, bufsize);
+
+                 if (data_sz && !piped) {
+                     remainingData -= bufsize;
+                     if (remainingData <= 0)
+                         break;
+                     if (remainingData < bufsize)
+                         bufsize = remainingData;
+                 }
+             }
+             fprintf(stderr,"Audio Drain \n");
+             if ( ioctl(pcm->fd, SNDRV_COMPRESS_DRAIN) < 0 )
+                 fprintf(stderr,"Audio Drain failed\n");
+             fprintf(stderr,"Audio Drain DONE \n");
+        } else {
+            while (read(fd, data, bufsize) > 0) {
+                if (hw_pcm_write(pcm, data, bufsize)){
+                    fprintf(stderr, "Aplay: pcm_write failed\n");
+                    free(data);
+                    pcm_close(pcm);
+                    return -errno;
+                }
+                memset(data, 0, bufsize);
+
+                if (data_sz && !piped) {
+                    remainingData -= bufsize;
+                    if (remainingData <= 0)
+                        break;
+                    if (remainingData < bufsize)
+                           bufsize = remainingData;
+                }
             }
         }
         free(data);
@@ -802,7 +841,8 @@ int main(int argc, char **argv)
                 "-V   -- verbose\n"
     "-F             -- Format\n"
                 "-B             -- Period\n"
-                "-T <MP3, AAC, AC3_PASS_THROUGH>  -- Compressed\n"
+                "-K             -- Period Count\n"
+                "-T <MP3, AAC, AC3_PASS_THROUGH, PCM>  -- Compressed\n"
                 "-X <\"FL,FR,FC,Ls,Rs,LFE\" for 5.1 configuration\n"
                 "     supported channels: \n"
                 "     FL, FR, FC, LS, RS, LFE, CS, TS \n"
@@ -815,7 +855,7 @@ int main(int argc, char **argv)
            fprintf(stderr, "\nSome of these may not be available on selected hardware\n");
            return 0;
      }
-     while ((c = getopt_long(argc, argv, "PVMD:R:C:F:B:T:X:", long_options, &option_index)) != -1) {
+     while ((c = getopt_long(argc, argv, "PVMD:R:C:F:B:K:T:X", long_options, &option_index)) != -1) {
        switch (c) {
        case 'P':
           pcm_flag = 0;
@@ -841,6 +881,9 @@ int main(int argc, char **argv)
           break;
        case 'B':
           period = (int)strtol(optarg, NULL, 0);
+          break;
+       case 'K':
+          period_count = (int)strtol(optarg, NULL, 0);
           break;
        case 'T':
           compressed = 1;
@@ -871,6 +914,7 @@ int main(int argc, char **argv)
     "-R             -- Rate\n"
     "-F             -- Format\n"
                 "-B             -- Period\n"
+                "-K             -- Period Count\n"
                 "-T             -- Compressed\n"
                 "-X <\"FL,FR,FC,Ls,Rs,LFE\" for 5.1 configuration\n"
                 "     supported channels: \n"
