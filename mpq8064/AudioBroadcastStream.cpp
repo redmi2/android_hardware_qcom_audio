@@ -386,7 +386,7 @@ ssize_t AudioBroadcastStreamALSA::write(const void *buffer, size_t bytes,
 
     ALOGV("write:: buffer %p, bytes %d", buffer, bytes);
     if (!mPowerLock) {
-        acquire_wake_lock (PARTIAL_WAKE_LOCK, "AudioOutLock");
+        acquire_wake_lock (PARTIAL_WAKE_LOCK, "AudioBroadcastLock");
         mPowerLock = true;
     }
 
