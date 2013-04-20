@@ -30,6 +30,7 @@
 #include <utils/threads.h>
 #include <sys/poll.h>
 #include <sys/eventfd.h>
+#include "AudioUtil.h"
 
 extern "C" {
    #include <sound/asound.h>
@@ -51,17 +52,24 @@ namespace android_audio_legacy
 using android::List;
 using android::Mutex;
 using android::Condition;
+class ALSADevice;
+class ALSAControl;
 class AudioHardwareALSA;
 class SoftMS11;
 class AudioBitstreamSM;
-/**
- * The id of ALSA module
- */
+/*******************************************************************************
+ID - ALSA MODULE
+*******************************************************************************/
 #define ALSA_HARDWARE_MODULE_ID "alsa"
 #define ALSA_HARDWARE_NAME      "alsa"
 
+/*******************************************************************************
+PLAYBACK, RECORD AND VOICE RELATED
+*******************************************************************************/
 #define DEFAULT_SAMPLING_RATE 48000
+#define MAX_SUPPORTED_SAMPLING_RATE 192000
 #define DEFAULT_CHANNEL_MODE  2
+#define MAX_SUPPORTED_CHANNELS  8
 #define VOICE_SAMPLING_RATE   8000
 #define VOICE_CHANNEL_MODE    1
 #define PLAYBACK_LATENCY      24000
@@ -86,7 +94,9 @@ class AudioBitstreamSM;
 #define VOIP_BUFFER_MAX_SIZE   VOIP_BUFFER_SIZE_16K
 #define VOIP_PLAYBACK_LATENCY      6400
 #define VOIP_RECORD_LATENCY        6400
-
+/*******************************************************************************
+KEYVALUE PAIR FOR SET/GET PARAMETER
+*******************************************************************************/
 #define DUALMIC_KEY         "dualmic_enabled"
 #define FLUENCE_KEY         "fluence"
 #define ANC_KEY             "anc_enabled"
@@ -106,7 +116,9 @@ class AudioBitstreamSM;
 #define TTY_VCO         0x00000040
 #define TTY_HCO         0x00000080
 #define TTY_CLEAR       0xFFFFFF0F
-
+/*******************************************************************************
+BIT STREAM STATEMACHINE
+*****************************************************************************/
 #define SAMPLES_PER_CHANNEL             1536*2
 #define MAX_INPUT_CHANNELS_SUPPORTED    8
 #define FACTOR_FOR_BUFFERING            2
@@ -121,16 +133,21 @@ class AudioBitstreamSM;
 #define PCM_MCH_OUT                 1
 #define SPDIF_OUT                   2
 #define COMPRESSED_OUT              2 // should be same as SPDIF_OUT
+#define TRANSCODE_OUT               3
 
 #ifndef ALSA_DEFAULT_SAMPLE_RATE
 #define ALSA_DEFAULT_SAMPLE_RATE 44100 // in Hz
 #endif
-
+/*******************************************************************************
+SESSION ID
+*******************************************************************************/
 #define NORMAL_PLAYBACK_SESSION_ID 0
 #define LPA_SESSION_ID 1
 #define TUNNEL_SESSION_ID 2
 #define MPQ_SESSION_ID 3
-
+/*******************************************************************************
+TUNNEL MODE
+*******************************************************************************/
 //Required for Tunnel
 #define TUNNEL_DECODER_BUFFER_SIZE 4800
 #define TUNNEL_DECODER_BUFFER_COUNT 256
@@ -148,48 +165,351 @@ class AudioBitstreamSM;
 #define NUM_AUDIOSESSION_FDS 3
 #define AFE_PROXY_SAMPLE_RATE 48000
 #define AFE_PROXY_CHANNEL_COUNT 2
-
-#define PCM_CHANNEL_FL    1
-/* Front right channel. */
-#define PCM_CHANNEL_FR    2
-/* Front center channel. */
-#define PCM_CHANNEL_FC    3
-/* Left surround channel.*/
-#define PCM_CHANNEL_LS   4
-/* Right surround channel.*/
-#define PCM_CHANNEL_RS   5
-/* Low frequency effect channel. */
-#define PCM_CHANNEL_LFE  6
-/* Center surround channel; Rear center channel. */
-#define PCM_CHANNEL_CS   7
-/* Left back channel; Rear left channel. */
-#define PCM_CHANNEL_LB   8
-/* Right back channel; Rear right channel. */
-#define PCM_CHANNEL_RB   9
-/* Top surround channel. */
-#define PCM_CHANNEL_TS   10
-/* Center vertical height channel.*/
-#define PCM_CHANNEL_CVH  11
-/* Mono surround channel.*/
-#define PCM_CHANNEL_MS   12
-/* Front left of center. */
-#define PCM_CHANNEL_FLC  13
-/* Front right of center. */
-#define PCM_CHANNEL_FRC  14
-/* Rear left of center. */
-#define PCM_CHANNEL_RLC  15
-/* Rear right of center. */
-#define PCM_CHANNEL_RRC  16
-
-//Required for ADTS Header Parsing
+/*******************************************************************************
+A2DP STATES
+*******************************************************************************/
+#define A2DP_RENDER_SETUP   0
+#define A2DP_RENDER_START   1
+#define A2DP_RENDER_STOP    2
+#define A2DP_RENDER_SUSPEND 3
+/*******************************************************************************
+CHANNEL MAP
+******************************************************************************/
+#define PCM_CHANNEL_FL    1 /* Front left channel */
+#define PCM_CHANNEL_FR    2 /* Front right channel. */
+#define PCM_CHANNEL_FC    3 /* Front center channel. */
+#define PCM_CHANNEL_LS    4 /* Left surround channel.*/
+#define PCM_CHANNEL_RS    5 /* Right surround channel.*/
+#define PCM_CHANNEL_LFE   6 /* Low frequency effect channel. */
+#define PCM_CHANNEL_CS    7 /* Center surround channel; Rear center channel. */
+#define PCM_CHANNEL_LB    8 /* Left back channel; Rear left channel. */
+#define PCM_CHANNEL_RB    9 /* Right back channel; Rear right channel. */
+#define PCM_CHANNEL_TS   10 /* Top surround channel. */
+#define PCM_CHANNEL_CVH  11 /* Center vertical height channel.*/
+#define PCM_CHANNEL_MS   12 /* Mono surround channel.*/
+#define PCM_CHANNEL_FLC  13 /* Front left of center. */
+#define PCM_CHANNEL_FRC  14 /* Front right of center. */
+#define PCM_CHANNEL_RLC  15 /* Rear left of center. */
+#define PCM_CHANNEL_RRC  16 /* Rear right of center. */
+/*******************************************************************************
+ADTS HEADER PARSING
+******************************************************************************/
 #define ADTS_HEADER_SYNC_RESULT 0xfff0
 #define ADTS_HEADER_SYNC_MASK 0xfff6
+/*******************************************************************************
+USECASES AND THE CORRESPONDING DEVICE FORMATS THAT WE SUPPORT IN HAL
+*******************************************************************************/
+/*
+In general max of 2 for pass through. Additional 1 for handling transcode
+as the existence of transcode is with a PCM handle followed by transcode handle
+So, a (AC3/EAC3) pass through + trancode require - 1 for pas through, 1 - pcm and
+1 - transcode
+*/
+#define NUM_DEVICES_SUPPORT_COMPR_DATA 2+1
+#define NUM_SUPPORTED_CODECS           14
+#define NUM_DECODE_PATH                6
+#define NUM_COLUMN_FOR_INDEXING        2
+#define NUM_STATES_FOR_EACH_DEVICE_FMT 3
+#define DECODER_TYPE_IDX               0
+#define ROUTE_FORMAT_IDX               1
 
-static uint32_t FLUENCE_MODE_ENDFIRE   = 0;
-static uint32_t FLUENCE_MODE_BROADSIDE = 1;
-class ALSADevice;
-class ALSAControl;
+#define MIN_SIZE_FOR_METADATA    96//metadata is 64, but we need LCM of 1 to 8
+#define NUM_OF_PERIODS_COMPR     4
+#define NUM_OF_PERIODS_PCM       8
+#define PERIOD_SIZE_COMPR        2400+MIN_SIZE_FOR_METADATA
+#define PERIOD_SIZE_PCM_16BIT    1920*2*6/*16 bit*/+MIN_SIZE_FOR_METADATA
+#define PERIOD_SIZE_PCM_24BIT    1920*3*6/*24 bit*/+MIN_SIZE_FOR_METADATA
 
+#define MS11_INPUT_BUFFER_SIZE   1536
+#define MP3_INPUT_BUFFER_SIZE    576
+#define WMA_INPUT_BUFFER_SIZE    128
+#define MP2_INPUT_BUFFER_SIZE    128
+#define DTS_INPUT_BUFFER_SIZE    128
+#define PCM_16_INPUT_BUFFER_SIZE 4*480
+#define PCM_24_INPUT_BUFFER_SIZE 4*720
+/*
+List of indexes of the supported formats
+Redundant formats such as (AAC-LC, HEAAC) are removed from the indexes as they
+are treated with the AAC format
+*/
+enum {
+    PCM_IDX = 0,
+    AAC_IDX,
+    AC3_IDX,
+    EAC3_IDX,
+    DTS_IDX,
+    DTS_LBR_IDX,
+    MP3_IDX,
+    WMA_IDX,
+    WMA_PRO_IDX,
+    MP2_IDX,
+    ALL_FORMATS_IDX
+};
+/*
+List of pass through's supported in the current usecases
+*/
+enum {
+    NO_PASSTHROUGH = 0,
+    AC3_PASSTHR,
+    EAC3_PASSTHR,
+    DTS_PASSTHR
+};
+/*
+List of transcoder's supported in the current usecases
+*/
+enum {
+    NO_TRANSCODER = 0,
+    AC3_TRANSCODER,
+    DTS_TRANSCODER
+};
+/*
+Requested end device format by user/app through set parameters
+*/
+enum {
+    UNCOMPRESSED = 0,
+    COMPRESSED,
+    COMPRESSED_CONVERT_EAC3_AC3,
+    COMPRESSED_CONVERT_ANY_AC3,
+    COMPRESSED_CONVERT_ANY_DTS,
+    ALL_DEVICE_FORMATS
+};
+/*
+List of type of data routed on end device
+*/
+enum {
+    ROUTE_NONE = 0,
+    ROUTE_UNCOMPRESSED = 1,
+    ROUTE_COMPRESSED = 2,
+    ROUTE_SW_TRANSCODED_COMPRESSED = 4,
+    ROUTE_DSP_TRANSCODED_COMPRESSED = 8
+};
+/*
+List of end device formats
+*/
+enum {
+    FORMAT_INVALID = -1,
+    FORMAT_PCM,
+    FORMAT_COMPR
+};
+/*
+Below are the only different types of decode that we perform
+*/
+enum {
+    DSP_DECODE = 1,      // render uncompressed
+    DSP_PASSTHROUGH = 2, // render compressed
+    DSP_TRANSCODE = 4,   // render as compressed
+    SW_DECODE = 8,       // render as uncompressed
+    SW_PASSTHROUGH = 16, // render compressed
+    SW_TRANSCODE = 32    // render compressed
+};
+/*
+Modes of buffering that we can support
+As of now, we only support input buffering to an extent specified by usecase
+*/
+enum {
+    NO_BUFFERING_MODE = 0,
+    INPUT_BUFFERING_MODE,
+    OUTPUT_BUFFEING_MODE
+};
+/*
+playback controls
+*/
+enum {
+    PLAY = 0,
+    PAUSE,
+    RESUME,
+    SEEK,
+    EOS
+};
+/*
+Multiple instance of use case
+*/
+enum {
+    STEREO_DRIVER = 0,
+    MULTI_CHANNEL_DRIVER,
+    COMRPESSED_DRIVER,
+};
+/*
+Instance bits
+*/
+enum {
+    MULTI_CHANNEL_1_BIT = 1<<4,
+    MULTI_CHANNEL_2_BIT = 1<<5,
+    MULTI_CHANNEL_3_BIT = 1<<6,
+    COMPRESSED_1_BIT    = 1<<12,
+    COMPRESSED_2_BIT    = 1<<13,
+    COMPRESSED_3_BIT    = 1<<14,
+    COMPRESSED_4_BIT    = 1<<15,
+    COMPRESSED_5_BIT    = 1<<16,
+    COMPRESSED_6_BIT    = 1<<17
+};
+/*
+List of support formats configured from frameworks
+*/
+const int supportedFormats[NUM_SUPPORTED_CODECS] = {
+    AUDIO_FORMAT_PCM_16_BIT,
+    AUDIO_FORMAT_PCM_24_BIT,
+    AUDIO_FORMAT_AAC,
+    AUDIO_FORMAT_HE_AAC_V1,
+    AUDIO_FORMAT_HE_AAC_V2,
+    AUDIO_FORMAT_AAC_ADIF,
+    AUDIO_FORMAT_AC3,
+    AUDIO_FORMAT_EAC3,
+    AUDIO_FORMAT_DTS,
+    AUDIO_FORMAT_DTS_LBR,
+    AUDIO_FORMAT_MP3,
+    AUDIO_FORMAT_WMA,
+    AUDIO_FORMAT_WMA_PRO,
+    AUDIO_FORMAT_MP2
+};
+/*
+we can only have 6 types of decoder type stored with bit masks.
+*/
+const int routeToDriver[NUM_DECODE_PATH][NUM_COLUMN_FOR_INDEXING] = {
+    {DSP_DECODE,      ROUTE_UNCOMPRESSED},
+    {DSP_PASSTHROUGH, ROUTE_COMPRESSED},
+    {DSP_TRANSCODE,   ROUTE_DSP_TRANSCODED_COMPRESSED},
+    {SW_DECODE,       ROUTE_UNCOMPRESSED},
+    {SW_PASSTHROUGH,  ROUTE_COMPRESSED},
+    {SW_TRANSCODE,    ROUTE_SW_TRANSCODED_COMPRESSED}
+};
+/*
+table to query index based on the format
+*/
+const int formatIndex[NUM_SUPPORTED_CODECS][NUM_COLUMN_FOR_INDEXING] = {
+/*---------------------------------------------
+|    FORMAT                  | INDEX           |
+----------------------------------------------*/
+    {AUDIO_FORMAT_PCM_16_BIT,  PCM_IDX},
+    {AUDIO_FORMAT_PCM_24_BIT,  PCM_IDX},
+    {AUDIO_FORMAT_AAC,         AAC_IDX},
+    {AUDIO_FORMAT_HE_AAC_V1,   AAC_IDX},
+    {AUDIO_FORMAT_HE_AAC_V2,   AAC_IDX},
+    {AUDIO_FORMAT_AAC_ADIF,    AAC_IDX},
+    {AUDIO_FORMAT_AC3,         AC3_IDX},
+    {AUDIO_FORMAT_EAC3,        EAC3_IDX},
+    {AUDIO_FORMAT_DTS,         DTS_IDX},
+    {AUDIO_FORMAT_DTS_LBR,     DTS_LBR_IDX},
+    {AUDIO_FORMAT_MP3,         MP3_IDX},
+    {AUDIO_FORMAT_WMA,         WMA_IDX},
+    {AUDIO_FORMAT_WMA_PRO,     WMA_PRO_IDX},
+    {AUDIO_FORMAT_MP2,         MP2_IDX}
+};
+/*
+Table to query non HDMI and SPDIF devices and their states such as type of
+decode, type of data routed to end device and type of transcoding needed
+*/
+const int usecaseDecodeFormat[ALL_FORMATS_IDX*NUM_STATES_FOR_EACH_DEVICE_FMT] = {
+/*-----------------
+|    UNCOMPR      |
+-----------------*/
+/*      PCM    */
+    DSP_DECODE,   //PCM_IDX
+    FORMAT_PCM,   //ROUTE_FORMAT
+    NO_TRANSCODER,//TRANSCODE_FORMAT
+/*      PCM    */
+    SW_DECODE,    // AAC_IDX
+    FORMAT_PCM,   //ROUTE_FORMAT
+    NO_TRANSCODER,//TRANSCODE_FORMAT
+/*      PCM    */
+    SW_DECODE,    //AC3_IDX
+    FORMAT_PCM,   //ROUTE_FORMAT
+    NO_TRANSCODER,//TRANSCODE_FORMAT
+/*      PCM    */
+    SW_DECODE,    //EAC3_IDX
+    FORMAT_PCM,   //ROUTE_FORMAT
+    NO_TRANSCODER,//TRANSCODE_FORMAT
+/*      PCM    */
+    DSP_DECODE,   //DTS_IDX
+    FORMAT_PCM,   //ROUTE_FORMAT
+    NO_TRANSCODER,//TRANSCODE_FORMAT
+/*      PCM    */
+    DSP_DECODE,   //DTS_LBR_IDX
+    FORMAT_PCM,   //ROUTE_FORMAT
+    NO_TRANSCODER,//TRANSCODE_FORMAT
+/*      PCM    */
+    DSP_DECODE,   //MP3_IDX
+    FORMAT_PCM,   //ROUTE_FORMAT
+    NO_TRANSCODER,//TRANSCODE_FORMAT
+/*      PCM    */
+    DSP_DECODE,   //WMA_IDX
+    FORMAT_PCM,   //ROUTE_FORMAT
+    NO_TRANSCODER,//TRANSCODE_FORMAT
+/*      PCM    */
+    DSP_DECODE,   //WMA_PRO_IDX
+    FORMAT_PCM,   //ROUTE_FORMAT
+    NO_TRANSCODER,//TRANSCODE_FORMAT
+/*      PCM    */
+    DSP_DECODE,  //MP2_IDX
+    FORMAT_PCM,  //ROUTE_FORMAT
+    NO_TRANSCODER//TRANSCODE_FORMAT
+};
+/*
+Table to query HDMI and SPDIF devices and their states such as type of
+decode, type of data routed to end device and type of transcoding needed
+*/
+const int usecaseDecodeHdmiSpdif[ALL_FORMATS_IDX*NUM_STATES_FOR_EACH_DEVICE_FMT]
+                                [ALL_DEVICE_FORMATS] = {
+/*--------------------------------------------------------------------------------
+|   UNCOMPRESSED   |     COMPR      |  COMPR_CONV  | COMPR_CONV    |   COMPR_CONV    |
+|                  |                |   EAC3_AC3   |   ANY_AC3     |     ANY_DTS     |
+---------------------------------------------------------------------------------*/
+/*   PCM            PCM              PCM             PCM             PCM       */
+    {DSP_DECODE,    DSP_DECODE,      DSP_DECODE,     DSP_DECODE,     DSP_DECODE|DSP_TRANSCODE},     //PCM_IDX
+    {FORMAT_PCM,    FORMAT_PCM,      FORMAT_PCM,     FORMAT_PCM,     FORMAT_COMPR},   //ROUTE_FORMAT
+    {NO_TRANSCODER, NO_TRANSCODER,   NO_TRANSCODER,  NO_TRANSCODER,  DTS_TRANSCODER}, //TRANSCODE_FMT
+/*   PCM            PCM              PCM             AC3             PCM       */
+    {SW_DECODE,     SW_DECODE,       SW_DECODE,      SW_TRANSCODE,   DSP_DECODE},     //AAC_IDX
+    {FORMAT_PCM,    FORMAT_PCM,      FORMAT_PCM,     FORMAT_COMPR,   FORMAT_PCM},     //ROUTE_FORMAT
+    {NO_TRANSCODER, NO_TRANSCODER,   NO_TRANSCODER,  AC3_TRANSCODER,  NO_TRANSCODER}, //TRANSCODE_FMT
+/*   PCM            AC3              AC3             AC3             PCM       */
+    {SW_DECODE,     SW_PASSTHROUGH,  SW_PASSTHROUGH, SW_PASSTHROUGH, DSP_DECODE},     //AC3_IDX
+    {FORMAT_PCM,    FORMAT_COMPR,    FORMAT_COMPR,   FORMAT_COMPR,   FORMAT_PCM},     //ROUTE_FORMAT
+    {NO_TRANSCODER, AC3_PASSTHR,     AC3_PASSTHR,    AC3_PASSTHR,    NO_TRANSCODER},  //TRANSCODE_FMT
+/*   PCM            EAC3             AC3             AC3             PCM       */
+    {SW_DECODE,     SW_PASSTHROUGH,  SW_TRANSCODE,   SW_TRANSCODE,   DSP_DECODE},     //EAC3_IDX
+    {FORMAT_PCM,    FORMAT_COMPR,    FORMAT_COMPR,   FORMAT_COMPR,   FORMAT_PCM},     //ROUTE_FORMAT
+    {NO_TRANSCODER, EAC3_PASSTHR,    AC3_TRANSCODER, AC3_TRANSCODER, NO_TRANSCODER},  //TRANSCODE_FMT
+/*   PCM            DTS              PCM             PCM             DTS       */
+    {DSP_DECODE,    DSP_PASSTHROUGH, DSP_DECODE,     DSP_DECODE,     DSP_PASSTHROUGH},//DTS_IDX
+    {FORMAT_PCM,    FORMAT_COMPR,    FORMAT_PCM,     FORMAT_PCM,     FORMAT_COMPR},   //ROUTE_FORMAT
+    {NO_TRANSCODER, DTS_PASSTHR,     NO_TRANSCODER,  NO_TRANSCODER,  DTS_PASSTHR},    //TRANSCODE_FMT
+/*   PCM            DTS_LBR          PCM             PCM             DTS       */
+    {DSP_DECODE,    DSP_PASSTHROUGH, DSP_DECODE,     DSP_DECODE,     DSP_PASSTHROUGH},//DTS_LBR_IDX
+    {FORMAT_PCM,    FORMAT_COMPR,    FORMAT_PCM,     FORMAT_PCM,     FORMAT_COMPR},   //ROUTE_FORMAT
+    {NO_TRANSCODER, DTS_PASSTHR,     NO_TRANSCODER,  NO_TRANSCODER,  DTS_PASSTHR},    //TRANSCODE_FMT
+/*   PCM            PCM              PCM             PCM             DTS       */
+    {DSP_DECODE,    DSP_DECODE,      DSP_DECODE,     DSP_DECODE,     DSP_DECODE|DSP_TRANSCODE},  //MP3_IDX
+    {FORMAT_PCM,    FORMAT_PCM,      FORMAT_PCM,     FORMAT_PCM,     FORMAT_COMPR},   //ROUTE_FORMAT
+    {NO_TRANSCODER, NO_TRANSCODER,   NO_TRANSCODER,  NO_TRANSCODER,  DTS_TRANSCODER}, //TRANSCODE_FMT
+/*   PCM            PCM              PCM             PCM             DTS       */
+    {DSP_DECODE,    DSP_DECODE,      DSP_DECODE,     DSP_DECODE,     DSP_DECODE|DSP_TRANSCODE},  //WMA_IDX
+    {FORMAT_PCM,    FORMAT_PCM,      FORMAT_PCM,     FORMAT_PCM,     FORMAT_COMPR},   //ROUTE_FORMAT
+    {NO_TRANSCODER, NO_TRANSCODER,   NO_TRANSCODER,  NO_TRANSCODER,  DTS_TRANSCODER}, //TRANSCODE_FMT
+/*   PCM            PCM              PCM             PCM             DTS       */
+    {DSP_DECODE,    DSP_DECODE,      DSP_DECODE,     DSP_DECODE,     DSP_DECODE|DSP_TRANSCODE},  //WMA_PRO_IDX
+    {FORMAT_PCM,    FORMAT_PCM,      FORMAT_PCM,     FORMAT_PCM,     FORMAT_COMPR},   //ROUTE_FORMAT
+    {NO_TRANSCODER, NO_TRANSCODER,   NO_TRANSCODER,  NO_TRANSCODER,  DTS_TRANSCODER}, //TRANSCODE_FMT
+/*   PCM            PCM              PCM             PCM             DTS       */
+    {DSP_DECODE,    DSP_DECODE,      DSP_DECODE,     DSP_DECODE,     DSP_DECODE|DSP_TRANSCODE},  //MP2_IDX
+    {FORMAT_PCM,    FORMAT_PCM,      FORMAT_PCM,     FORMAT_PCM,     FORMAT_COMPR},   //ROUTE_FORMAT
+    {NO_TRANSCODER, NO_TRANSCODER,   NO_TRANSCODER,  NO_TRANSCODER,  DTS_TRANSCODER}  //TRANSCODE_FMT
+};
+/*
+List of decoders which require config as part of first buffer
+*/
+const int decodersRequireConfig[] = {
+    AUDIO_FORMAT_AAC,
+    AUDIO_FORMAT_HE_AAC_V1,
+    AUDIO_FORMAT_HE_AAC_V2,
+    AUDIO_FORMAT_AAC_ADIF,
+    AUDIO_FORMAT_WMA,
+    AUDIO_FORMAT_WMA_PRO
+};
+/*
+List of enum that are used in Broadcast.
+NOTE: Need to be removed once broadcast is moved with updated states as above
+*/
 enum {
     INVALID_FORMAT               = -1,
     PCM_FORMAT                   = 0,
@@ -197,7 +517,18 @@ enum {
     COMPRESSED_FORCED_PCM_FORMAT = 2,
     COMPRESSED_PASSTHROUGH_FORMAT = 3
 };
-
+/******************************************************************************
+FLUENCE
+*******************************************************************************/
+static uint32_t FLUENCE_MODE_ENDFIRE   = 0;
+static uint32_t FLUENCE_MODE_BROADSIDE = 1;
+/******************************************************************************
+STRUCTURES
+*******************************************************************************/
+/*
+Alsa handle. Holds all the required states about the stream, device it is
+mapped to and the correponding driver opened
+*/
 struct alsa_handle_t {
     ALSADevice*         module;
     uint32_t            devices;
@@ -207,6 +538,7 @@ struct alsa_handle_t {
     snd_pcm_format_t    format;
     uint16_t            channels;
     uint16_t            timeStampMode;
+    uint16_t            metaDataMode;
     uint32_t            sampleRate;
     int                 mode;            // Phone state i.e. incall/normal/incommunication
     unsigned int        latency;         // Delay in usec
@@ -216,7 +548,10 @@ struct alsa_handle_t {
     uint32_t            activeDevice;
     snd_use_case_mgr_t  *ucMgr;
 };
-
+typedef List<alsa_handle_t> ALSAHandleList;
+/*
+Meta data structure for handling compressed read and input path
+*/
 struct compressed_read_metadata_t {
     uint32_t            streamId;
     uint32_t            formatId;
@@ -229,30 +564,32 @@ struct compressed_read_metadata_t {
     uint32_t            timestampLsw;
     uint32_t            flags;
 };
-
 struct input_metadata_handle_t {
     uint64_t            timestamp;
     uint32_t            bufferLength;
     uint32_t            consumedLength;
 };
-
+typedef List<input_metadata_handle_t> inputMetadataList;
+/*
+Meta data structure for handling compressed output
+*/
 struct output_metadata_handle_t {
     uint32_t            metadataLength;
     uint32_t            bufferLength;
     uint64_t            timestamp;
     uint32_t            reserved[12];
 };
-
-typedef List<alsa_handle_t> ALSAHandleList;
-typedef List<input_metadata_handle_t> inputMetadataList;
-
+/*
+use case string list
+*/
 struct use_case_t {
     char                useCase[MAX_STR_LEN];
 };
 typedef List<use_case_t> ALSAUseCaseList;
-
+/******************************************************************************
+CLASS
+*******************************************************************************/
 // ----------------------------------------------------------------------------
-
 class ALSADevice
 {
 public:
@@ -296,7 +633,7 @@ public:
     status_t    setChannelMap(alsa_handle_t *handle, int maxChannels,
                               char *channelMap);
     void        setChannelAlloc(int channelAlloc);
-    status_t    setWMAParams(alsa_handle_t* , int[], int);
+    status_t    setWMAParams(int[], int);
     int         getALSABufferSize(alsa_handle_t *handle);
     status_t    setHDMIChannelCount(int channels);
     void        switchDeviceUseCase(alsa_handle_t *handle, uint32_t devices,
@@ -307,7 +644,19 @@ public:
     void        removeUseCase(alsa_handle_t *handle, char *device);
     status_t    openCapture(alsa_handle_t *handle, bool isMmapMode,
                             bool isCompressed);
+    status_t    openPlayback(alsa_handle_t *handle, bool isMmapMode);
     status_t    configureTranscode(alsa_handle_t *handle);
+    void        updateHDMIEDIDInfo();
+    int         getFormatHDMIIndexEDIDInfo(EDID_AUDIO_FORMAT_ID formatId);
+    bool        isTunnelPlaybackUseCase(const char *useCase);
+    bool        isMultiChannelPlaybackUseCase(const char *useCase);
+    bool        isTunnelPseudoPlaybackUseCase(const char *useCase);
+    char*       getPlaybackUseCase(int type, bool isModifier);
+    void        freePlaybackUseCase(const char *useCase);
+    int         mSpdifFormat;
+    int         mHdmiFormat;
+    EDID_AUDIO_INFO mEDIDInfo;
+    unsigned int mDriverInstancesUsed;
 protected:
     friend class AudioHardwareALSA;
 
@@ -325,8 +674,6 @@ private:
     status_t   startProxy();
 
 private:
-    bool        isUsecaseMatching(const char *usecase, const char *requsecase);
-    int         checkAndGetAvailableUseCase(alsa_handle_t *handle, char altUsecase[]);
     int         deviceName(alsa_handle_t *handle, unsigned flags, char **value);
     status_t    setHardwareParams(alsa_handle_t *handle);
     status_t    setSoftwareParams(alsa_handle_t *handle);
@@ -341,6 +688,8 @@ private:
     void        enableDevice(alsa_handle_t *handle, bool bIsUseCaseSet);
     status_t    setCaptureHardwareParams(alsa_handle_t *handle, bool isCompressed);
     status_t    setCaptureSoftwareParams(alsa_handle_t *handle, bool isCompressed);
+    status_t    setPlaybackHardwareParams(alsa_handle_t *handle);
+    status_t    setPlaybackSoftwareParams(alsa_handle_t *handle);
 
     char        mic_type[128];
     char        curRxUCMDevice[50];
@@ -376,7 +725,7 @@ private:
     };
     struct proxy_params mProxyParams;
 };
-
+// ----------------------------------------------------------------------------
 class ALSAControl
 {
 public:
@@ -419,9 +768,7 @@ protected:
 
     bool                    mPowerLock;
 };
-
 // ----------------------------------------------------------------------------
-
 class AudioStreamOutALSA : public AudioStreamOut, public ALSAStreamOps
 {
 public:
@@ -480,9 +827,7 @@ private:
 protected:
     AudioHardwareALSA *     mParent;
 };
-
 // ----------------------------------------------------------------------------
-
 class AudioSessionOutALSA : public AudioStreamOut
 {
 public:
@@ -543,136 +888,141 @@ public:
     virtual status_t    setObserver(void *observer);
 
 private:
+    // mutex
     Mutex               mLock;
-    Mutex               mSyncLock;
     Mutex               mControlLock;
     Mutex               mRoutingLock;
-    uint32_t            mFrameCount;
-    uint32_t            mSampleRate;
-    uint32_t            mChannels;
-    size_t              mBufferSize;
-    int                 mFormat;
-    int                 mDevices;
-    int                 mSecDevices;
-    int                 mTranscodeDevices;
-    uint32_t            mStreamVol;
-    bool                mPowerLock;
-    bool                mRoutePcmAudio;
-    bool                mRouteAudioToA2dp;
-    bool                mUseTunnelDecoder;
-    bool                mUseDualTunnel;
-    bool                mCaptureFromProxy;
-    bool                mUseMS11Decoder;
-    bool                mDtsTranscode;
-    uint32_t            mSessionId;
-    size_t              mMinBytesReqToDecode;
-    bool                mAacConfigDataSet;
-    bool                mWMAConfigDataSet;
-    unsigned char       mChannelStatus[24];
-    bool                mChannelStatusSet;
-    bool                mTunnelPaused;
-    bool                mPaused;
-    bool                mTunnelSeeking;
-    bool                mReachedExtractorEOS;
-    bool                mSkipWrite;
-    char                mSpdifOutputFormat[128];
-    char                mHdmiOutputFormat[128];
-    uint32_t            mCurDevice;
-    uint32_t            mCurMode;
-    int32_t             mSpdifFormat;
-    int32_t             mHdmiFormat;
-    uint64_t            hw_ptr[2];
-    uint32_t            mA2dpUseCase;
-    struct pollfd       pfd[NUM_AUDIOSESSION_FDS];
-    //Structure to hold mem buffer information
-    class BuffersAllocated {
-    public:
-        BuffersAllocated(void *buf1, int32_t nSize) :
-        memBuf(buf1), memBufsize(nSize), bytesToWrite(0)
-        {}
-        void* memBuf;
-        int32_t memBufsize;
-        uint32_t bytesToWrite;
-    };
+    Mutex               mFrameCountMutex;
 
     AudioHardwareALSA  *mParent;
-    alsa_handle_t *     mPcmRxHandle;
-    alsa_handle_t *     mCompreRxHandle;
-    alsa_handle_t *     mSecCompreRxHandle;
-    alsa_handle_t *     mTranscodeHandle;
-    ALSADevice *        mALSADevice;
+    ALSADevice         *mALSADevice;
     snd_use_case_mgr_t *mUcMgr;
-    SoftMS11           *mMS11Decoder;
-    AudioBitstreamSM   *mBitstreamSM;
-    AudioEventObserver *mObserver;
-    output_metadata_handle_t mOutputMetadataTunnel;
-    uint32_t            mOutputMetadataLength;
-    bool                mFirstBuffer;
-    bool                mADTSHeaderPresent;
 
-    status_t            openPcmDevice(int devices);
-    status_t            openDevice(char *pUseCase, bool bIsUseCase, int devices);
-    status_t            closeDevice(alsa_handle_t *pDevice);
-    status_t            doRouting(int devices);
-    void                createThreadsForTunnelDecode();
-    void                bufferAlloc(alsa_handle_t *handle, int bufIndex);
-    void                bufferDeAlloc(int bufIndex);
-    bool                isReadyToPostEOS(int errPoll, void *fd);
-    status_t            resetBufferQueue();
-    status_t            drainTunnel();
-    status_t            openTunnelDevice(int devices);
-    void                copyBuffers(alsa_handle_t *destHandle, List<BuffersAllocated> filledQueue);
-    void                initFilledQueue(alsa_handle_t *handle, int queueIndex, int consumedIndex);
-    // make sure the event thread also exited
-    void                requestAndWaitForEventThreadExit();
-    int32_t             writeToCompressedDriver(char *buffer, int bytes);
-    static void *       eventThreadWrapper(void *me);
-    void                eventThreadEntry();
-    void                updateOutputFormat();
-    void                updateRoutingFlags(int devices);
-    void                setSpdifHdmiRoutingFlags(int devices);
-    status_t            setPlaybackFormat();
-    void                setChannelMap(alsa_handle_t *handle);
-    void                setPCMChannelMap(alsa_handle_t *handle);
-    status_t            pause_l();
-    status_t            resume_l();
-    void                reset();
-    void                updateMetaData(size_t bytes);
+    // states
+    int                 mDevices;
+    int                 mFormat;
+    uint32_t            mChannels;
+    uint32_t            mSampleRate;
+    uint32_t            mSessionId;
+    uint32_t            mBufferSize;
+
+    // device specifics
+    int                 mSpdifOutputFormat;
+    int                 mHdmiOutputFormat;
+    int                 mSpdifFormat;
+    int                 mHdmiFormat;
+
+    // decoder specifics
+    int                 mDecoderType;
+    bool                mDecoderConfigSet;
+    bool                mUseMS11Decoder;
+    SoftMS11            *mMS11Decoder;
+    AudioBitstreamSM    *mBitstreamSM;
+    uint32_t            mMinBytesReqToDecode;
+    bool                mPaused;
+    int                 mStreamVol;
+    bool                mIsMS11FilePlaybackMode;
+    void                *mDecoderConfigBuffer;
+    int32_t             mDecoderConfigBufferLength;
+    bool                mFirstBitstreamBuffer;
+    // rendering
+    int                 mFrameCount;
+    // misc
+    bool                mPowerLock;
+    // routing
+    uint32_t            mA2dpUseCase;
+    bool                mRouteAudioToA2dp;
+    bool                mOpenDecodeRoute;
+    int                 mDecodeFormatDevices;
+    bool                mOpenPassthroughRoute;
+    int                 mPassthroughFormatDevices;
+    bool                mOpenTranscodeRoute;
+    int                 mTranscodeFormatDevices;
+    int                 mRouteDecodeFormat;
+    int                 mRoutePassthroughFormat;
+    int                 mRouteTrancodeFormat;
+    bool                mChannelStatusSet;
+    unsigned char       mChannelStatus[24];
+    char                *mWriteTempBuffer;
+    AudioEventObserver  *mObserver;
+        /*
+        At any time, we can only route
+        1. PCM on all devices
+        2. PCM on few and Compressed(either DECODE/PASSTHROUGH or TRANSCODE) on others
+        3. Compressed on all devices
+        4. Compressed DECODE/PASSTHROUGH or TRANSCODE
+        Hence atmost 2 handles are required
+        so track states of the handles with corresponding format and devices
+        */
+    int                 mNumRxHandlesActive;
+    alsa_handle_t       *mRxHandle[NUM_DEVICES_SUPPORT_COMPR_DATA];
+    int                 mRxHandleRouteFormat[NUM_DEVICES_SUPPORT_COMPR_DATA];
+    int                 mRxHandleDevices[NUM_DEVICES_SUPPORT_COMPR_DATA];
+    int                 mRxHandleRouteFormatType[NUM_DEVICES_SUPPORT_COMPR_DATA];
+    output_metadata_handle_t  mOutputMetadata;
+
     uint32_t            channelMapToChannels(uint32_t channelMap);
-    bool                mPostedEOS;
-    void*               mFirstAACBuffer;
-    int32_t             mFirstAACBufferLength;
-    #define DECODEQUEUEINDEX     0
-    #define PASSTHRUQUEUEINDEX   1
-    List<BuffersAllocated> mInputMemEmptyQueue[2];
-    List<BuffersAllocated> mInputMemFilledQueue[2];
-    List<BuffersAllocated> mInputBufPool[2];
+    bool                isSupportedFormat(int format);
+    bool                isMS11SupportedFormats(int format);
+    bool                canAc3PassThroughWithoutMS11(int format);
+    int                 getFormatIndex();
+    void                fixUpDevicesForA2DPPlayback();
+    int                 getIndexHandleBasedOnHandleFormat(int handleFormat);
+    int                 getIndexHandleBasedOnHandleDevices(int handleDevices);
+    void                updateDeviceSupportedFormats();
+    void                fixUpHdmiFormatBasedOnEDID();
+    void                initialize();
+    status_t            flush_l();
+    void                reset();
+    void                reinitialize();
+    void                fixupSampleRateChannelModeMS11Formats();
+    void                updateDecodeTypeAndRoutingStates();
+    void                updateRxHandleStates();
+    int                 getDeviceFormat(int devices);
+    bool                isDecoderConfigRequired();
+    bool                isInputBufferingModeReqd();
+    int                 getBufferingFactor();
+    status_t            routingSetup();
+    status_t            openMS11Instance();
+    status_t            openPlaybackDevice(int index, int devices, int deviceFormat);
+    status_t            openDevice(const char *useCase, bool bIsUseCase,
+                                   int devices, int deviceFormat);
+    void                getPeriodSizeCountAndFormat(int routeFormat, int *periodSize,
+                                                    int *periodCount, int *format);
+    int                 getBufferLength();
+    status_t            openTempBufForMetadataModeRendering();
+    status_t            closeDevice(alsa_handle_t *pHandle);
+    status_t            a2dpRenderingControl(int state);
+    status_t            setPlaybackFormat(int devices, int deviceFormat);
+    void                setMS11ChannelMap(alsa_handle_t *handle);
+    void                setPCMChannelMap(alsa_handle_t *handle);
+    int                 setDecodeConfig(char *buffer, size_t bytes);
+    void                copyBitstreamInternalBuffer(char *buffer, size_t bytes);
+    bool                decode(char *buffer, size_t bytes);
+    bool                swDecode(char *buffer, size_t bytes);
+    bool                dspDecode(char *buffer, size_t bytes);
+    void                setSpdifChannelStatus(char *buffer, size_t bytes,
+                                              audio_parser_code_type codec_type);
+    uint32_t            render(bool continueDecode);
+    void                eosHandling();
+    status_t            doRouting(int device);
+    void                adjustRxHandleAndStates();
+    void                resetRxHandleState(int index);
+    void                handleSwitchAndOpenForDeviceSwitch(int devices, int format);
+    void                handleCloseForDeviceSwitch(int format);
 
-    //Declare all the threads
-    pthread_t mEventThread;
-
-    //Declare the condition Variables and Mutex
-    Mutex mInputMemMutex;
-    Mutex mEventMutex;
-    Mutex mFrameCountMutex;
-    Mutex mWriteCvMutex;
-    Condition mWriteCv;
-    Condition mEventCv;
-    bool mKillEventThread;
-    bool mEventThreadAlive;
-    int mInputBufferSize;
-    int mInputBufferCount;
-
-    //event fd to signal the EOS and Kill from the userspace
-    int mEfd;
 #ifdef DEBUG
-    FILE *mFpDumpInput;
-    FILE *mFpDumpPCMOutput;
+    enum {
+        INPUT = 0,
+        OUTPUT
+    };
+    FILE                *mFpDumpInput;
+    FILE                *mFpDumpPCMOutput;
+    void                updateDumpWithPlaybackControls(int controlType);
+    void                dumpInputOutput(int type, char *buffer, size_t bytes);
 #endif
 };
-
 // ----------------------------------------------------------------------------
-
 class AudioBroadcastStreamALSA : public AudioBroadcastStream
 {
 public:
@@ -990,7 +1340,7 @@ private:
 protected:
     AudioHardwareALSA *     mParent;
 };
-
+// ----------------------------------------------------------------------------
 class AudioHardwareALSA : public AudioHardwareBase
 {
 public:
@@ -1134,8 +1484,8 @@ protected:
     int                 mIsVoiceCallActive;
     int                 mIsFmActive;
     bool                mBluetoothVGS;
-    char                mSpdifOutputFormat[128];
-    char                mHdmiOutputFormat[128];
+    int                 mSpdifOutputFormat;
+    int                 mHdmiOutputFormat;
 
     //A2DP variables
     audio_stream_out   *mA2dpStream;
@@ -1155,9 +1505,12 @@ protected:
       USECASE_HIFI2 = 0x0100,
       USECASE_HIFI3 = 0x0200,
       USECASE_HIFI4 = 0x0400,
-      USECASE_HIFI_TUNNEL = 0x010000,
-      USECASE_HIFI_TUNNEL2 = 0x020000,
-      USECASE_HIFI_TUNNEL3 = 0x040000,
+      USECASE_HIFI_TUNNEL1 = 0x001000,
+      USECASE_HIFI_TUNNEL2 = 0x002000,
+      USECASE_HIFI_TUNNEL3 = 0x004000,
+      USECASE_HIFI_TUNNEL4 = 0x008000,
+      USECASE_HIFI_TUNNEL5 = 0x010000,
+      USECASE_HIFI_TUNNEL6 = 0x020000,
       USECASE_FM = 0x01000000,
       USECASE_HWOUTPUT = 0x11,
     };
@@ -1166,13 +1519,14 @@ protected:
 public:
     bool mRouteAudioToA2dp;
 };
-
+// ----------------------------------------------------------------------------
 class AudioBitstreamSM
 {
 public:
     AudioBitstreamSM();
     ~AudioBitstreamSM();
     bool    initBitstreamPtr();
+    bool    initBitstreamPtr(int bufferingFactor);
     void    resetBitstreamPtr();
     void    copyBitstreamToInternalBuffer(char *bufPtr, size_t bytes);
     bool    sufficientBitstreamToDecode(size_t minThreshBytesToDecode);
@@ -1187,21 +1541,28 @@ public:
     void    setOutputBufferWritePtr(int format, size_t outputPCMSample);
     void    appendSilenceToBitstreamInternalBuffer(size_t bytes, unsigned char);
     void    resetOutputBitstreamPtr();
+    void    startInputBufferingMode();
+    void    stopInputBufferingMode();
 private:
-    // Buffer pointers for input and output to MS11
-    char               *ms11InputBuffer;
-    char               *ms11InputBufferWritePtr;
+    int                mBufferingFactor;
+    int                mBufferingFactorCnt;
+    // Buffer pointers for input and output
+    char               *mInputBuffer;
+    char               *mInputBufferCurrPtr;
+    char               *mInputBufferWritePtr;
 
-    char               *ms11DDEncOutputBuffer;
-    char               *ms11DDEncOutputBufferWritePtr;
+    char               *mEncOutputBuffer;
+    char               *mEncOutputBufferWritePtr;
 
-    char               *ms11PCM2ChOutputBuffer;
-    char               *ms11PCM2ChOutputBufferWritePtr;
+    char               *mPCM2ChOutputBuffer;
+    char               *mPCM2ChOutputBufferWritePtr;
 
-    char               *ms11PCMMChOutputBuffer;
-    char               *ms11PCMMChOutputBufferWritePtr;
+    char               *mPCMMChOutputBuffer;
+    char               *mPCMMChOutputBufferWritePtr;
+
+    char               *mPassthroughOutputBuffer;
+    char               *mPassthroughOutputBufferWritePtr;
 };
-
 // ----------------------------------------------------------------------------
 
 };        // namespace android_audio_legacy

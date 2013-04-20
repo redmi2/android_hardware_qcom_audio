@@ -934,6 +934,10 @@ int getUseCaseType(const char *useCase)
     ALOGV("getUseCaseType: use case is %s\n", useCase);
     if (!strncmp(useCase, SND_USE_CASE_VERB_HIFI,
            MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_HIFI2,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI2)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_HIFI3,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI3)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_HIFI_LOWLATENCY_MUSIC,
            MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI_LOWLATENCY_MUSIC)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER,
@@ -942,34 +946,64 @@ int getUseCaseType(const char *useCase)
             MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
             MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI_TUNNEL2)) ||
-        !strncmp(useCase, SND_USE_CASE_VERB_HIFI2,
-            MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI2)) ||
-        !strncmp(useCase, SND_USE_CASE_VERB_HIFI3,
-            MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI3)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL3,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI_TUNNEL3)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL4,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI_TUNNEL4)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL5,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI_TUNNEL5)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL6,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI_TUNNEL6)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL2,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL2)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL3,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL3)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL4,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL4)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL5,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL5)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL6,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL6)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_DIGITAL_RADIO,
             MAX_LEN(useCase,SND_USE_CASE_VERB_DIGITAL_RADIO)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC,
             MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_MUSIC)) ||
-        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_LOWLATENCY_MUSIC,
-            MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_LOWLATENCY_MUSIC)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC2,
             MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_MUSIC2)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC3,
             MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_MUSIC3)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_LOWLATENCY_MUSIC,
+            MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_LOWLATENCY_MUSIC)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_LPA,
             MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_LPA)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL,
             MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_TUNNEL)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
             MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_TUNNEL2)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL3,
+            MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_TUNNEL3)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL4,
+            MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_TUNNEL4)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL5,
+            MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_TUNNEL5)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL6,
+            MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_TUNNEL6)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_FM,
             MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_FM))||
-        !strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_TUNNEL1,
-            MAX_LEN(useCase,SND_USE_CASE_MOD_PSEUDO_TUNNEL1)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_TUNNEL,
+            MAX_LEN(useCase,SND_USE_CASE_MOD_PSEUDO_TUNNEL)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_TUNNEL2,
             MAX_LEN(useCase,SND_USE_CASE_MOD_PSEUDO_TUNNEL2)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_TUNNEL3,
-            MAX_LEN(useCase,SND_USE_CASE_MOD_PSEUDO_TUNNEL3))) {
+            MAX_LEN(useCase,SND_USE_CASE_MOD_PSEUDO_TUNNEL3)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_TUNNEL4,
+            MAX_LEN(useCase,SND_USE_CASE_MOD_PSEUDO_TUNNEL4)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_TUNNEL5,
+            MAX_LEN(useCase,SND_USE_CASE_MOD_PSEUDO_TUNNEL5)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_TUNNEL6,
+            MAX_LEN(useCase,SND_USE_CASE_MOD_PSEUDO_TUNNEL6))) {
         return CAP_RX;
     } else if (!strncmp(useCase, SND_USE_CASE_VERB_HIFI_REC,
             MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI_REC)) ||
