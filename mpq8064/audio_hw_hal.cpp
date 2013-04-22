@@ -220,7 +220,17 @@ static int out_set_parameters(struct audio_stream *stream, const char *kvpairs)
 {
     struct qcom_stream_out *out =
         reinterpret_cast<struct qcom_stream_out *>(stream);
-    return out->qcom_out->setParameters(String8(kvpairs));
+    int val;
+    String8 s8 = String8(kvpairs);
+    AudioParameter parms = AudioParameter(String8(kvpairs));
+
+    if (parms.getInt(String8(AUDIO_PARAMETER_STREAM_ROUTING), val) == NO_ERROR) {
+        val = convert_audio_device(val, HAL_API_REV_2_0, HAL_API_REV_1_0);
+        parms.remove(String8(AUDIO_PARAMETER_STREAM_ROUTING));
+        parms.addInt(String8(AUDIO_PARAMETER_STREAM_ROUTING), val);
+        s8 = parms.toString();
+    }
+    return out->qcom_out->setParameters(s8);
 }
 
 static int out_bcast_set_parameters(struct audio_stream *stream, const char *kvpairs)
@@ -235,7 +245,18 @@ static char * out_get_parameters(const struct audio_stream *stream, const char *
     const struct qcom_stream_out *out =
         reinterpret_cast<const struct qcom_stream_out *>(stream);
     String8 s8;
+    int val;
+
     s8 = out->qcom_out->getParameters(String8(keys));
+
+    AudioParameter parms = AudioParameter(s8);
+    if (parms.getInt(String8(AUDIO_PARAMETER_STREAM_ROUTING), val) == NO_ERROR) {
+        val = convert_audio_device(val, HAL_API_REV_1_0, HAL_API_REV_2_0);
+        parms.remove(String8(AUDIO_PARAMETER_STREAM_ROUTING));
+        parms.addInt(String8(AUDIO_PARAMETER_STREAM_ROUTING), val);
+        s8 = parms.toString();
+    }
+
     return strdup(s8.string());
 }
 
@@ -428,7 +449,18 @@ static int in_set_parameters(struct audio_stream *stream, const char *kvpairs)
 {
     struct qcom_stream_in *in =
         reinterpret_cast<struct qcom_stream_in *>(stream);
-    return in->qcom_in->setParameters(String8(kvpairs));
+    int val;
+    AudioParameter parms = AudioParameter(String8(kvpairs));
+    String8 s8 = String8(kvpairs);
+
+    if (parms.getInt(String8(AUDIO_PARAMETER_STREAM_ROUTING), val) == NO_ERROR) {
+        val = convert_audio_device(val, HAL_API_REV_2_0, HAL_API_REV_1_0);
+        parms.remove(String8(AUDIO_PARAMETER_STREAM_ROUTING));
+        parms.addInt(String8(AUDIO_PARAMETER_STREAM_ROUTING), val);
+        s8 = parms.toString();
+    }
+
+    return in->qcom_in->setParameters(s8);
 }
 
 static char * in_get_parameters(const struct audio_stream *stream,
@@ -437,7 +469,18 @@ static char * in_get_parameters(const struct audio_stream *stream,
     const struct qcom_stream_in *in =
         reinterpret_cast<const struct qcom_stream_in *>(stream);
     String8 s8;
+    int val;
+
     s8 = in->qcom_in->getParameters(String8(keys));
+
+    AudioParameter parms = AudioParameter(s8);
+    if (parms.getInt(String8(AUDIO_PARAMETER_STREAM_ROUTING), val) == NO_ERROR) {
+        val = convert_audio_device(val, HAL_API_REV_1_0, HAL_API_REV_2_0);
+        parms.remove(String8(AUDIO_PARAMETER_STREAM_ROUTING));
+        parms.addInt(String8(AUDIO_PARAMETER_STREAM_ROUTING), val);
+        s8 = parms.toString();
+    }
+
     return strdup(s8.string());
 }
 

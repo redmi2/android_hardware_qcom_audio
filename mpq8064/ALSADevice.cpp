@@ -428,7 +428,7 @@ int ALSADevice::getDeviceType(uint32_t devices, uint32_t mode)
 }
 void ALSADevice::switchDevice(uint32_t devices, uint32_t mode)
 {
-    ALOGV("switchDevice devices = %d, mode = %d", devices,mode);
+    ALOGV("switchDevice devices = %x, mode = %d", devices,mode);
     for(ALSAHandleList::iterator it = mDeviceList->begin(); it != mDeviceList->end(); ++it) {
         if((strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
                           strlen(SND_USE_CASE_VERB_HIFI_TUNNEL))) &&
@@ -464,7 +464,7 @@ void ALSADevice::switchDeviceUseCase(alsa_handle_t *handle,
     uint32_t switchTodevices = devices;
     bool bIsUseCaseSet = false;
 
-    ALOGV("switchDeviceUseCase curdevices = %d usecase %s devices = %d, mode = %d",
+    ALOGV("switchDeviceUseCase curdevices = %x usecase %s devices = %x, mode = %d",
            handle->activeDevice, handle->useCase, devices, mode);
 
     //Update the active devices to the device list which needs to be derouted
@@ -1197,7 +1197,7 @@ void ALSADevice::disableDevice(alsa_handle_t *handle)
     unsigned usecase_type = 0;
 
     snd_use_case_get(handle->ucMgr, "_verb", (const char **)&use_case);
-    ALOGD("disableDevice device = %d verb  %s mode %d use case %s",
+    ALOGD("disableDevice device = %x verb  %s mode %d use case %s",
           devices, (use_case == NULL) ? "NULL" : use_case, handle->mode, handle->useCase);
 
     {
@@ -1209,7 +1209,7 @@ void ALSADevice::disableDevice(alsa_handle_t *handle)
                 if (it->useCase != NULL) {
                     if (strcmp(it->useCase, handle->useCase)) {
                         if ((&(*it)) != handle && handle->activeDevice && it->activeDevice && (it->activeDevice & actualDevices)) {
-                            ALOGD("disableRxDevice - false use case %s active Device %d deviceToDisable %d",
+                            ALOGD("disableRxDevice - false use case %s active Device %x deviceToDisable %x",
                                   it->useCase, it->activeDevice, deviceToDisable);
                             if(getDeviceType(it->activeDevice & actualDevices, 0) & DEVICE_TYPE_RX)
                                 disableRxDevice = false;
@@ -1255,7 +1255,7 @@ void ALSADevice::enableDevice(alsa_handle_t *handle, bool bIsUseCaseSet)
     uint32_t devices = handle->activeDevice;
     unsigned usecase_type = 0;
 
-    ALOGD("enableDevice %d bIsUseCaseSet %d", handle->activeDevice, bIsUseCaseSet);
+    ALOGD("enableDevice %x bIsUseCaseSet %d", handle->activeDevice, bIsUseCaseSet);
     while (devices != 0) {
         int deviceToEnable = devices & (-devices);
         getDevices(deviceToEnable, handle->mode, &rxDevice, &txDevice);
