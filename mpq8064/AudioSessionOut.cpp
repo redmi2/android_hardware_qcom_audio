@@ -1659,7 +1659,7 @@ status_t AudioSessionOutALSA::getNextWriteTimestamp(int64_t *timeStamp)
     if (mCompreRxHandle && mUseTunnelDecoder) {
         Mutex::Autolock autoLock(mLock);
         tstamp.timestamp = -1;
-        if (ioctl(mCompreRxHandle->handle->fd, SNDRV_COMPRESS_TSTAMP, &tstamp)){
+        if ( mCompreRxHandle==NULL ||  ioctl( mCompreRxHandle->handle->fd, SNDRV_COMPRESS_TSTAMP, &tstamp)){
             ALOGE("Failed SNDRV_COMPRESS_TSTAMP\n");
             return -1;
         } else {
@@ -1676,7 +1676,7 @@ status_t AudioSessionOutALSA::getNextWriteTimestamp(int64_t *timeStamp)
             mFrameCountMutex.unlock();
         } else if(mCompreRxHandle){
             Mutex::Autolock autoLock(mLock);
-            if (ioctl(mCompreRxHandle->handle->fd, SNDRV_COMPRESS_TSTAMP,
+            if ( mCompreRxHandle==NULL ||  ioctl(mCompreRxHandle->handle->fd, SNDRV_COMPRESS_TSTAMP,
                       &tstamp)) {
                 ALOGE("Failed SNDRV_COMPRESS_TSTAMP\n");
                 return -1;
