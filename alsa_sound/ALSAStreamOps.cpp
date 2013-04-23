@@ -193,9 +193,30 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
     String8 key = String8(AudioParameter::keyRouting),value;
     int device;
     status_t err = NO_ERROR;
+    int mMode = mParent->mode();
+
     if (param.getInt(key, device) == NO_ERROR) {
         // Ignore routing if device is 0.
         if(device) {
+            //checking for camcorder_mode and in call more to select appropriate input device
+            key = String8("camcorder_mode");
+            if (param.get(key, value) == NO_ERROR) {
+                if (value) {
+                    if ((mMode == AudioSystem::MODE_IN_CALL) || (mMode == AudioSystem::MODE_IN_COMMUNICATION)) {
+                        if (device & AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET) {
+                            device = AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET;
+                        } else if (device & AudioSystem::DEVICE_IN_WIRED_HEADSET) {
+                            device = AudioSystem::DEVICE_IN_WIRED_HEADSET;
+                        } else if (device & AudioSystem::DEVICE_IN_AUX_DIGITAL) {
+                            device = AudioSystem::DEVICE_IN_AUX_DIGITAL;
+                        } else {
+                            device = AudioSystem::DEVICE_IN_BUILTIN_MIC;
+                        }
+                    } else {
+                        device = AudioSystem::DEVICE_IN_BUILTIN_MIC;
+                    }
+                }
+            }
             ALOGD("setParameters(): keyRouting with device %#x", device);
             if (mParent->isExtOutDevice(device)) {
                 mParent->mRouteAudioToExtOut = true;
