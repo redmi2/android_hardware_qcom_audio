@@ -1916,7 +1916,10 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
                     ALOGV("playback thread :Empty Queue[0] size() = %d, Filled Queue[0] size() = %d ",
                         mInputMemEmptyQueue[0].size(), mInputMemFilledQueue[0].size());
                     mInputMemMutex.unlock();
-                    hw_ptr[0] += mCompreRxHandle->bufferSize/(2*mCompreRxHandle->channels);
+                    if (mCompreRxHandle->handle->flags & PCM_TUNNEL)
+                        hw_ptr[0] += mCompreRxHandle->bufferSize/(4*mCompreRxHandle->channels);
+                    else
+                        hw_ptr[0] += mCompreRxHandle->bufferSize/(2*mCompreRxHandle->channels);
                     {
                         Mutex::Autolock autoLock(mSyncLock);
                         mCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN |
@@ -1946,7 +1949,10 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
                 ALOGV("playback thread :Empty Queue[1] size() = %d, Filled Queue[1] size() = %d ",
                     mInputMemEmptyQueue[1].size(), mInputMemFilledQueue[1].size());
                 mInputMemMutex.unlock();
-                hw_ptr[1] += mSecCompreRxHandle->bufferSize/(2*mSecCompreRxHandle->channels);
+                if (mSecCompreRxHandle->handle->flags & PCM_TUNNEL)
+                    hw_ptr[1] += mSecCompreRxHandle->bufferSize/(4*mSecCompreRxHandle->channels);
+                else
+                    hw_ptr[1] += mSecCompreRxHandle->bufferSize/(2*mSecCompreRxHandle->channels);
                 {
                     Mutex::Autolock autoLock(mSyncLock);
                     mSecCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN |
