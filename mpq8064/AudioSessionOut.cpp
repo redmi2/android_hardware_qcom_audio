@@ -639,23 +639,7 @@ void AudioSessionOutALSA::updateDeviceSupportedFormats()
     ALOGV("updateDeviceSupportedFormats");
     int index = getFormatIndex();
     int formatIndex;
-//NOTE: to be removed with output format control
-    char value[128];
-    property_get("mpq.audio.spdif.format",value,"0");
-    if(!strncmp(value,"ac3",sizeof(value)))
-        mParent->mSpdifOutputFormat = COMPRESSED_CONVERT_ANY_AC3;
-    else if(!strncmp(value,"dts",sizeof(value)))
-        mParent->mSpdifOutputFormat = COMPRESSED_CONVERT_ANY_DTS;
-    else
-        mParent->mSpdifOutputFormat = UNCOMPRESSED;
-    property_get("mpq.audio.hdmi.format",value,"0");
-    if(!strncmp(value,"ac3",sizeof(value)))
-        mParent->mHdmiOutputFormat = COMPRESSED_CONVERT_ANY_AC3;
-    else if(!strncmp(value,"dts",sizeof(value)))
-        mParent->mHdmiOutputFormat = COMPRESSED_CONVERT_ANY_DTS;
-    else
-        mParent->mHdmiOutputFormat = UNCOMPRESSED;
-////////
+
     mSpdifOutputFormat = mParent->mSpdifOutputFormat;
     mHdmiOutputFormat  = mParent->mHdmiOutputFormat;
     ALOGV("mSpdifOutputFormat: %d, mHdmiOutputFormat: %d",

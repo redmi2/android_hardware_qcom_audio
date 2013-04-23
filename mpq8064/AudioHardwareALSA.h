@@ -107,6 +107,10 @@ KEYVALUE PAIR FOR SET/GET PARAMETER
 #define FENS_KEY            "fens_enable"
 #define SPDIF_FORMAT_KEY    "spdif_format"
 #define HDMI_FORMAT_KEY     "hdmi_format"
+#define SPDIF_MUTE_KEY      "spdif_mute"
+#define HDMI_MUTE_KEY       "hdmi_mute"
+#define SPDIF_OCHANNELS_KEY "spdif_output_channels"
+#define HDMI_OCHANNELS_KEY  "hdmi_output_channels"
 
 #define ANC_FLAG        0x00000001
 #define DMIC_FLAG       0x00000002
@@ -193,9 +197,21 @@ CHANNEL MAP
 #define PCM_CHANNEL_RRC  16 /* Rear right of center. */
 /*******************************************************************************
 ADTS HEADER PARSING
-******************************************************************************/
+*******************************************************************************/
+//Required for ADTS Header Parsing
 #define ADTS_HEADER_SYNC_RESULT 0xfff0
 #define ADTS_HEADER_SYNC_MASK 0xfff6
+/*******************************************************************************
+HDMI and SPDIF Device Output format control
+*******************************************************************************/
+#define NUM_DEVICES_WITH_PP_PARAMS 2
+#define HDMI_RX 0x8001
+#define SECONDARY_I2S_RX 0x8002
+//Param ID's
+#define ADM_PP_PARAM_MUTE_ID 0
+#define ADM_PP_PARAM_MUTE_LENGTH 3
+#define ADM_PP_PARAM_LATENCY_ID 1
+#define ADM_PP_PARAM_MUTE_LENGTH 3
 /*******************************************************************************
 USECASES AND THE CORRESPONDING DEVICE FORMATS THAT WE SUPPORT IN HAL
 *******************************************************************************/
@@ -466,8 +482,9 @@ const int usecaseDecodeHdmiSpdif[ALL_FORMATS_IDX*NUM_STATES_FOR_EACH_DEVICE_FMT]
     {SW_DECODE,     SW_PASSTHROUGH,  SW_PASSTHROUGH, SW_PASSTHROUGH, DSP_DECODE},     //AC3_IDX
     {FORMAT_PCM,    FORMAT_COMPR,    FORMAT_COMPR,   FORMAT_COMPR,   FORMAT_PCM},     //ROUTE_FORMAT
     {NO_TRANSCODER, AC3_PASSTHR,     AC3_PASSTHR,    AC3_PASSTHR,    NO_TRANSCODER},  //TRANSCODE_FMT
+                    // update this to SW-PASSTHROUGH when eac3 pass through support is available
 /*   PCM            EAC3             AC3             AC3             PCM       */
-    {SW_DECODE,     SW_PASSTHROUGH,  SW_TRANSCODE,   SW_TRANSCODE,   DSP_DECODE},     //EAC3_IDX
+    {SW_DECODE,     SW_TRANSCODE,    SW_TRANSCODE,   SW_TRANSCODE,   DSP_DECODE},     //EAC3_IDX
     {FORMAT_PCM,    FORMAT_COMPR,    FORMAT_COMPR,   FORMAT_COMPR,   FORMAT_PCM},     //ROUTE_FORMAT
     {NO_TRANSCODER, EAC3_PASSTHR,    AC3_TRANSCODER, AC3_TRANSCODER, NO_TRANSCODER},  //TRANSCODE_FMT
 /*   PCM            DTS              PCM             PCM             DTS       */
@@ -632,6 +649,7 @@ public:
     status_t    setCaptureFormat(const char *value);
     status_t    setChannelMap(alsa_handle_t *handle, int maxChannels,
                               char *channelMap);
+    status_t    setDeviceMute(int device, int value);
     void        setChannelAlloc(int channelAlloc);
     status_t    setWMAParams(int[], int);
     int         getALSABufferSize(alsa_handle_t *handle);
@@ -655,6 +673,8 @@ public:
     void        freePlaybackUseCase(const char *useCase);
     int         mSpdifFormat;
     int         mHdmiFormat;
+    int         mSpdifOutputChannels;
+    int         mHdmiOutputChannels;
     EDID_AUDIO_INFO mEDIDInfo;
     unsigned int mDriverInstancesUsed;
 protected:
@@ -672,6 +692,7 @@ private:
     status_t   exitReadFromProxy();
     void       initProxyParams();
     status_t   startProxy();
+    int        mapDeviceToPort(int device);
 
 private:
     int         deviceName(alsa_handle_t *handle, unsigned flags, char **value);
@@ -1486,6 +1507,10 @@ protected:
     bool                mBluetoothVGS;
     int                 mSpdifOutputFormat;
     int                 mHdmiOutputFormat;
+    bool                mSpdifMuteOn;
+    bool                mHdmiMuteOn;
+    int                 mSpdifOutputChannels;
+    int                 mHdmiOutputChannels;
 
     //A2DP variables
     audio_stream_out   *mA2dpStream;

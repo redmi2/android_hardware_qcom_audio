@@ -48,6 +48,11 @@ namespace sys_close {
 namespace android_audio_legacy
 {
 
+const int deviceToPortID[][NUM_DEVICES_WITH_PP_PARAMS] = {
+        {AudioSystem::DEVICE_OUT_AUX_DIGITAL, HDMI_RX},
+        {AudioSystem::DEVICE_OUT_SPDIF, SECONDARY_I2S_RX}
+};
+
 ALSADevice::ALSADevice() {
     mDevSettingsFlag = TTY_OFF;
     btsco_samplerate = 8000;
@@ -74,6 +79,10 @@ ALSADevice::ALSADevice() {
     mProxyParams.mProxyPcmHandle = NULL;
     memset(&mEDIDInfo, 0, sizeof(struct EDID_AUDIO_INFO));
     mDriverInstancesUsed = 0;
+    mHdmiFormat = UNCOMPRESSED;
+    mSpdifFormat = UNCOMPRESSED;
+    mHdmiOutputChannels = MAX_INPUT_CHANNELS_SUPPORTED;
+    mSpdifOutputChannels = STEREO_CHANNELS;
     ALOGD("ALSA Device opened");
 };
 
@@ -1610,6 +1619,53 @@ status_t ALSADevice::setPlaybackFormat(const char *value, int device, int dtsTra
         ALOGE("setPlaybackFormat error = %d",err);
     }
 
+    return NO_ERROR;
+}
+
+int ALSADevice::mapDeviceToPort(int device)
+{
+    for(int i=0; i<NUM_DEVICES_WITH_PP_PARAMS; i++)
+        if(deviceToPortID[i][0] == device)
+            return deviceToPortID[i][1];
+    return 0;
+}
+
+status_t ALSADevice::setDeviceMute(int device, int devMute)
+{
+    ALOGD("device - 0x%x, mute = %d", device, devMute);
+    char** setValues;
+    int port_id;
+    bool isMemAvailable = true;
+    int memAllocIdx = 0;
+    setValues = (char**)malloc(ADM_PP_PARAM_MUTE_LENGTH*sizeof(char*));
+    if(setValues) {
+        for(int i=0; i<ADM_PP_PARAM_MUTE_LENGTH; i++) {
+            setValues[i] = (char*)malloc(STRING_LENGTH_OF_INTEGER*sizeof(char));
+            if(!setValues[i]) {
+                ALOGE("memory allocation for seending device mute failed");
+                isMemAvailable = false;
+                memAllocIdx = i;
+                break;
+            }
+        }
+    } else {
+        ALOGE("memory allocation for set device mute failed");
+        isMemAvailable = false;
+    }
+    if (isMemAvailable) {
+        port_id = mapDeviceToPort(device);
+        ALOGV("port_id: %d", port_id);
+        sprintf(setValues[0], "%d", ADM_PP_PARAM_MUTE_ID);
+        sprintf(setValues[1], "%d", port_id);
+        sprintf(setValues[2], "%d", devMute);
+
+        setMixerControlExt("Device PP Params", ADM_PP_PARAM_MUTE_LENGTH, setValues);
+    }
+    for(int i=0; i<memAllocIdx; i++)
+        if(setValues[i])
+            free(setValues[i]);
+    if(setValues)
+        free(setValues);
     return NO_ERROR;
 }
 
