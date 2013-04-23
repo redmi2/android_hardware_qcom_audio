@@ -888,6 +888,8 @@ int32_t AudioSessionOutALSA::writeToCompressedDriver(char *buffer, int bytes)
             }
             ALOGV("Write: received a signal to wake up");
         }
+        if (mSkipWrite)
+            mSkipWrite = false;
 
         List<BuffersAllocated>::iterator it = mInputMemEmptyQueue[0].begin();
         BuffersAllocated buf = *it;
