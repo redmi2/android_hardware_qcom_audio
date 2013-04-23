@@ -33,6 +33,9 @@
 #endif
 #include <sys/poll.h>
 #include <sys/eventfd.h>
+#ifdef QCOM_LISTEN_FEATURE_ENABLE
+#include "ListenHardware.h"
+#endif
 
 extern "C" {
     #include <sound/asound.h>
@@ -139,6 +142,8 @@ static int USBPLAYBACKBIT_VOIPCALL = (1 << 2);
 static int USBPLAYBACKBIT_FM = (1 << 3);
 static int USBPLAYBACKBIT_LPA = (1 << 4);
 static int USBPLAYBACKBIT_TUNNEL = (1 << 5);
+static int USBPLAYBACKBIT_MULTICHANNEL = (1 << 6);
+static int USBPLAYBACKBIT_LOWLATENCY = (1 << 7);
 
 static int USBRECBIT_REC = (1 << 0);
 static int USBRECBIT_VOICECALL = (1 << 1);
@@ -990,6 +995,12 @@ public:
             AudioSystem::audio_in_acoustics acoustics);
     virtual    void        closeInputStream(AudioStreamIn* in);
 
+#ifdef QCOM_LISTEN_FEATURE_ENABLE
+    status_t openListenSession(ListenSession** handle);
+    status_t closeListenSession(ListenSession* handle);
+    status_t setMadObserver(listen_callback_t cb_func);
+#endif
+
     status_t    startPlaybackOnExtOut(uint32_t activeUsecase);
     status_t    stopPlaybackOnExtOut(uint32_t activeUsecase);
     bool        suspendPlaybackOnExtOut(uint32_t activeUsecase);
@@ -1130,6 +1141,10 @@ protected:
     };
     uint32_t mExtOutActiveUseCases;
     status_t mStatus;
+
+#ifdef QCOM_LISTEN_FEATURE_ENABLE
+    ListenHardware *mListenHw;
+#endif
 
 public:
     bool mRouteAudioToExtOut;
