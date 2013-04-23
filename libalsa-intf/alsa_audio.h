@@ -21,6 +21,11 @@
 #include <sound/asound.h>
 #define PCM_ERROR_MAX 128
 
+struct pcm_buffer {
+    void *residue_buf;
+    int residue_buf_ptr;
+};
+
 struct pcm {
     int fd;
     int timer_fd;
@@ -38,6 +43,7 @@ struct pcm {
     struct snd_pcm_sw_params *sw_p;
     struct snd_pcm_sync_ptr *sync_ptr;
     struct snd_pcm_channel_info ch[2];
+    struct pcm_buffer *buf;
     void *addr;
     int card_no;
     int device_no;
@@ -61,6 +67,9 @@ struct pcm {
 
 #define PCM_MMAP       0x00010000
 #define PCM_NMMAP      0x00000000
+
+#define PCM_LINEAR     0x00000100
+#define PCM_TUNNEL     0x00000010
 
 #define DEBUG_ON       0x00000001
 #define DEBUG_OFF      0x00000000
