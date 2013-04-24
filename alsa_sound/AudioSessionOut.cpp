@@ -111,6 +111,9 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     mSkipEOS            = false;
     mTunnelMode         = false;
 
+    ALOGV("Setting mParent->mCurRxDevice to %x", devices);
+    mParent->mCurRxDevice = devices;
+
     if(devices == 0) {
         ALOGE("No output device specified");
         return;
