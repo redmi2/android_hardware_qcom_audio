@@ -125,6 +125,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     mInputBufferSize    = MULTI_CHANNEL_MAX_PERIOD_SIZE;
     mInputBufferCount   = MULTI_CHANNEL_PERIOD_COUNT;
     mEfd = -1;
+    mSavedTimestamp = 0;
 
     mWMAConfigDataSet    = false;
     mAacConfigDataSet    = false; // flags if AAC config to be set(which is sent in first buffer)
@@ -1682,9 +1683,10 @@ status_t AudioSessionOutALSA::getNextWriteTimestamp(int64_t *timeStamp)
                 return -1;
             } else {
                 *timeStamp = tstamp.timestamp;
+                mSavedTimestamp = *timeStamp;
             }
         } else {
-            *timeStamp = 0;
+            *timeStamp = mSavedTimestamp;
         }
         ALOGV("Timestamp returned = %lld\n",*timeStamp);
     } else {
@@ -1695,9 +1697,10 @@ status_t AudioSessionOutALSA::getNextWriteTimestamp(int64_t *timeStamp)
                     (mFrameCount * mPcmRxHandle->periodSize)/ (mChannels*(bitFormat))))
                      * 1000000)) / mSampleRate);
             mFrameCountMutex.unlock();
+            mSavedTimestamp = *timeStamp;
         }
         else
-            *timeStamp = 0;
+           *timeStamp = mSavedTimestamp ;// *timeStamp = 0;
         ALOGV("Timestamp returned = %lld\n",*timeStamp);
     }
     return NO_ERROR;
@@ -2242,6 +2245,7 @@ void AudioSessionOutALSA::reset() {
     }
 
     mSessionId = -1;
+    mSavedTimestamp = 0;
 
     mRoutePcmAudio    = false;
     mSpdifFormat     = INVALID_FORMAT;
