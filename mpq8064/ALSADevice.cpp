@@ -382,7 +382,14 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     handle->handle->channels = handle->channels;
     handle->periodSize = handle->handle->period_size;
     handle->bufferSize = handle->handle->period_size;
-    if (handle->type == PCM_FORMAT)
+
+    if((!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI,
+                              strlen(SND_USE_CASE_VERB_HIFI))) ||
+       (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC,
+                             strlen(SND_USE_CASE_MOD_PLAY_MUSIC)))) {
+
+        handle->latency = PLAYBACK_LATENCY + (handle->handle->period_cnt * PCM_BUFFER_DURATION);
+    }else if (handle->type == PCM_FORMAT)
         handle->latency += (handle->handle->period_cnt * PCM_BUFFER_DURATION);
 
     return NO_ERROR;
