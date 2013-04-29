@@ -803,7 +803,9 @@ void AudioBroadcastStreamALSA::setSpdifHdmiRoutingFlags(int devices)
         if(mDevices & AudioSystem::DEVICE_OUT_SPDIF) {
             mSpdifFormat = COMPRESSED_FORMAT;
         // 44.1, 22.05 and 11.025K are not supported on Spdif for Passthrough
-            if((mFormat != AUDIO_FORMAT_DTS && mFormat != AUDIO_FORMAT_DTS_LBR) ||
+            if(((mFormat & AUDIO_FORMAT_MAIN_MASK) != AUDIO_FORMAT_DTS &&
+              (mFormat & AUDIO_FORMAT_MAIN_MASK) != AUDIO_FORMAT_DTS_LBR) ||
+              (mFormat & AUDIO_FORMAT_SUB_MASK & AUDIO_FORMAT_SUB_DTS_TE) ||
               (mSampleRate == 44100 || mSampleRate == 22050 || mSampleRate == 11025)) {
                 mTranscodeDevices |= AudioSystem::DEVICE_OUT_SPDIF;
                 mDtsTranscode = true;
@@ -815,7 +817,9 @@ void AudioBroadcastStreamALSA::setSpdifHdmiRoutingFlags(int devices)
     if(!strncmp(mHdmiOutputFormat,"dts",sizeof(mHdmiOutputFormat))) {
         if(mDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
             mHdmiFormat = COMPRESSED_FORMAT;
-            if(mFormat != AUDIO_FORMAT_DTS && mFormat != AUDIO_FORMAT_DTS_LBR) {
+            if(((mFormat & AUDIO_FORMAT_MAIN_MASK) != AUDIO_FORMAT_DTS &&
+              (mFormat & AUDIO_FORMAT_MAIN_MASK) != AUDIO_FORMAT_DTS_LBR) ||
+              (mFormat & AUDIO_FORMAT_SUB_MASK & AUDIO_FORMAT_SUB_DTS_TE)) {
                 mTranscodeDevices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
                 mDtsTranscode = true;
             }

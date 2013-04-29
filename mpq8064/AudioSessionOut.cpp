@@ -75,6 +75,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     mSampleRate     = samplingRate;
     ALOGV("channel map = %d", channels);
     mChannels = channels = channelMapToChannels(channels);
+    format = format & AUDIO_FORMAT_MAIN_MASK;
     if(format == AUDIO_FORMAT_AAC || format == AUDIO_FORMAT_HE_AAC_V1 ||
        format == AUDIO_FORMAT_HE_AAC_V2 || format == AUDIO_FORMAT_AAC_ADIF) {
         if(samplingRate > 24000) {
@@ -147,7 +148,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
         *status = BAD_VALUE;
         return;
     }
-    if((format == AUDIO_FORMAT_PCM_16_BIT) && (channels <= 0 || channels > 8)) {
+    if((format == AUDIO_FORMAT_PCM) && (channels <= 0 || channels > 8)) {
         ALOGE("Invalid number of channels %d", channels);
         *status = BAD_VALUE;
         return;
@@ -214,7 +215,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
         mUseTunnelDecoder = true;
         mWMAConfigDataSet = false;
 
-    } else if(format == AUDIO_FORMAT_PCM_16_BIT || format == AUDIO_FORMAT_PCM_24_BIT) {
+    } else if(format == AUDIO_FORMAT_PCM) {
         mMinBytesReqToDecode = PCM_BLOCK_PER_CHANNEL_MS11*mChannels-1;
 /* Enable this when Support of 6 channel to AC3 is required. Till then PCM is pass throughed
         if(channels > 2 && channels <= 6) {
@@ -241,7 +242,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
         }
 
     } else {
-        ALOGE("Unsupported format %d", format);
+        ALOGE("Unsupported mFormat %d, format %d", mFormat, format);
         return;
     }
 
@@ -1766,7 +1767,8 @@ status_t AudioSessionOutALSA::openDevice(char *useCase, bool bIsUseCase, int dev
         alsa_handle.type = COMPRESSED_FORMAT;
         if (mUseMS11Decoder == true)
             alsa_handle.type |= PASSTHROUGH_FORMAT;
-        else if (mFormat == AUDIO_FORMAT_DTS || mFormat == AUDIO_FORMAT_DTS_LBR) {
+        else if ((mFormat & AUDIO_FORMAT_MAIN_MASK) == AUDIO_FORMAT_DTS ||
+                 (mFormat & AUDIO_FORMAT_MAIN_MASK) == AUDIO_FORMAT_DTS_LBR) {
             if ((mSpdifFormat == COMPRESSED_FORMAT && mHdmiFormat == COMPRESSED_FORMAT)
                 || (mUseDualTunnel == true && devices == mSecDevices))
                 alsa_handle.type |= PASSTHROUGH_FORMAT;
@@ -2149,7 +2151,10 @@ void AudioSessionOutALSA::updateRoutingFlags(int devices)
 
     if(mUseTunnelDecoder)
         mRoutePcmAudio = false;
-    if(mFormat == AUDIO_FORMAT_DTS || mFormat == AUDIO_FORMAT_DTS_LBR)
+
+    if (((mFormat & AUDIO_FORMAT_MAIN_MASK) == AUDIO_FORMAT_DTS ||
+        (mFormat & AUDIO_FORMAT_MAIN_MASK) == AUDIO_FORMAT_DTS_LBR) &&
+        !(mFormat & AUDIO_FORMAT_SUB_MASK & AUDIO_FORMAT_SUB_DTS_TE))
     {
         if(((devices & AudioSystem::DEVICE_OUT_SPDIF) && (devices & ~AudioSystem::DEVICE_OUT_SPDIF)
              && (mSpdifFormat == COMPRESSED_FORMAT)) || ((devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
@@ -2161,6 +2166,7 @@ void AudioSessionOutALSA::updateRoutingFlags(int devices)
                 mSecDevices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
         }
     }
+
     return;
 }
 
@@ -2203,11 +2209,14 @@ void AudioSessionOutALSA::setSpdifHdmiRoutingFlags(int devices)
         if(devices & AudioSystem::DEVICE_OUT_SPDIF) {
             mSpdifFormat = COMPRESSED_FORMAT;
         // 44.1, 22.05 and 11.025K are not supported on Spdif for Passthrough
-            if((mFormat != AUDIO_FORMAT_DTS && mFormat != AUDIO_FORMAT_DTS_LBR) ||
+            if(((mFormat & AUDIO_FORMAT_MAIN_MASK) != AUDIO_FORMAT_DTS &&
+              (mFormat & AUDIO_FORMAT_MAIN_MASK) != AUDIO_FORMAT_DTS_LBR) ||
+              (mFormat & AUDIO_FORMAT_SUB_MASK & AUDIO_FORMAT_SUB_DTS_TE) ||
               (mSampleRate == 44100 || mSampleRate == 22050 || mSampleRate == 11025)) {
                  mTranscodeDevices |= AudioSystem::DEVICE_OUT_SPDIF;
                  mDtsTranscode = true;
             }
+
             if (mUseTunnelDecoder == false)
                 mSpdifFormat = COMPRESSED_FORCED_PCM_FORMAT;
         }
@@ -2216,7 +2225,9 @@ void AudioSessionOutALSA::setSpdifHdmiRoutingFlags(int devices)
         if(devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
 
             mHdmiFormat = COMPRESSED_FORMAT;
-            if(mFormat != AUDIO_FORMAT_DTS && mFormat != AUDIO_FORMAT_DTS_LBR) {
+            if(((mFormat & AUDIO_FORMAT_MAIN_MASK) != AUDIO_FORMAT_DTS &&
+              (mFormat & AUDIO_FORMAT_MAIN_MASK) != AUDIO_FORMAT_DTS_LBR) ||
+              (mFormat & AUDIO_FORMAT_SUB_MASK & AUDIO_FORMAT_SUB_DTS_TE)) {
                 mTranscodeDevices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
                 mDtsTranscode = true;
             }

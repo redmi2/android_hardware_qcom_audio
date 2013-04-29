@@ -217,7 +217,8 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
         } else if(format == AUDIO_FORMAT_MP3) {
              ALOGV("MP3 CODEC");
              compr_params.codec.id = compr_cap.codecs[0];
-        } else if(format == AUDIO_FORMAT_DTS && !(handle->type & PASSTHROUGH_FORMAT)) {
+        } else if((format & AUDIO_FORMAT_MAIN_MASK) == AUDIO_FORMAT_DTS
+                  && !(handle->type & PASSTHROUGH_FORMAT)) {
              ALOGV("DTS CODEC");
              property_get("ro.build.modelid",dtsModelId,"0");
              ALOGV("from property modelId=%s,length=%d\n",
@@ -249,7 +250,8 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
              if(!(dtsPPval == 0 || dtsPPval == 1))
                  dtsPPval = -1;
              compr_params.codec.options.dts.parse_rev2aux = dtsPPval;
-        } else if(format == AUDIO_FORMAT_DTS_LBR && !(handle->type & PASSTHROUGH_FORMAT)) {
+        } else if((format & AUDIO_FORMAT_MAIN_MASK) == AUDIO_FORMAT_DTS_LBR
+                  && !(handle->type & PASSTHROUGH_FORMAT)) {
              ALOGV("DTS LBR CODEC");
              property_get("ro.build.modelid", dtsModelId, "0");
              ALOGV("from property modelId=%s,length=%d\n",
@@ -276,12 +278,12 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
              if(!(dtsPPval == 0 || dtsPPval == 1))
                  dtsPPval = -1;
              compr_params.codec.options.dts.parse_rev2aux = dtsPPval;
-        } else if(format == AUDIO_FORMAT_DTS
+        } else if((format & AUDIO_FORMAT_MAIN_MASK) == AUDIO_FORMAT_DTS
                  && (handle->type & PASSTHROUGH_FORMAT)) {
              ALOGV("DTS PASSTHROUGH CODEC");
              compr_params.codec.id = compr_cap.codecs[7];
              hdmiChannels = 2;
-        } else if(format == AUDIO_FORMAT_DTS_LBR
+        } else if((format & AUDIO_FORMAT_MAIN_MASK) == AUDIO_FORMAT_DTS_LBR
                  && (handle->type & PASSTHROUGH_FORMAT)) {
              ALOGV("DTS LBR PASSTHROUGH CODEC");
              compr_params.codec.id = compr_cap.codecs[13];
@@ -1070,15 +1072,6 @@ void ALSADevice::setDeviceList(ALSAHandleList *mParentDeviceList)
 status_t ALSADevice::start(alsa_handle_t *handle)
 {
     status_t err = NO_ERROR;
-    bool dtsTranscode = false;
-    char spdifFormat[128];
-    char hdmiFormat[128];
-
-    property_get("mpq.audio.spdif.format",spdifFormat,"0");
-    property_get("mpq.audio.hdmi.format",hdmiFormat,"0");
-    if (!strncmp(spdifFormat,"dts",sizeof(spdifFormat)) ||
-        !strncmp(hdmiFormat,"dts",sizeof(hdmiFormat)))
-        dtsTranscode = true;
 
     if(!handle->handle) {
         ALOGE("No active PCM driver to start");
