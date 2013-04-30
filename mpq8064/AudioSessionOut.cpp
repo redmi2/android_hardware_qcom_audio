@@ -381,15 +381,10 @@ status_t AudioSessionOutALSA::setVolume(float left, float right)
 
     ALOGD("Setting stream volume to %d (available range is 0 to 0x2000)\n", mStreamVol);
     if(mPcmRxHandle) {
-        if(!strncmp(mPcmRxHandle->useCase, SND_USE_CASE_VERB_HIFI2,
-                                     strlen(SND_USE_CASE_VERB_HIFI2)) ||
-                !strncmp(mPcmRxHandle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC2,
-                                     strlen(SND_USE_CASE_MOD_PLAY_MUSIC2))) {
-            ALOGD("setPCM 1 Volume(%f)\n", volume);
-            ALOGD("Setting PCM volume to %d (available range is 0 to 0x2000)\n", mStreamVol);
-            status = mPcmRxHandle->module->setPlaybackVolume(mStreamVol,
+        ALOGD("setPCM 1 Volume(%f)\n", volume);
+        ALOGD("Setting PCM volume to %d (available range is 0 to 0x2000)\n", mStreamVol);
+        status = mPcmRxHandle->module->setPlaybackVolume(mStreamVol,
                                                mPcmRxHandle->useCase);
-        }
         return status;
     }
     else if(mCompreRxHandle) {
@@ -706,6 +701,11 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
                         break;
                     mPcmRxHandle = NULL;
                     status = openPcmDevice(devices);
+
+                    if(mPcmRxHandle){
+                        status = mPcmRxHandle->module->setPlaybackVolume(mStreamVol,
+                                                mPcmRxHandle->useCase);
+                    }
                     if(status != NO_ERROR)
                         break;
                 }
