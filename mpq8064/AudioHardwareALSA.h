@@ -111,6 +111,8 @@ KEYVALUE PAIR FOR SET/GET PARAMETER
 #define HDMI_MUTE_KEY       "hdmi_mute"
 #define SPDIF_OCHANNELS_KEY "spdif_output_channels"
 #define HDMI_OCHANNELS_KEY  "hdmi_output_channels"
+#define SPDIF_DELAY_KEY     "spdif_delay"
+#define HDMI_DELAY_KEY      "hdmi_delay"
 
 #define ANC_FLAG        0x00000001
 #define DMIC_FLAG       0x00000002
@@ -211,7 +213,7 @@ HDMI and SPDIF Device Output format control
 #define ADM_PP_PARAM_MUTE_ID 0
 #define ADM_PP_PARAM_MUTE_LENGTH 3
 #define ADM_PP_PARAM_LATENCY_ID 1
-#define ADM_PP_PARAM_MUTE_LENGTH 3
+#define ADM_PP_PARAM_LATENCY_LENGTH 3
 /*******************************************************************************
 USECASES AND THE CORRESPONDING DEVICE FORMATS THAT WE SUPPORT IN HAL
 *******************************************************************************/
@@ -677,6 +679,8 @@ public:
     int         mHdmiOutputChannels;
     EDID_AUDIO_INFO mEDIDInfo;
     unsigned int mDriverInstancesUsed;
+    status_t setPlaybackOutputDelay(int outputDevice, unsigned int delay);
+
 protected:
     friend class AudioHardwareALSA;
 
