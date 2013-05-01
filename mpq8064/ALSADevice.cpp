@@ -1647,42 +1647,16 @@ int32_t ALSADevice::get_compressed_channel_status(void *audio_stream_data,
     return 0;
 }
 
-status_t ALSADevice::setPlaybackVolume(int value, char *useCase)
+status_t ALSADevice::setPlaybackVolume(alsa_handle_t *handle, int volume)
 {
     status_t err = NO_ERROR;
-    char volMixerCtrlStr[128];
 
-    if((!strncmp(useCase, SND_USE_CASE_VERB_HIFI2,
-           strlen(SND_USE_CASE_VERB_HIFI2))) ||
-       (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC2,
-           strlen(SND_USE_CASE_MOD_PLAY_MUSIC2))))
-        strlcpy(volMixerCtrlStr, "HIFI2 RX Volume", sizeof(volMixerCtrlStr));
-    else if((!strncmp(useCase, SND_USE_CASE_VERB_HIFI3,
-                strlen(SND_USE_CASE_VERB_HIFI3))) ||
-            (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC3,
-                strlen(SND_USE_CASE_MOD_PLAY_MUSIC3))))
-        strlcpy(volMixerCtrlStr, "HIFI3 RX Volume", sizeof(volMixerCtrlStr));
-    else if(!strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC4,
-                strlen(SND_USE_CASE_MOD_PLAY_MUSIC4)))
-        strlcpy(volMixerCtrlStr, "HIFI4 RX Volume", sizeof(volMixerCtrlStr));
-    else if((!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
-                strlen(SND_USE_CASE_VERB_HIFI_TUNNEL))) ||
-            (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL1,
-                strlen(SND_USE_CASE_MOD_PLAY_TUNNEL1))))
-        strlcpy(volMixerCtrlStr, "COMPRESSED RX Volume", sizeof(volMixerCtrlStr));
-    else if((!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
-                strlen(SND_USE_CASE_VERB_HIFI_TUNNEL2))) ||
-            (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
-                strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2))))
-        strlcpy(volMixerCtrlStr, "COMPRESSED2 RX Volume", sizeof(volMixerCtrlStr));
-    else if(!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL3,
-                strlen(SND_USE_CASE_MOD_PLAY_TUNNEL3)))
-        strlcpy(volMixerCtrlStr, "COMPRESSED3 RX Volume", sizeof(volMixerCtrlStr));
+    if(handle)
+        err = pcm_set_volume(handle->handle, mMixer, volume);
 
-    err = setMixerControl(volMixerCtrlStr,value,0);
-    if(err) {
-        ALOGE("setPlaybackVolume - error = %d",err);
-    }
+     if(err) {
+         ALOGE("setPlaybackVolume - error = %d",err);
+     }
     return err;
 }
 

@@ -1024,25 +1024,26 @@ int pcm_set_channel_map(struct pcm *pcm, struct mixer *mixer,
 {
     struct mixer_ctl *ctl;
     char control_name[44]; // max length of name is 44 as defined
-    char device_num[3]; // device number upto 2 digit
+    char device_num[STRING_LENGTH_OF_INTEGER+1];
     char **set_values;
-    int i;
+    int i, rc = 0;
 
     ALOGV("pcm_set_channel_map");
     set_values = (char**)malloc(max_channels*sizeof(char*));
     if(set_values) {
         for(i=0; i< max_channels; i++) {
-            set_values[i] = (char*)malloc(4*sizeof(char));
+            set_values[i] = (char*)malloc(STRING_LENGTH_OF_INTEGER*sizeof(char));
             if(set_values[i]) {
                 sprintf(set_values[i],"%d",chmap[i]);
             } else {
                 ALOGE("memory allocation for set channel map failed");
-                return -1;
+                rc = -ENOMEM;
+                goto set_channel_map_done;
             }
         }
     } else {
         ALOGE("memory allocation for set channel map failed");
-        return -1;
+        return -ENOMEM;
     }
     strlcpy(control_name, "Playback Channel Map", sizeof(control_name));
     if(pcm != NULL) {
@@ -1053,13 +1054,59 @@ int pcm_set_channel_map(struct pcm *pcm, struct mixer *mixer,
     ctl = mixer_get_control(mixer, control_name, 0);
     if(ctl == NULL) {
         ALOGE("Could not get the mixer control\n");
-        return -1;
+        rc = -EINVAL;
+    } else {
+        mixer_ctl_set_value(ctl, max_channels, set_values);
     }
-    mixer_ctl_set_value(ctl, max_channels, set_values);
+set_channel_map_done:
     for(i=0; i< max_channels; i++)
         if(set_values[i])
             free(set_values[i]);
     if(set_values)
         free(set_values);
-    return 0;
+    return rc;
+}
+
+int pcm_set_volume(struct pcm *pcm, struct mixer *mixer, int volume)
+{
+    struct mixer_ctl *ctl;
+    char control_name[44]; // max length of name is 44 as defined
+    char device_num[STRING_LENGTH_OF_INTEGER+1];
+    char **set_values;
+    int i, rc=0;
+
+    ALOGV("pcm_set_volume");
+    if(pcm == NULL)
+        return -EINVAL;
+    set_values = (char**)malloc(sizeof(char*));
+    if(set_values) {
+        set_values[0] = (char*)malloc(STRING_LENGTH_OF_INTEGER*sizeof(char));
+        if(set_values[0]) {
+            sprintf(set_values[0],"%d",volume);
+        } else {
+            ALOGE("memory allocation for set volume failed");
+            rc = -ENOMEM;
+            goto set_volume_done;
+        }
+    } else {
+        ALOGE("memory allocation for set volume failed");
+        return -ENOMEM;
+    }
+    strlcpy(control_name, "Playback Volume", sizeof(control_name));
+    sprintf(device_num, "%d", pcm->device_no);
+    strcat(control_name, device_num);
+    ALOGV("pcm_set_volume: control name:%s", control_name);
+    ctl = mixer_get_control(mixer, control_name, 0);
+    if(ctl == NULL) {
+        ALOGE("Could not get the mixer control\n");
+        rc = -EINVAL;
+    } else {
+        mixer_ctl_set_value(ctl, 1, set_values);
+    }
+set_volume_done:
+    if(set_values[0])
+        free(set_values[0]);
+    if(set_values)
+        free(set_values);
+    return rc;
 }
