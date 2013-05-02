@@ -1345,8 +1345,7 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
             if (device2 == AUDIO_DEVICE_NONE) {
                 device2 = mAvailableOutputDevices & AUDIO_DEVICE_OUT_DGTL_DOCK_HEADSET;
             }
-            if ((device2 == AUDIO_DEVICE_NONE) && (strategy != STRATEGY_SONIFICATION)) {
-                // no sonification on aux digital (e.g. HDMI)
+            if ((device2 == AUDIO_DEVICE_NONE) ) {
                 device2 = mAvailableOutputDevices & AUDIO_DEVICE_OUT_AUX_DIGITAL;
             }
             if (device2 == AUDIO_DEVICE_NONE) {
