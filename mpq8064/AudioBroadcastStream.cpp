@@ -87,7 +87,7 @@ AudioBroadcastStreamALSA::AudioBroadcastStreamALSA(AudioHardwareALSA *parent,
     mUcMgr          = mParent->mUcMgr;
     mA2dpUseCase    = AudioHardwareALSA::USECASE_NONE;
 
-    ALOGD("devices:%d, format:%d, channels:%d, sampleRate:%d, audioSource:%d",
+    ALOGD("devices:%x, format:%d, channels:%d, sampleRate:%d, audioSource:%d",
         devices, format, channels, sampleRate, audioSource);
 
     if(!(devices & AudioSystem::DEVICE_OUT_ALL) ||
@@ -271,7 +271,7 @@ status_t AudioBroadcastStreamALSA::setParameters(const String8& keyValuePairs)
     int device;
     if (param.getInt(key, device) == NO_ERROR) {
         // Ignore routing if device is 0.
-        ALOGD("setParameters(): keyRouting with device %d", device);
+        ALOGD("setParameters(): keyRouting with device %x", device);
         if(device) {
             //ToDo: Call device setting UCM API here
             doRouting(device);
@@ -1186,7 +1186,7 @@ status_t AudioBroadcastStreamALSA::openTunnelDevice(int devices)
         //Passthrough to be configured with 2 channels
         mTranscodeHandle->channels = 2;
         mTranscodeHandle->sampleRate = mSampleRate > 48000 ? 48000: mSampleRate;
-        ALOGV("Transcode devices = %d", mTranscodeDevices);
+        ALOGV("Transcode devices = %x", mTranscodeDevices);
         strlcpy(mTranscodeHandle->useCase, mCompreRxHandle->useCase, sizeof(mTranscodeHandle->useCase));
         strncat(mTranscodeHandle->useCase, SND_USE_CASE_PSEUDO_TUNNEL_SUFFIX, sizeof(mTranscodeHandle->useCase));
         mALSADevice->setUseCase(mTranscodeHandle, false);

@@ -255,7 +255,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
             return;
     }
     if (mUseTunnelDecoder) {
-        ALOGV("Tunnel decoder case use mSecDevices=%d, mUseDualTunnel=%d \
+        ALOGV("Tunnel decoder case use mSecDevices=%x, mUseDualTunnel=%d \
         mSecCompreRxHandle=%u", mSecDevices, mUseDualTunnel, mSecCompreRxHandle);
         if (format != AUDIO_FORMAT_WMA && format != AUDIO_FORMAT_WMA_PRO)
             *status = openTunnelDevice(mDevices);
@@ -332,7 +332,7 @@ status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
         // Ignore routing if device is 0.
         if(device) {
             device |= AudioSystem::DEVICE_OUT_SPDIF;
-            ALOGD("setParameters(): keyRouting with device %d", device);
+            ALOGD("setParameters(): keyRouting with device %x", device);
             doRouting(device);
         }
         param.remove(key);
@@ -350,7 +350,7 @@ String8 AudioSessionOutALSA::getParameters(const String8& keys)
     String8 value;
     String8 key = String8(AudioParameter::keyRouting);
     int devices = mDevices;
-    ALOGV("getParameters mDevices %d mRouteAudioToA2dp %d", mDevices, mRouteAudioToA2dp);
+    ALOGV("getParameters mDevices %x mRouteAudioToA2dp %d", mDevices, mRouteAudioToA2dp);
     if (param.get(key, value) == NO_ERROR) {
         if((mDevices & AudioSystem::DEVICE_OUT_PROXY) && mRouteAudioToA2dp) {
             devices |= AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP;
@@ -456,7 +456,7 @@ status_t AudioSessionOutALSA::openTunnelDevice(int devices)
         //Passthrough to be configured with 2 channels
         mTranscodeHandle->channels = 2;
         mTranscodeHandle->sampleRate = mSampleRate > 48000 ? 48000: mSampleRate;
-        ALOGV("Transcode devices = %d", mTranscodeDevices);
+        ALOGV("Transcode devices = %x", mTranscodeDevices);
         strlcpy(mTranscodeHandle->useCase, mCompreRxHandle->useCase, sizeof(mTranscodeHandle->useCase));
         strncat(mTranscodeHandle->useCase, SND_USE_CASE_PSEUDO_TUNNEL_SUFFIX, sizeof(mTranscodeHandle->useCase));
         mALSADevice->setUseCase(mTranscodeHandle, false);
