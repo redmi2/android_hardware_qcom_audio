@@ -188,7 +188,9 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
                 device |=  AudioSystem::DEVICE_OUT_PROXY;
                 mParent->mRouteAudioToA2dp = true;
                 ALOGD("setParameters(): A2DP device %d", device);
-            }
+            } else
+                device |=  AudioSystem::DEVICE_OUT_SPDIF;
+
             err = mParent->doRouting(device);
             if(err) {
                 ALOGE("doRouting failed = %d",err);
