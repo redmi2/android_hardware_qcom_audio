@@ -198,6 +198,13 @@ audio_devices_t AudioPolicyManager::getDeviceForInputSource(int inputSource)
             device = AUDIO_DEVICE_IN_REMOTE_SUBMIX;
         }
         break;
+    case AUDIO_SOURCE_CAMCORDER:
+        if (mAvailableInputDevices & AUDIO_DEVICE_IN_BACK_MIC) {
+            device = AUDIO_DEVICE_IN_BACK_MIC;
+        } else if (mAvailableInputDevices & AUDIO_DEVICE_IN_BUILTIN_MIC) {
+            device = AUDIO_DEVICE_IN_BUILTIN_MIC;
+        }
+        break;
     default:
         ALOGW("getDeviceForInputSource() invalid input source %d", inputSource);
         break;
