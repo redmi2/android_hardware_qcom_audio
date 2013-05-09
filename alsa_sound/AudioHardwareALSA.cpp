@@ -2024,11 +2024,8 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         }
 #endif
         err = mALSADevice->open(&(*it));
-        if (*format == AUDIO_FORMAT_AMR_WB) {
-             ALOGD("### Setting bufsize to 61");
-             it->bufferSize = 61;
-        }
         if (err) {
+           mDeviceList.erase(it);
            ALOGE("Error opening pcm input device");
         #ifdef QCOM_LISTEN_FEATURE_ENABLE
             //Notify to listen HAL that Audio capture is inactive
@@ -2106,15 +2103,8 @@ status_t AudioHardwareALSA::dump(int fd, const Vector<String16>& args)
 size_t AudioHardwareALSA::getInputBufferSize(uint32_t sampleRate, int format, int channelCount)
 {
     size_t bufferSize = 0;
-    if (format == AUDIO_FORMAT_PCM_16_BIT
-#ifdef QCOM_AUDIO_FORMAT_ENABLED
-        || format == AUDIO_FORMAT_EVRC
-        || format == AUDIO_FORMAT_EVRCB
-        || format == AUDIO_FORMAT_EVRCWB
-#endif
-        || format == AUDIO_FORMAT_AMR_NB
-        || format == AUDIO_FORMAT_AMR_WB) {
-        if(sampleRate == 8000 || sampleRate == 16000 || sampleRate == 32000) {
+    if (format == AUDIO_FORMAT_PCM_16_BIT) {
+        if((sampleRate == 8000 || sampleRate == 16000 || sampleRate == 32000)) {
 #ifdef TARGET_B_FAMILY
             bufferSize = DEFAULT_IN_BUFFER_SIZE;
 #else
@@ -2127,6 +2117,20 @@ size_t AudioHardwareALSA::getInputBufferSize(uint32_t sampleRate, int format, in
         } else if (sampleRate == 44100 || sampleRate == 48000) {
             bufferSize = 1024 * sizeof(int16_t) * channelCount;
         }
+        ALOGD("getInputBufferSize PCM 16 bit = %d", bufferSize);
+    } else if ( /*Used for tunnel voip encoders.
+                 * Not used for tunnel amr-wb encoding
+                 * as it works on 1 frame worth 61 bytes
+                 */
+#ifdef QCOM_AUDIO_FORMAT_ENABLED
+        format == AUDIO_FORMAT_EVRC
+        || format == AUDIO_FORMAT_EVRCB
+        || format == AUDIO_FORMAT_EVRCWB
+#endif
+        || format == AUDIO_FORMAT_AMR_NB
+        || format == AUDIO_FORMAT_AMR_WB) {
+        bufferSize = (sampleRate * channelCount * 20 * sizeof(int16_t)) / 1000;
+        ALOGD("getInputBufferSize AMRWB/AMRNB/EVRC = %d", bufferSize);
     } else {
         bufferSize = DEFAULT_IN_BUFFER_SIZE * channelCount;
         ALOGE("getInputBufferSize bad format: %x use default input buffersize:%d", format, bufferSize);
@@ -2748,7 +2752,8 @@ status_t AudioHardwareALSA::stopPlaybackOnExtOut_l(uint32_t activeUsecase) {
 
 #ifdef OUTPUT_BUFFER_LOG
     ALOGV("close file output");
-    fclose (outputBufferFile1);
+    if(outputBufferFile1)
+        fclose (outputBufferFile1);
 #endif
          }
      }
@@ -3052,7 +3057,7 @@ void AudioHardwareALSA::extOutThreadFunc() {
         proxyBufferTime = mALSADevice->mProxyParams.mBufferTime;
         {
             Mutex::Autolock autolock1(mExtOutMutex);
-            if (mResampler != NULL) {
+            if (mResampler != NULL && (mUsbStream == mExtOutStream)) {
                 uint32_t inFrames = size/(AFE_PROXY_CHANNEL_COUNT*2);
                 uint32_t outFrames = inFrames;
                 mResampler->resample_from_input(mResampler,
@@ -3068,7 +3073,7 @@ void AudioHardwareALSA::extOutThreadFunc() {
         while (err == OK && (numBytesRemaining  > 0) && !mKillExtOutThread
                 && mIsExtOutEnabled ) {
             {
-                Mutex::Autolock autolock1(mExtOutMutex);
+                mExtOutMutex.lock();
                 if(mExtOutStream != NULL ) {
                     bytesAvailInBuffer = mExtOutStream->common.get_buffer_size(&mExtOutStream->common);
                     uint32_t writeLen = bytesAvailInBuffer > numBytesRemaining ?
@@ -3076,10 +3081,13 @@ void AudioHardwareALSA::extOutThreadFunc() {
                     ALOGV("Writing %d bytes to External Output ", writeLen);
                     bytesWritten = mExtOutStream->write(mExtOutStream,copyBuffer, writeLen);
                 } else {
+                    //unlock the mutex before sleep
+                    mExtOutMutex.unlock();
                     ALOGV(" No External output to write  ");
                     usleep(proxyBufferTime*1000);
                     bytesWritten = numBytesRemaining;
                 }
+                mExtOutMutex.unlock();
             }
             //If the write fails make this thread sleep and let other
             //thread (eg: stopA2DP) to acquire lock to prevent a deadlock.
