@@ -1246,6 +1246,8 @@ void ALSADevice::disableDevice(alsa_handle_t *handle)
                 txDevice = NULL;
             }
             devices = devices & (~deviceToDisable);
+            disableRxDevice = true;
+            disableTxDevice = true;
         }
     }
     handle->activeDevice = 0;
@@ -1266,7 +1268,6 @@ void ALSADevice::enableDevice(alsa_handle_t *handle, bool bIsUseCaseSet)
             if (usecase_type & USECASE_TYPE_RX) {
                 if(bIsUseCaseSet) {
                     snd_use_case_set_case(handle->ucMgr, "_verb", handle->useCase, rxDevice);
-                    bIsUseCaseSet = false;
                 } else {
                     snd_use_case_set_case(handle->ucMgr, "_enamod", handle->useCase, rxDevice);
                 }
@@ -1279,7 +1280,6 @@ void ALSADevice::enableDevice(alsa_handle_t *handle, bool bIsUseCaseSet)
             if (usecase_type & USECASE_TYPE_TX) {
                 if(bIsUseCaseSet) {
                     snd_use_case_set_case(handle->ucMgr, "_verb", handle->useCase, txDevice);
-                    bIsUseCaseSet = false;
                 } else {
                     snd_use_case_set_case(handle->ucMgr, "_enamod", handle->useCase, txDevice);
                 }

@@ -293,6 +293,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
     if (param.getInt(key, device) == NO_ERROR) {
         // Ignore routing if device is 0.
         if(device) {
+            device |= AudioSystem::DEVICE_OUT_SPDIF;
             doRouting(device);
         }
         param.remove(key);
@@ -816,6 +817,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
     status_t err = BAD_VALUE;
     if (flags & AUDIO_OUTPUT_FLAG_TUNNEL) {
         int sessionId = 3;
+        devices |= AudioSystem::DEVICE_OUT_SPDIF;
         AudioSessionOutALSA *out = new AudioSessionOutALSA(this, devices, *format, *channels,
                                                        *sampleRate, sessionId, &err);
         if(err != NO_ERROR) {
@@ -990,6 +992,7 @@ AudioHardwareALSA::openOutputSession(uint32_t devices,
 {
     Mutex::Autolock autoLock(mLock);
     ALOGD("openOutputSession");
+    devices |= AudioSystem::DEVICE_OUT_SPDIF;
     status_t err = BAD_VALUE;
     AudioSessionOutALSA *out = new AudioSessionOutALSA(this, devices, *format, channels,
                                                        samplingRate, sessionId, &err);
