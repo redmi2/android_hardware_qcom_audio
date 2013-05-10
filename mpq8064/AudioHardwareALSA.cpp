@@ -545,7 +545,13 @@ status_t AudioHardwareALSA::doRouting(int device)
     ALOGV("device = 0x%x,mCurDevice 0x%x", device, mCurDevice);
     if (device == 0)
         device = mCurDevice;
-    ALOGD("doRouting: device %d newMode %d mIsVoiceCallActive %d mIsFmActive %d",
+    if (device & AudioSystem::DEVICE_OUT_ALL_A2DP) {
+        device &= ~AudioSystem::DEVICE_OUT_ALL_A2DP;
+        device |=  AudioSystem::DEVICE_OUT_PROXY;
+        mRouteAudioToA2dp = true;
+        ALOGV("Routing Everything to proxy now");
+    }
+    ALOGD("doRouting: device %x newMode %d mIsVoiceCallActive %d mIsFmActive %d",
           device, newMode, mIsVoiceCallActive, mIsFmActive);
     if((newMode == AudioSystem::MODE_IN_CALL) && (mIsVoiceCallActive == 0)) {
         // Start voice call
