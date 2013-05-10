@@ -399,7 +399,7 @@ status_t ALSADevice::setSoftwareParams(alsa_handle_t *handle)
             handle->type == COMPRESSED_PASSTHROUGH_FORMAT) {
         params->period_step = 1;
         params->avail_min = handle->channels - 1 ? periodSize/2 : periodSize/4;
-        params->start_threshold = handle->channels - 1 ? periodSize : periodSize/2;
+        params->start_threshold =  periodSize/(2*handle->channels);
         params->xfer_align = handle->handle->period_size/(4*channels);
     }
     params->silence_threshold = 0;
