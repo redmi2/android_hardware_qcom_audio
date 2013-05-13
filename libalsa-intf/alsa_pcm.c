@@ -143,7 +143,8 @@ enum decoder_alias {
     FORMAT_DTS_LBR          = SND_AUDIOCODEC_DTS_LBR,
     FORMAT_DTS_PASS_THROUGH = SND_AUDIOCODEC_DTS_PASS_THROUGH,
     FORMAT_AMRWB            = SND_AUDIOCODEC_AMRWB,
-    FORMAT_AMRWB_PLUS       = SND_AUDIOCODEC_AMRWBPLUS
+    FORMAT_AMRWB_PLUS       = SND_AUDIOCODEC_AMRWBPLUS,
+    FORMAT_PCM              = SND_AUDIOCODEC_PCM
 };
 
 int get_compressed_format(const char *format)
@@ -179,6 +180,9 @@ int get_compressed_format(const char *format)
         }else if (strcmp(ch, "AMR_WB_PLUS") == 0) {
                 printf("FORMAT_AMRWB_PLUS is selected\n");
                 return FORMAT_AMRWB_PLUS;
+        }else if (strcmp(ch, "PCM") == 0) {
+                printf("FORMAT_PCM is selected\n");
+                return FORMAT_PCM;
         } else {
                 printf("invalid format\n");
                 return -1;
