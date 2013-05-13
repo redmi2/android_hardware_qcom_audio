@@ -82,6 +82,7 @@ struct pcm {
 #define PCM_PERIOD_SZ_MASK (0xF << PCM_PERIOD_SZ_SHIFT)
 
 #define TIMEOUT_INFINITE  -1
+#define STRING_LENGTH_OF_INTEGER 12
 
 /* Acquire/release a pcm channel.
  * Returns non-zero on error
@@ -157,6 +158,7 @@ int get_compressed_format(const char *format);
 void param_dump(struct snd_pcm_hw_params *p);
 int pcm_prepare(struct pcm *pcm);
 long pcm_avail(struct pcm *pcm);
+int pcm_set_volume(struct pcm *pcm, struct mixer *mixer, int volume);
 int pcm_set_channel_map(struct pcm *pcm, struct mixer *mixer,
                         int max_channels, char *chmap);
 

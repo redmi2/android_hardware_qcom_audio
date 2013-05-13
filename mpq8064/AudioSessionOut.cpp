@@ -387,8 +387,7 @@ status_t AudioSessionOutALSA::setVolume(float left, float right)
                                      strlen(SND_USE_CASE_MOD_PLAY_MUSIC2))) {
             ALOGD("setPCM 1 Volume(%f)\n", volume);
             ALOGD("Setting PCM volume to %d (available range is 0 to 0x2000)\n", mStreamVol);
-            status = mPcmRxHandle->module->setPlaybackVolume(mStreamVol,
-                                               mPcmRxHandle->useCase);
+            status = mPcmRxHandle->module->setPlaybackVolume(mPcmRxHandle, mStreamVol);
         }
         return status;
     }
@@ -396,8 +395,7 @@ status_t AudioSessionOutALSA::setVolume(float left, float right)
         if (mSpdifFormat != COMPRESSED_FORMAT && mHdmiFormat != COMPRESSED_FORMAT) {
             ALOGD("set compressed Volume(%f) handle->type %d\n", volume, mCompreRxHandle->type);
             ALOGD("Setting Compressed volume to %d (available range is 0 to 0x2000)\n", mStreamVol);
-            status = mCompreRxHandle->module->setPlaybackVolume(mStreamVol,
-                                                 mCompreRxHandle->useCase);
+            status = mCompreRxHandle->module->setPlaybackVolume(mCompreRxHandle, mStreamVol);
         }
         return status;
     }

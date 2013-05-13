@@ -329,13 +329,11 @@ status_t AudioBroadcastStreamALSA::mute(bool mute)
     }
     if(mPcmRxHandle) {
         if(mPcmRxHandle->type == PCM_FORMAT) {
-            status = mPcmRxHandle->module->setPlaybackVolume(volume,
-                                               mPcmRxHandle->useCase);
+            status = mPcmRxHandle->module->setPlaybackVolume(mPcmRxHandle, volume);
         }
     } else if(mCompreRxHandle) {
         if(mSpdifFormat != COMPRESSED_FORMAT && mHdmiFormat != COMPRESSED_FORMAT) {
-            status = mCompreRxHandle->module->setPlaybackVolume(volume,
-                                                 mCompreRxHandle->useCase);
+            status = mCompreRxHandle->module->setPlaybackVolume(mCompreRxHandle, volume);
         }
     }
     return OK;
@@ -362,13 +360,11 @@ status_t AudioBroadcastStreamALSA::setVolume(float left, float right)
                  (available range is 0 to 100)\n", mStreamVol);
     if(mPcmRxHandle) {
         if(mPcmRxHandle->type == PCM_FORMAT) {
-            status = mPcmRxHandle->module->setPlaybackVolume(mStreamVol,
-                                               mPcmRxHandle->useCase);
+            status = mPcmRxHandle->module->setPlaybackVolume(mPcmRxHandle, mStreamVol);
         }
     } else if(mCompreRxHandle) {
         if(mSpdifFormat != COMPRESSED_FORMAT && mHdmiFormat != COMPRESSED_FORMAT)
-            status = mCompreRxHandle->module->setPlaybackVolume(mStreamVol,
-                                                 mCompreRxHandle->useCase);
+            status = mCompreRxHandle->module->setPlaybackVolume(mCompreRxHandle, mStreamVol);
     }
     return status;
 }

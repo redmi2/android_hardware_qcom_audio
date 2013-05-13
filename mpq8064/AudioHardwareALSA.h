@@ -290,7 +290,7 @@ public:
                                               unsigned char *channel_status,
                                               enum audio_parser_code_type codec_type);
 
-    status_t    setPlaybackVolume(int, char *);
+    status_t    setPlaybackVolume(alsa_handle_t *handle, int volume);
     status_t    setPlaybackFormat(const char *value, int device, int dtsTranscode);
     status_t    setCaptureFormat(const char *value);
     status_t    setChannelMap(alsa_handle_t *handle, int maxChannels,
