@@ -527,6 +527,12 @@ void ALSADevice::switchDevice(uint32_t devices, uint32_t mode)
                           strlen(SND_USE_CASE_MOD_PLAY_TUNNEL3))) &&
            (strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_MUSIC4,
                           strlen(SND_USE_CASE_MOD_PLAY_MUSIC4)))  &&
+           (strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_MUSIC5,
+                          strlen(SND_USE_CASE_MOD_PLAY_MUSIC5)))  &&
+           (strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_MUSIC6,
+                          strlen(SND_USE_CASE_MOD_PLAY_MUSIC6)))  &&
+           (strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_MUSIC7,
+                          strlen(SND_USE_CASE_MOD_PLAY_MUSIC7)))  &&
            (strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED,
                           strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED))) &&
            (strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED,
@@ -617,6 +623,12 @@ status_t ALSADevice::open(alsa_handle_t *handle)
                             strlen(SND_USE_CASE_MOD_PLAY_MUSIC3))) ||
         (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC4,
                             strlen(SND_USE_CASE_MOD_PLAY_MUSIC4))) ||
+        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC5,
+                            strlen(SND_USE_CASE_MOD_PLAY_MUSIC5))) ||
+        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC6,
+                            strlen(SND_USE_CASE_MOD_PLAY_MUSIC6))) ||
+        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC7,
+                            strlen(SND_USE_CASE_MOD_PLAY_MUSIC7))) ||
         (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
                             strlen(SND_USE_CASE_VERB_HIFI_TUNNEL2))) ||
         (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
@@ -1212,6 +1224,12 @@ int  ALSADevice::getUseCaseType(const char *useCase)
            strlen(SND_USE_CASE_MOD_PLAY_TUNNEL3)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC4,
            strlen(SND_USE_CASE_MOD_PLAY_MUSIC4)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC5,
+           strlen(SND_USE_CASE_MOD_PLAY_MUSIC5)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC6,
+           strlen(SND_USE_CASE_MOD_PLAY_MUSIC6)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC7,
+           strlen(SND_USE_CASE_MOD_PLAY_MUSIC7)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_FM,
            strlen(SND_USE_CASE_MOD_PLAY_FM)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL1,
@@ -1804,6 +1822,15 @@ status_t ALSADevice::setPlaybackVolume(int value, char *useCase)
     else if(!strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC4,
                 strlen(SND_USE_CASE_MOD_PLAY_MUSIC4)))
         strlcpy(volMixerCtrlStr, "HIFI4 RX Volume", sizeof(volMixerCtrlStr));
+    else if(!strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC5,
+                strlen(SND_USE_CASE_MOD_PLAY_MUSIC5)))
+        strlcpy(volMixerCtrlStr, "HIFI5 RX Volume", sizeof(volMixerCtrlStr));
+    else if(!strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC6,
+                strlen(SND_USE_CASE_MOD_PLAY_MUSIC6)))
+        strlcpy(volMixerCtrlStr, "HIFI6 RX Volume", sizeof(volMixerCtrlStr));
+    else if(!strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC7,
+                strlen(SND_USE_CASE_MOD_PLAY_MUSIC7)))
+        strlcpy(volMixerCtrlStr, "HIFI7 RX Volume", sizeof(volMixerCtrlStr));
     else if((!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
                 strlen(SND_USE_CASE_VERB_HIFI_TUNNEL))) ||
             (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL1,

@@ -226,31 +226,6 @@ AudioBroadcastStreamALSA::~AudioBroadcastStreamALSA()
 
     initialization();
 
-    for(ALSAHandleList::iterator it = mParent->mDeviceList.begin();
-            it != mParent->mDeviceList.end(); ++it) {
-        if((!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED,
-                strlen(SND_USE_CASE_VERB_HIFI_REC_COMPRESSED))) ||
-           (!strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED,
-                strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED))) ||
-           (!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC2,
-                 strlen(SND_USE_CASE_VERB_HIFI_REC2))) ||
-           (!strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC2,
-                 strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC2))) ||
-           (!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI3,
-                 strlen(SND_USE_CASE_VERB_HIFI3))) ||
-           (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_MUSIC3,
-                 strlen(SND_USE_CASE_MOD_PLAY_MUSIC3))) ||
-           (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_MUSIC4,
-                 strlen(SND_USE_CASE_MOD_PLAY_MUSIC4)))||
-           (!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
-                 strlen(SND_USE_CASE_VERB_HIFI_TUNNEL2))) ||
-           (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
-                 strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2))) ||
-           (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL3,
-                 strlen(SND_USE_CASE_MOD_PLAY_TUNNEL3)))) {
-            mParent->mDeviceList.erase(it);
-        }
-    }
     //clear avsync metadatalist
     for(inputMetadataList::iterator it = mInputMetadataListPcm.begin();
             it != mInputMetadataListPcm.end(); ++it)
