@@ -1697,6 +1697,10 @@ int AudioSessionOutALSA::setDecodeConfig(char *buffer, size_t bytes)
                                       mRxHandleRouteFormat[index])) {
                    ALOGE("opening Playback device failed");
                    return 0;
+                } else if(mRxHandleRouteFormat[index] == ROUTE_UNCOMPRESSED) {
+                    if(mALSADevice->setPlaybackVolume(mRxHandle[index],
+                                                            mStreamVol))
+                        ALOGE("setPlaybackVolume for playback failed");
                 }
             }
             if (openTempBufForMetadataModeRendering()) {
@@ -1830,8 +1834,14 @@ bool AudioSessionOutALSA::swDecode(char *buffer, size_t bytes)
                 ALOGE("change in sample rate - close pcm device fail");
             status = openPlaybackDevice(index, mRxHandleDevices[index],
                                        mRxHandleRouteFormat[index]);
-            if(status != NO_ERROR)
+            if(status != NO_ERROR) {
                 ALOGE("change in sample rate - open pcm device fail");
+            } else if(mRxHandleRouteFormat[index] == ROUTE_UNCOMPRESSED) {
+                status = mALSADevice->setPlaybackVolume(mRxHandle[index],
+                                                        mStreamVol);
+                if(status)
+                    ALOGE("setPlaybackVolume for playback failed");
+            }
         }
         mChannelStatusSet = false;
     }
@@ -2152,9 +2162,17 @@ void AudioSessionOutALSA::handleSwitchAndOpenForDeviceSwitch(int devices, int fo
         mRxHandleDevices[index] = devices;
         mRxHandleRouteFormat[index] = format;
         mRxHandleRouteFormatType[index] = getDeviceFormat(devices);
-        openPlaybackDevice(index, mRxHandleDevices[index],
-                           mRxHandleRouteFormat[index]);
-        mNumRxHandlesActive++;
+        if(openPlaybackDevice(index, mRxHandleDevices[index],
+                           mRxHandleRouteFormat[index])) {
+              ALOGE("openPlaybackDevice failed");
+        } else {
+            mNumRxHandlesActive++;
+            if(mRxHandleRouteFormat[index] == ROUTE_UNCOMPRESSED) {
+                if(mALSADevice->setPlaybackVolume(mRxHandle[index],
+                                                        mStreamVol))
+                    ALOGE("setPlaybackVolume for playback failed");
+            }
+        }
     }
     return;
 }
