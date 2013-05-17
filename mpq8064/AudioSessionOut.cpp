@@ -575,8 +575,6 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
                 return -1;
             }
         }
-        else
-            return -1;
     }
 #ifdef DEBUG
     mFpDumpInput = fopen("/data/input.raw","a");
