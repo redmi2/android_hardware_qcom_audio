@@ -23,7 +23,6 @@
 #include <utils/Log.h>
 #include <cutils/properties.h>
 #include <linux/ioctl.h>
-#include "AudioUtil.h"
 #include "AudioHardwareALSA.h"
 #include <media/AudioRecord.h>
 
@@ -73,6 +72,8 @@ ALSADevice::ALSADevice() {
     mProxyParams.mCaptureBuffer = NULL;
     mProxyParams.mProxyState = proxy_params::EProxyClosed;
     mProxyParams.mProxyPcmHandle = NULL;
+    memset(&mEDIDInfo, 0, sizeof(struct EDID_AUDIO_INFO));
+    mDriverInstancesUsed = 0;
     ALOGD("ALSA Device opened");
 };
 
@@ -126,22 +127,19 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     char hdmiFormat[20];
     char dtsModelId[128];
     int hdmiChannels = 8;
-    EDID_AUDIO_INFO info = { 0 };
 
     if (handle->devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
-        if (AudioUtil::getHDMIAudioSinkCaps(&info)) {
-            int channel_count = 0;
-            for (int i = 0; i < info.nAudioBlocks && i < MAX_EDID_BLOCKS; i++) {
-                if (info.AudioBlocksArray[i].nFormatId == LPCM &&
-                    info.AudioBlocksArray[i].nChannels > channel_count &&
-                    info.AudioBlocksArray[i].nChannels <= MAX_HDMI_CHANNEL_CNT) {
-                    channel_count = info.AudioBlocksArray[i].nChannels;
-                }
+        int channel_count = 0;
+        for (int i = 0; i < mEDIDInfo.nAudioBlocks && i < MAX_EDID_BLOCKS; i++) {
+            if (mEDIDInfo.AudioBlocksArray[i].nFormatId == LPCM &&
+                mEDIDInfo.AudioBlocksArray[i].nChannels > channel_count &&
+                mEDIDInfo.AudioBlocksArray[i].nChannels <= MAX_HDMI_CHANNEL_CNT) {
+                channel_count = mEDIDInfo.AudioBlocksArray[i].nChannels;
             }
-            hdmiChannels = channel_count;
-            pcm_set_channel_map(NULL, mMixer, MAX_HDMI_CHANNEL_CNT, info.channelMap);
-            setChannelAlloc(info.channelAllocation);
         }
+        hdmiChannels = channel_count;
+        pcm_set_channel_map(NULL, mMixer, MAX_HDMI_CHANNEL_CNT, mEDIDInfo.channelMap);
+        setChannelAlloc(mEDIDInfo.channelAllocation);
     }
     property_get("mpq.audio.spdif.format",spdifFormat,"0");
     property_get("mpq.audio.hdmi.format",hdmiFormat,"0");
@@ -239,12 +237,12 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
              ALOGV("DTS PASSTHROUGH CODEC");
              compr_params.codec.id = compr_cap.codecs[7];
              hdmiChannels = 2;
-        } else if(format == AUDIO_FORMAT_DTS_LBR
+        }  else if(format == AUDIO_FORMAT_DTS_LBR
                  && handle->type == COMPRESSED_PASSTHROUGH_FORMAT) {
              ALOGV("DTS LBR PASSTHROUGH CODEC");
              compr_params.codec.id = compr_cap.codecs[13];
              hdmiChannels = 2;
-        }  else if(format == AUDIO_FORMAT_MP2) {
+        } else if(format == AUDIO_FORMAT_MP2) {
              ALOGV("MP2 CODEC");
              compr_params.codec.id = compr_cap.codecs[12];
         }else {
@@ -278,12 +276,13 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
         handle->channels = 8;
         handle->handle->flags |= PCM_TUNNEL;
     }
-    if(handle->sampleRate > 48000) {
-        ALOGE("Sample rate >48000, opening the driver with 48000Hz");
-        handle->sampleRate     = 48000;
+    if(handle->sampleRate > MAX_SUPPORTED_SAMPLING_RATE) {
+        ALOGE("Sample rate > max supported, opening the driver with max: %d",
+              MAX_SUPPORTED_SAMPLING_RATE);
+        handle->sampleRate     = MAX_SUPPORTED_SAMPLING_RATE;
     }
-    if(handle->channels > 8)
-        handle->channels = 8;
+    if(handle->channels > MAX_SUPPORTED_CHANNELS)
+        handle->channels = MAX_SUPPORTED_CHANNELS;
     if (handle->devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
         err = setHDMIChannelCount(hdmiChannels);
         if(err != OK) {
@@ -430,26 +429,8 @@ void ALSADevice::switchDevice(uint32_t devices, uint32_t mode)
 {
     ALOGV("switchDevice devices = %x, mode = %d", devices,mode);
     for(ALSAHandleList::iterator it = mDeviceList->begin(); it != mDeviceList->end(); ++it) {
-        if((strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
-                          strlen(SND_USE_CASE_VERB_HIFI_TUNNEL))) &&
-           (strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL1,
-                          strlen(SND_USE_CASE_MOD_PLAY_TUNNEL1))) &&
-           (strncmp(it->useCase, SND_USE_CASE_VERB_HIFI2,
-                          strlen(SND_USE_CASE_VERB_HIFI2))) &&
-           (strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_MUSIC2,
-                          strlen(SND_USE_CASE_MOD_PLAY_MUSIC2))) &&
-           (strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
-                          strlen(SND_USE_CASE_VERB_HIFI_TUNNEL2))) &&
-           (strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
-                          strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2))) &&
-           (strncmp(it->useCase, SND_USE_CASE_VERB_HIFI3,
-                          strlen(SND_USE_CASE_VERB_HIFI3))) &&
-           (strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_MUSIC3,
-                          strlen(SND_USE_CASE_MOD_PLAY_MUSIC3)))  &&
-           (strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL3,
-                          strlen(SND_USE_CASE_MOD_PLAY_TUNNEL3))) &&
-           (strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_MUSIC4,
-                          strlen(SND_USE_CASE_MOD_PLAY_MUSIC4)))) {
+        if(!isTunnelPlaybackUseCase(it->useCase) &&
+           !isMultiChannelPlaybackUseCase(it->useCase)) {
             if(getUseCaseType(it->useCase) & getDeviceType(devices, mode))
                 switchDeviceUseCase(&(*it), devices, mode);
         }
@@ -520,28 +501,10 @@ status_t ALSADevice::open(alsa_handle_t *handle)
     // ToDo: Add a condition check for HIFI2 use cases also
     if ((!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI,
                             strlen(SND_USE_CASE_VERB_HIFI))) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI2,
-                            strlen(SND_USE_CASE_VERB_HIFI2))) ||
         (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC,
                             strlen(SND_USE_CASE_MOD_PLAY_MUSIC))) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC2,
-                            strlen(SND_USE_CASE_MOD_PLAY_MUSIC2))) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
-                            strlen(SND_USE_CASE_VERB_HIFI_TUNNEL))) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL1,
-                            strlen(SND_USE_CASE_MOD_PLAY_TUNNEL1))) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI3,
-                            strlen(SND_USE_CASE_VERB_HIFI3))) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC3,
-                            strlen(SND_USE_CASE_MOD_PLAY_MUSIC3))) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC4,
-                            strlen(SND_USE_CASE_MOD_PLAY_MUSIC4))) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
-                            strlen(SND_USE_CASE_VERB_HIFI_TUNNEL2))) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
-                            strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2))) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL3,
-                            strlen(SND_USE_CASE_MOD_PLAY_TUNNEL3)))) {
+        isTunnelPlaybackUseCase(handle->useCase) ||
+        isMultiChannelPlaybackUseCase(handle->useCase)) {
         flags = PCM_OUT;
     } else {
         flags = PCM_IN;
@@ -563,16 +526,7 @@ status_t ALSADevice::open(alsa_handle_t *handle)
         ALOGE("Failed to get pcm device node: %s", devName);
         return NO_INIT;
     }
-    if (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
-                           strlen(SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL1,
-                            strlen(SND_USE_CASE_MOD_PLAY_TUNNEL1))) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
-                            strlen(SND_USE_CASE_VERB_HIFI_TUNNEL2))) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
-                            strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2))) ||
-        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL3,
-                            strlen(SND_USE_CASE_MOD_PLAY_TUNNEL3)))) {
+    if (isTunnelPlaybackUseCase(handle->useCase)) {
         flags |= DEBUG_ON | PCM_MMAP;
     }
     handle->handle = pcm_open(flags, (char*)devName);
@@ -1107,44 +1061,19 @@ int  ALSADevice::getUseCaseType(const char *useCase)
     ALOGE("use case is %s\n", useCase);
     if (!strncmp(useCase, SND_USE_CASE_VERB_HIFI,
            strlen(SND_USE_CASE_VERB_HIFI)) ||
+        isMultiChannelPlaybackUseCase(useCase) ||
         !strncmp(useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER,
            strlen(SND_USE_CASE_VERB_HIFI_LOW_POWER)) ||
-        !strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
-           strlen(SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
-        !strncmp(useCase, SND_USE_CASE_VERB_HIFI2,
-           strlen(SND_USE_CASE_VERB_HIFI2)) ||
-        !strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
-           strlen(SND_USE_CASE_VERB_HIFI_TUNNEL2)) ||
-        !strncmp(useCase, SND_USE_CASE_VERB_HIFI3,
-           strlen(SND_USE_CASE_VERB_HIFI3)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_DIGITAL_RADIO,
            strlen(SND_USE_CASE_VERB_DIGITAL_RADIO)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC,
            strlen(SND_USE_CASE_MOD_PLAY_MUSIC)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_LPA,
            strlen(SND_USE_CASE_MOD_PLAY_LPA)) ||
-        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL1,
-           strlen(SND_USE_CASE_MOD_PLAY_TUNNEL1)) ||
-        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC2,
-           strlen(SND_USE_CASE_MOD_PLAY_MUSIC2)) ||
-        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
-           strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2)) ||
-        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC3,
-           strlen(SND_USE_CASE_MOD_PLAY_MUSIC3)) ||
-        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL3,
-           strlen(SND_USE_CASE_MOD_PLAY_TUNNEL3)) ||
-        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC4,
-           strlen(SND_USE_CASE_MOD_PLAY_MUSIC4)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_FM,
            strlen(SND_USE_CASE_MOD_PLAY_FM)) ||
-        !strncmp(useCase, SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL1,
-           strlen(SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL1)) ||
-        !strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_TUNNEL1,
-           strlen(SND_USE_CASE_MOD_PSEUDO_TUNNEL1)) ||
-        !strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_TUNNEL2,
-           strlen(SND_USE_CASE_MOD_PSEUDO_TUNNEL2)) ||
-        !strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_TUNNEL3,
-           strlen(SND_USE_CASE_MOD_PSEUDO_TUNNEL3))) {
+        isTunnelPlaybackUseCase(useCase) ||
+        isTunnelPseudoPlaybackUseCase(useCase)) {
         return USECASE_TYPE_RX;
     } else if (!strncmp(useCase, SND_USE_CASE_VERB_HIFI_REC,
            strlen(SND_USE_CASE_VERB_HIFI_REC)) ||
@@ -1650,7 +1579,7 @@ int32_t ALSADevice::get_compressed_channel_status(void *audio_stream_data,
 status_t ALSADevice::setPlaybackVolume(alsa_handle_t *handle, int volume)
 {
     status_t err = NO_ERROR;
-
+    ALOGV("setPlaybackVolume");
     if(handle)
         err = pcm_set_volume(handle->handle, mMixer, volume);
 
@@ -1728,7 +1657,7 @@ status_t ALSADevice::setCaptureFormat(const char *value)
     return err;
 }
 
-status_t ALSADevice::setWMAParams(alsa_handle_t *handle, int params[], int size)
+status_t ALSADevice::setWMAParams(int params[], int size)
 {
     status_t err = NO_ERROR;
     if (size > sizeof(mWMA_params)/sizeof(mWMA_params[0])) {
@@ -1791,7 +1720,6 @@ status_t ALSADevice::setHDMIChannelCount(int channels)
 {
     status_t err = NO_ERROR;
     const char *channel_cnt_str = NULL;
-    ALOGE("dddd: channels in sethdmichannelcount = %d", channels);
     switch (channels) {
     case 8: channel_cnt_str = "Eight"; break;
     case 7: channel_cnt_str = "Seven"; break;
@@ -1854,108 +1782,6 @@ int ALSADevice::getDevices(uint32_t devices, uint32_t mode, char **rxDevice, cha
     return devices;
 }
 
-/**
- * Compares two usecase to check if they are same or can be replaced
- * with each other
- * Returns true if replaceable, false otherwise.
- *
- * Two usecases can be replaced by each other if
- * 1. They are same
- * 2. They differ only by a number(not more than two digit) at the end
- * 3. Both usecases should have number as suffix at the end.
- *
- * E.g. "Play Music1" and "Play Music2" are replaceable
- *      "Play Music11" and "Play Music9" are replaceable
- *    but "Play Music" and "Play Music2" are NOT REPLACEABLE
- *
- *    The last case is included to distinguise standard Usecases from
- *    Our Usecase definitions.
- */
-bool ALSADevice::isUsecaseMatching(const char *usecase, const char *requsecase)
-{
-    int len1 = 0, len2 = 0, lc = 0;
-
-    while (usecase[lc] != '\0' && requsecase[lc] != '\0'
-           && usecase[lc] == requsecase[lc])
-        lc++;
-
-    len1 = strlen(usecase);
-    len2 = strlen(requsecase);
-
-    if (len1 == lc && len2 == lc)
-        return true; /* Both Usecases are same */
-    if (lc+2 < len1 || lc+2 < len2 || len1 == lc || len2 == lc)
-        return false; /* Usecases differ by more than two characters*/
-
-    while (len1-- > lc) {
-        if (usecase[len1] < '0' || usecase[len1] > '9')
-            return false; /* Characters at end the end are not numerals */
-    }
-    while (len2-- > lc) {
-        if (requsecase[len2] < '0' || requsecase[len2] > '9')
-            return false; /* Characters at end the end are not numerals */
-    }
-
-    return true; /* Replaceable Usecases */
-}
-
-/*
- * Checks whether the requested Usecase is already opened or conflicts otherwise
- * Returns int:
- *     0, if no conflicts detected
- *     1, if conflicts but alternative usecase is available
- *     NEGATIVE, Error values if usecase invalid or cannot be used
- */
-int ALSADevice::checkAndGetAvailableUseCase(alsa_handle_t *handle, char altUsecase[])
-{
-    char const **list = NULL;
-    int ret = 0, index = 0, listCount = 0;
-    bool usecaseConflicts = false;
-    ALSAHandleList::iterator it;
-
-    ALOGD("checkAndGetAvailableUseCase usecase req: %s", handle->useCase);
-    for (it = handle->module->mDeviceList->begin();
-         it != handle->module->mDeviceList->end(); ++it) {
-         if (handle != &(*it) && strncmp(it->useCase, handle->useCase, sizeof(handle->useCase))
-             == 0 && it->handle && it->handle->fd > 0) {
-             ALOGV("requsecase in conflict");
-             usecaseConflicts = true;
-             break;
-         }
-    }
-    if (usecaseConflicts == false) {
-       strlcpy(altUsecase, handle->useCase, sizeof(handle->useCase));
-       return ret;
-    }
-
-    listCount = snd_use_case_get_list(handle->ucMgr, "_modifiers", &list);
-    while(index < listCount) {
-        if (isUsecaseMatching(list[index], handle->useCase) == true) {
-            usecaseConflicts = false;
-            for (it = handle->module->mDeviceList->begin();
-                it != handle->module->mDeviceList->end(); ++it) {
-                if (handle != &(*it) && strncmp(it->useCase, list[index], sizeof(handle->useCase))
-                    == 0 && it->handle && it->handle->fd > 0) {
-                    usecaseConflicts = true;
-                    break;
-                }
-            }
-            if (usecaseConflicts == false) {
-                ALOGV("Alternative usecase suggested %s.", list[index]);
-                strlcpy(altUsecase, list[index], MAX_STR_LEN);
-                ret = 1;
-                break;
-            }
-        }
-        index++;
-    }
-    if (listCount < 0 || index == listCount)
-        ret = -1;
-    if (listCount > 0)
-        snd_use_case_free_list(list, listCount);
-    return ret;
-}
-
 int ALSADevice::setUseCase(alsa_handle_t *handle, bool bIsUseCaseSet)
 {
     char altUseCase[MAX_STR_LEN] = "";
@@ -1963,15 +1789,6 @@ int ALSADevice::setUseCase(alsa_handle_t *handle, bool bIsUseCaseSet)
 
     // check for Conflicts if usecase is already set
     ALOGD("setUseCase device = %d", handle->activeDevice);
-    if (!bIsUseCaseSet) {
-        ret = checkAndGetAvailableUseCase(handle, altUseCase);
-        if (ret > 0 && altUseCase[0] != '\0'){
-            strlcpy(handle->useCase, altUseCase, sizeof(handle->useCase));
-        } else if (ret < 0) {
-            ALOGV("no valid match for usecase found,req usecase %s", handle->useCase);
-            return -1;
-        }
-    }
     enableDevice(handle, bIsUseCaseSet);
 
    return 0;
@@ -2568,5 +2385,581 @@ status_t ALSADevice::setCaptureSoftwareParams(alsa_handle_t *handle,
     }
     return NO_ERROR;
 }
+
+void ALSADevice::updateHDMIEDIDInfo()
+{
+    AudioUtil::getHDMIAudioSinkCaps(&mEDIDInfo);
+}
+
+int ALSADevice::getFormatHDMIIndexEDIDInfo(EDID_AUDIO_FORMAT_ID formatId)
+{
+    int i;
+    for (i = 0; i < mEDIDInfo.nAudioBlocks && i < MAX_EDID_BLOCKS; i++) {
+        if(mEDIDInfo.AudioBlocksArray[i].nFormatId == formatId)
+            return i;
+    }
+    return -1;
+}
+
+status_t ALSADevice::openPlayback(alsa_handle_t *handle, bool isMmapMode)
+{
+    char *devName = NULL;
+    unsigned flags = PCM_OUT | DEBUG_ON;
+    int err = NO_ERROR;
+
+    close(handle);
+
+    ALOGD("%s handle %p", __func__, handle);
+
+    if (handle->channels == 1)
+        flags |= PCM_MONO;
+    else if (handle->channels == 4)
+        flags |= PCM_QUAD;
+    else if (handle->channels == 6)
+        flags |= PCM_5POINT1;
+    else if (handle->channels == 8)
+        flags |= PCM_7POINT1;
+    else
+        flags |= PCM_STEREO;
+
+    if(isMmapMode)
+        flags |= PCM_MMAP;
+    else
+        flags |= PCM_NMMAP;
+
+    if (deviceName(handle, flags, &devName) < 0) {
+        ALOGE("Failed to get pcm device node: %s", devName);
+        return NO_INIT;
+    }
+    if(devName != NULL)
+        handle->handle = pcm_open(flags, (char*)devName);
+    ALOGD("s_open: opening ALSA device '%s'", devName);
+
+    if(devName != NULL)
+        free(devName);
+
+    if (!handle->handle) {
+        ALOGE("s_open: Failed to initialize ALSA device '%s'", devName);
+        return NO_INIT;
+    }
+
+    handle->handle->flags = flags;
+
+    ALOGD("setting hardware parameters");
+    err = setPlaybackHardwareParams(handle);
+    if (err == NO_ERROR) {
+        ALOGD("setting software parameters");
+        err = setPlaybackSoftwareParams(handle);
+    }
+    if(err != NO_ERROR) {
+        ALOGE("Set HW/SW params failed: Closing the pcm stream");
+        standby(handle);
+        return err;
+    }
+    if(isMmapMode) {
+        if (mmap_buffer(handle->handle)) {
+            ALOGE("Mmap failed");
+            standby(handle);
+            return NO_INIT;
+        }
+        if (pcm_prepare(handle->handle)) {
+            ALOGE("prepare failed");
+            standby(handle);
+            return NO_INIT;
+        }
+        //TODO: cross the behavior of start threshold when mmap is enabled.
+        //      As of now mmap is not enable. so, this is not exercised
+        while(1) {
+            if(ioctl(handle->handle->fd, SNDRV_PCM_IOCTL_START)) {
+                if (errno == EPIPE) {
+                    continue;
+                } else {
+                    ALOGE("start failed");
+                    return NO_INIT;
+                }
+            } else {
+                ALOGE("start succeeded");
+                handle->handle->start = 1;
+                break;
+            }
+        }
+    }
+
+    return NO_ERROR;
+}
+
+
+status_t ALSADevice::setPlaybackHardwareParams(alsa_handle_t *handle)
+{
+    struct snd_pcm_hw_params *params;
+    struct snd_compr_caps compr_cap;
+    struct snd_compr_params compr_params;
+
+    int32_t minPeroid, maxPeroid;
+    unsigned long bufferSize, reqBuffSize;
+    unsigned int periodTime, bufferTime;
+
+    int status = 0;
+    status_t err = NO_ERROR;
+    unsigned int requestedRate = handle->sampleRate;
+    int format = handle->format;
+
+    bool setDtsModelId = false;
+    char dtsModelId[128];
+
+    params = (snd_pcm_hw_params*) calloc(1, sizeof(struct snd_pcm_hw_params));
+    if (!params) {
+        return NO_INIT;
+    }
+    param_init(params);
+
+    reqBuffSize = handle->bufferSize;
+    ALOGD("Handle type %d, format=%d", (int)handle->type, handle->format);
+    if (ioctl(handle->handle->fd, SNDRV_COMPRESS_GET_CAPS, &compr_cap)) {
+        ALOGE("SNDRV_COMPRESS_GET_CAPS, failed Error no %d \n", errno);
+        err = -errno;
+        if (params)
+            free(params);
+        return err;
+    }
+
+    param_set_int(params, SNDRV_PCM_HW_PARAM_PERIODS,
+                  (handle->bufferSize/handle->periodSize));
+    minPeroid = compr_cap.min_fragment_size;
+    maxPeroid = compr_cap.max_fragment_size;
+    ALOGV("Min peroid size = %d , Maximum Peroid size = %d format = %d",\
+        minPeroid, maxPeroid, format);
+
+    setDtsModelId = (mSpdifFormat == COMPRESSED_CONVERT_ANY_DTS) ||
+                    (mHdmiFormat == COMPRESSED_CONVERT_ANY_DTS) ? true : false;
+    //NOTE: the flag PCM_TUNNEL indicate the data go through compressed driver.
+    //      the tunnel flag is removed for the PCM clips to be back ward compatible
+    //      with 24-bit change. TODO: handle this accordingly
+    handle->handle->flags |= PCM_TUNNEL;
+    switch(format) {
+    case AUDIO_FORMAT_WMA:
+    case AUDIO_FORMAT_WMA_PRO:
+        ALOGV("WMA CODEC");
+        compr_params.codec.id = (format == AUDIO_FORMAT_WMA_PRO) ?
+                                compr_cap.codecs[4] : compr_cap.codecs[3];
+        if (mWMA_params == NULL) {
+            ALOGV("WMA param config missing.");
+            if (params)
+                free(params);
+            return BAD_VALUE;
+        }
+        compr_params.codec.bit_rate = mWMA_params[0];
+        compr_params.codec.align = mWMA_params[1];
+        compr_params.codec.options.wma.encodeopt = mWMA_params[2];
+        compr_params.codec.format = mWMA_params[3];
+        compr_params.codec.options.wma.bits_per_sample = mWMA_params[4];
+        compr_params.codec.options.wma.channelmask = mWMA_params[5];
+        compr_params.codec.options.wma.encodeopt1 = mWMA_params[6];
+        compr_params.codec.options.wma.encodeopt2 = mWMA_params[7];
+        compr_params.codec.sample_rate = handle->sampleRate;
+        compr_params.codec.ch_in = handle->channels;
+        break;
+    case AUDIO_FORMAT_AAC:
+    case AUDIO_FORMAT_HE_AAC_V1:
+    case AUDIO_FORMAT_HE_AAC_V2:
+    case AUDIO_FORMAT_AAC_ADIF:
+        ALOGV("AAC CODEC");
+        compr_params.codec.id = (handle->type == ROUTE_SW_TRANSCODED_COMPRESSED) ?
+                                compr_cap.codecs[2] : compr_cap.codecs[1];
+        break;
+    case AUDIO_FORMAT_AC3:
+        ALOGV("AC3 CODEC");
+        compr_params.codec.id = (handle->type == ROUTE_COMPRESSED) ?
+                                compr_cap.codecs[2] : compr_cap.codecs[2];
+        break;
+    case AUDIO_FORMAT_EAC3:
+        ALOGV("EAC3 CODEC");
+        //NOTE: change this to eac3 pass through
+        compr_params.codec.id = (handle->type == ROUTE_COMPRESSED) ?
+                                compr_cap.codecs[2] /* eac3 pas through */ :
+                                (handle->type == ROUTE_SW_TRANSCODED_COMPRESSED) ?
+                                    compr_cap.codecs[2]: compr_cap.codecs[2];
+        break;
+    case AUDIO_FORMAT_MP3:
+         ALOGV("MP3 CODEC");
+         compr_params.codec.id = compr_cap.codecs[0];
+         break;
+    case AUDIO_FORMAT_DTS:
+         ALOGV("DTS CODEC");
+         compr_params.codec.id = handle->type == ROUTE_UNCOMPRESSED ?
+                                 compr_cap.codecs[5] : compr_cap.codecs[7];
+         setDtsModelId = handle->type == ROUTE_UNCOMPRESSED ? true : false;
+         break;
+    case AUDIO_FORMAT_DTS_LBR:
+             ALOGV("DTS LBR CODEC");
+         compr_params.codec.id = handle->type == ROUTE_UNCOMPRESSED ?
+                                 compr_cap.codecs[6] : compr_cap.codecs[13];
+         setDtsModelId = handle->type == ROUTE_UNCOMPRESSED ? true : false;
+         break;
+    case AUDIO_FORMAT_MP2:
+         ALOGV("MP2 CODEC");
+         compr_params.codec.id = compr_cap.codecs[12];
+         break;
+    case AUDIO_FORMAT_PCM_16_BIT:
+    case AUDIO_FORMAT_PCM_24_BIT:
+         ALOGV("AUDIO_FORMAT_PCM");
+         compr_params.codec.id = compr_cap.codecs[11];
+         handle->handle->flags &= ~PCM_TUNNEL;
+         handle->handle->flags |= PCM_LINEAR;
+         break;
+    default:
+         ALOGE("format not supported to open tunnel device");
+         if (params)
+             free(params);
+         return BAD_VALUE;
+    }
+    if(setDtsModelId) {
+         property_get("ro.build.modelid",dtsModelId,"0");
+         ALOGD("from property modelId=%s,length=%d\n",
+            dtsModelId, strlen(dtsModelId));
+         compr_params.codec.dts.modelIdLength = strlen(dtsModelId);
+         compr_params.codec.dts.modelId = (__u8 *)dtsModelId;
+         ALOGD("passing to driver modelId=%s,length=%d\n",
+         compr_params.codec.dts.modelId,
+         compr_params.codec.dts.modelIdLength);
+         compr_params.codec.transcode_dts = 1;
+    } else {
+         compr_params.codec.transcode_dts = 0;
+    }
+    if (ioctl(handle->handle->fd, SNDRV_COMPRESS_SET_PARAMS, &compr_params)) {
+        ALOGE("SNDRV_COMPRESS_SET_PARAMS,failed Error no %d \n", errno);
+        err = -errno;
+        if (params)
+            free(params);
+        return err;
+    }
+    if(handle->metaDataMode) {
+/*
+Enable this when the meta data mode specific ioctl is added.
+Compressed driver to handle both meta and no meta data mode.
+
+        if (ioctl(handle->handle->fd, SNDRV_COMPRESS_SET_METADATA_MODE)) {
+           ALOGE("SNDRV_COMPRESS_SET_METADATA_MODE,failed Error no %d \n", errno);
+        }
+*/
+    }
+    if(handle->sampleRate > MAX_SUPPORTED_SAMPLING_RATE) {
+        ALOGE("Sample rate > max supported, opening the driver with max: %d",
+              MAX_SUPPORTED_SAMPLING_RATE);
+        handle->sampleRate     = MAX_SUPPORTED_SAMPLING_RATE;
+    }
+    if(handle->channels > MAX_SUPPORTED_CHANNELS)
+        handle->channels = MAX_SUPPORTED_CHANNELS;
+
+    EDID_AUDIO_INFO info = { 0 };
+
+    if (handle->devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+        int hdmiChannels = 2;
+        char channelMap[MAX_HDMI_CHANNEL_CNT] = {PCM_CHANNEL_FL, PCM_CHANNEL_FR,
+                                                 0, 0, 0, 0, 0 , 0};
+        int channelAllocation = 0;
+        if(handle->type == ROUTE_UNCOMPRESSED) {
+            int index = getFormatHDMIIndexEDIDInfo(LPCM);
+            if(index >=0) {
+                hdmiChannels = mEDIDInfo.AudioBlocksArray[index].nChannels;
+                ALOGV("hdmiChannels form edid: %d", hdmiChannels);
+                memcpy(channelMap, mEDIDInfo.channelMap, MAX_HDMI_CHANNEL_CNT);
+                channelAllocation = mEDIDInfo.channelAllocation;
+            }
+        }
+        setHDMIChannelCount(hdmiChannels);
+        pcm_set_channel_map(NULL, mMixer, MAX_HDMI_CHANNEL_CNT,
+                            channelMap);
+        setChannelAlloc(channelAllocation);
+    }
+
+    ALOGD("setHardwareParams: reqBuffSize %d, periodSize %d, channels %d, sampleRate %d.",
+         (int) reqBuffSize, handle->periodSize, handle->channels, handle->sampleRate);
+
+    param_set_mask(params, SNDRV_PCM_HW_PARAM_ACCESS,
+        (handle->handle->flags & PCM_MMAP) ? SNDRV_PCM_ACCESS_MMAP_INTERLEAVED
+        : SNDRV_PCM_ACCESS_RW_INTERLEAVED);
+    if (handle->format == AUDIO_FORMAT_PCM_16_BIT) {
+        param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT,
+                       SNDRV_PCM_FORMAT_S16_LE);
+        param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 16);
+        param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS,
+                       handle->channels * 16);
+        handle->handle->format = SNDRV_PCM_FORMAT_S16_LE;
+    } else {
+        param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT,
+                       SNDRV_PCM_FORMAT_S24_LE);
+        param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 32);
+        param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS,
+                       handle->channels * 32);
+        handle->handle->format = SNDRV_PCM_FORMAT_S24_LE;
+    }
+    param_set_mask(params, SNDRV_PCM_HW_PARAM_SUBFORMAT,
+                   SNDRV_PCM_SUBFORMAT_STD);
+    param_set_int(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, handle->periodSize);
+
+    param_set_int(params, SNDRV_PCM_HW_PARAM_CHANNELS,
+                  handle->channels);
+    param_set_int(params, SNDRV_PCM_HW_PARAM_RATE, handle->sampleRate);
+    param_set_hw_refine(handle->handle, params);
+
+    if (param_set_hw_params(handle->handle, params)) {
+        ALOGE("cannot set hw params");
+        if (params)
+            free(params);
+        return NO_INIT;
+    }
+    param_dump(params);
+
+    handle->handle->buffer_size = pcm_buffer_size(params);
+    handle->handle->period_size = pcm_period_size(params);
+    handle->handle->period_cnt = handle->handle->buffer_size/handle->handle->period_size;
+    ALOGD("setHardwareParams: buffer_size %d, period_size %d, period_cnt %d, format %d",
+        handle->handle->buffer_size, handle->handle->period_size,
+        handle->handle->period_cnt, handle->handle->format);
+    handle->handle->rate = handle->sampleRate;
+    handle->handle->channels = handle->channels;
+    handle->periodSize = handle->handle->period_size;
+    handle->bufferSize = handle->handle->period_size;
+    if (handle->type == PCM_FORMAT)
+        handle->latency = 0;
+
+    return NO_ERROR;
+}
+
+status_t ALSADevice::setPlaybackSoftwareParams(alsa_handle_t *handle)
+{
+    struct snd_pcm_sw_params* params;
+    struct pcm* pcm = handle->handle;
+
+    unsigned long periodSize = pcm->period_size;
+    unsigned flags = pcm->flags;
+
+    params = (snd_pcm_sw_params*) calloc(1, sizeof(struct snd_pcm_sw_params));
+    if (!params) {
+        ALOGE("Failed to allocate ALSA software parameters!");
+        return NO_INIT;
+    }
+
+    if(handle->timeStampMode == SNDRV_PCM_TSTAMP_ENABLE)
+        params->tstamp_mode = SNDRV_PCM_TSTAMP_ENABLE;
+    else
+        params->tstamp_mode = SNDRV_PCM_TSTAMP_NONE;
+    params->period_step = 1;
+    params->avail_min = pcm->period_size/(2*handle->channels);
+    params->xfer_align = pcm->period_size/(2*handle->channels);
+
+    params->start_threshold = 1;
+    params->stop_threshold = INT_MAX;
+    params->silence_threshold = 0;
+    params->silence_size = 0;
+
+    if (param_set_sw_params(handle->handle, params)) {
+        ALOGE("cannot set sw params");
+        return NO_INIT;
+    }
+    return NO_ERROR;
+}
+
+bool ALSADevice::isTunnelPlaybackUseCase(const char *useCase)
+{
+    if((!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
+         strlen(SND_USE_CASE_VERB_HIFI_TUNNEL))) ||
+       (!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
+         strlen(SND_USE_CASE_VERB_HIFI_TUNNEL2))) ||
+       (!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL3,
+         strlen(SND_USE_CASE_VERB_HIFI_TUNNEL3))) ||
+       (!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL4,
+         strlen(SND_USE_CASE_VERB_HIFI_TUNNEL4))) ||
+       (!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL5,
+         strlen(SND_USE_CASE_VERB_HIFI_TUNNEL5))) ||
+       (!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL6,
+         strlen(SND_USE_CASE_VERB_HIFI_TUNNEL6))) ||
+       (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL,
+         strlen(SND_USE_CASE_MOD_PLAY_TUNNEL))) ||
+       (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
+         strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2))) ||
+       (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL3,
+         strlen(SND_USE_CASE_MOD_PLAY_TUNNEL3))) ||
+       (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL4,
+         strlen(SND_USE_CASE_MOD_PLAY_TUNNEL4))) ||
+       (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL5,
+         strlen(SND_USE_CASE_MOD_PLAY_TUNNEL5))) ||
+       (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL6,
+         strlen(SND_USE_CASE_MOD_PLAY_TUNNEL6)))) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+bool ALSADevice::isMultiChannelPlaybackUseCase(const char *useCase)
+{
+    if((!strncmp(useCase, SND_USE_CASE_VERB_HIFI2,
+         strlen(SND_USE_CASE_VERB_HIFI2))) ||
+       (!strncmp(useCase, SND_USE_CASE_VERB_HIFI3,
+         strlen(SND_USE_CASE_VERB_HIFI3))) ||
+       (!strncmp(useCase, SND_USE_CASE_VERB_HIFI4,
+         strlen(SND_USE_CASE_VERB_HIFI4))) ||
+       (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC2,
+         strlen(SND_USE_CASE_MOD_PLAY_MUSIC2))) ||
+       (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC3,
+         strlen(SND_USE_CASE_MOD_PLAY_MUSIC3))) ||
+       (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC4,
+         strlen(SND_USE_CASE_MOD_PLAY_MUSIC4)))) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+bool ALSADevice::isTunnelPseudoPlaybackUseCase(const char *useCase)
+{
+    if((!strncmp(useCase, SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL,
+         strlen(SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL))) ||
+       (!strncmp(useCase, SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL2,
+         strlen(SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL2))) ||
+       (!strncmp(useCase, SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL3,
+         strlen(SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL3))) ||
+       (!strncmp(useCase, SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL4,
+         strlen(SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL4))) ||
+       (!strncmp(useCase, SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL5,
+         strlen(SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL5))) ||
+       (!strncmp(useCase, SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL6,
+         strlen(SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL6))) ||
+       (!strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_TUNNEL,
+         strlen(SND_USE_CASE_MOD_PSEUDO_TUNNEL))) ||
+       (!strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_TUNNEL2,
+         strlen(SND_USE_CASE_MOD_PSEUDO_TUNNEL2))) ||
+       (!strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_TUNNEL3,
+         strlen(SND_USE_CASE_MOD_PSEUDO_TUNNEL3))) ||
+       (!strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_TUNNEL4,
+         strlen(SND_USE_CASE_MOD_PSEUDO_TUNNEL4))) ||
+       (!strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_TUNNEL5,
+         strlen(SND_USE_CASE_MOD_PSEUDO_TUNNEL5))) ||
+       (!strncmp(useCase, SND_USE_CASE_MOD_PSEUDO_TUNNEL6,
+         strlen(SND_USE_CASE_MOD_PSEUDO_TUNNEL6)))) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+char* ALSADevice::getPlaybackUseCase(int type, bool isVerb)
+{
+    char* ret = NULL;
+    ALOGV("mDriverInstancesUsed: 0x%x", mDriverInstancesUsed);
+    switch(type) {
+    case COMRPESSED_DRIVER:
+        if(!(mDriverInstancesUsed & COMPRESSED_1_BIT)) {
+            mDriverInstancesUsed |= COMPRESSED_1_BIT;
+            ret = SND_USE_CASE_MOD_PLAY_TUNNEL;
+            if(isVerb)
+                ret = SND_USE_CASE_VERB_HIFI_TUNNEL;
+        } else if(!(mDriverInstancesUsed & COMPRESSED_2_BIT)) {
+            mDriverInstancesUsed |= COMPRESSED_2_BIT;
+            ret = SND_USE_CASE_MOD_PLAY_TUNNEL2;
+            if(isVerb)
+                ret = SND_USE_CASE_VERB_HIFI_TUNNEL2;
+        } else if(!(mDriverInstancesUsed & COMPRESSED_3_BIT)) {
+            mDriverInstancesUsed |= COMPRESSED_3_BIT;
+            ret = SND_USE_CASE_MOD_PLAY_TUNNEL3;
+            if(isVerb)
+                ret = SND_USE_CASE_VERB_HIFI_TUNNEL3;
+        } else if(!(mDriverInstancesUsed & COMPRESSED_4_BIT)) {
+            mDriverInstancesUsed |= COMPRESSED_4_BIT;
+            ret = SND_USE_CASE_MOD_PLAY_TUNNEL4;
+            if(isVerb)
+                ret = SND_USE_CASE_VERB_HIFI_TUNNEL4;
+        } else if(!(mDriverInstancesUsed & COMPRESSED_5_BIT)) {
+            mDriverInstancesUsed |= COMPRESSED_5_BIT;
+            ret = SND_USE_CASE_MOD_PLAY_TUNNEL5;
+            if(isVerb)
+                ret = SND_USE_CASE_VERB_HIFI_TUNNEL5;
+        } else if(!(mDriverInstancesUsed & COMPRESSED_6_BIT)) {
+            mDriverInstancesUsed |= COMPRESSED_6_BIT;
+            ret = SND_USE_CASE_MOD_PLAY_TUNNEL6;
+            if(isVerb)
+                ret = SND_USE_CASE_VERB_HIFI_TUNNEL6;
+        }
+        break;
+    case MULTI_CHANNEL_DRIVER:
+        if(!(mDriverInstancesUsed & MULTI_CHANNEL_1_BIT)) {
+            mDriverInstancesUsed |= MULTI_CHANNEL_1_BIT;
+            ret = SND_USE_CASE_MOD_PLAY_MUSIC2;
+            if(isVerb)
+                ret = SND_USE_CASE_VERB_HIFI2;
+        } else if(!(mDriverInstancesUsed & MULTI_CHANNEL_2_BIT)) {
+            mDriverInstancesUsed |= MULTI_CHANNEL_2_BIT;
+            ret = SND_USE_CASE_MOD_PLAY_MUSIC3;
+            if(isVerb)
+                ret = SND_USE_CASE_VERB_HIFI3;
+        } else if(!(mDriverInstancesUsed & MULTI_CHANNEL_3_BIT)) {
+            mDriverInstancesUsed |= MULTI_CHANNEL_3_BIT;
+            ret = SND_USE_CASE_MOD_PLAY_MUSIC4;
+            if(isVerb)
+                ret = SND_USE_CASE_VERB_HIFI4;
+        }
+        break;
+    }
+    ALOGV("Tunnel utilized: %s", ret);
+    return ret;
+}
+
+void ALSADevice::freePlaybackUseCase(const char* useCase)
+{
+    char value[PROPERTY_VALUE_MAX];
+    if(!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL,
+        strlen(SND_USE_CASE_MOD_PLAY_TUNNEL)) ||
+       !strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
+        strlen(SND_USE_CASE_VERB_HIFI_TUNNEL))) {
+        mDriverInstancesUsed &= ~COMPRESSED_1_BIT;
+    } else if(!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
+               strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2)) ||
+              !strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
+               strlen(SND_USE_CASE_VERB_HIFI_TUNNEL2))) {
+        mDriverInstancesUsed &= ~COMPRESSED_2_BIT;
+    } else if(!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL3,
+               strlen(SND_USE_CASE_MOD_PLAY_TUNNEL3)) ||
+              !strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL3,
+               strlen(SND_USE_CASE_VERB_HIFI_TUNNEL3))) {
+        mDriverInstancesUsed &= ~COMPRESSED_3_BIT;
+    } else if(!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL4,
+               strlen(SND_USE_CASE_MOD_PLAY_TUNNEL4)) ||
+              !strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL4,
+               strlen(SND_USE_CASE_VERB_HIFI_TUNNEL4))) {
+        mDriverInstancesUsed &= ~COMPRESSED_4_BIT;
+    } else if(!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL5,
+               strlen(SND_USE_CASE_MOD_PLAY_TUNNEL5)) ||
+              !strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL5,
+               strlen(SND_USE_CASE_VERB_HIFI_TUNNEL5))) {
+        mDriverInstancesUsed &= ~COMPRESSED_5_BIT;
+    } else if(!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL6,
+               strlen(SND_USE_CASE_MOD_PLAY_TUNNEL6)) ||
+              !strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL6,
+               strlen(SND_USE_CASE_VERB_HIFI_TUNNEL6))) {
+        mDriverInstancesUsed &= ~COMPRESSED_6_BIT;
+    } else if(!strncmp(useCase, SND_USE_CASE_VERB_HIFI2,
+               strlen(SND_USE_CASE_VERB_HIFI2)) ||
+              !strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC2,
+               strlen(SND_USE_CASE_MOD_PLAY_MUSIC2))) {
+        mDriverInstancesUsed &= ~MULTI_CHANNEL_1_BIT;
+    } else if(!strncmp(useCase, SND_USE_CASE_VERB_HIFI3,
+               strlen(SND_USE_CASE_VERB_HIFI3)) ||
+              !strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC3,
+               strlen(SND_USE_CASE_MOD_PLAY_MUSIC3))) {
+        mDriverInstancesUsed &= ~MULTI_CHANNEL_2_BIT;
+    } else if(!strncmp(useCase, SND_USE_CASE_VERB_HIFI4,
+               strlen(SND_USE_CASE_VERB_HIFI4)) ||
+              !strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC4,
+               strlen(SND_USE_CASE_MOD_PLAY_MUSIC4))) {
+        mDriverInstancesUsed &= ~MULTI_CHANNEL_3_BIT;
+    } else {
+        ALOGV("%s: use case not matching with the indexes defined", useCase);
+        return;
+    }
+    ALOGV("Tunnel freed: %s", useCase);
+}
+
 
 }

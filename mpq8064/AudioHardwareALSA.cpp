@@ -125,6 +125,8 @@ AudioHardwareALSA::AudioHardwareALSA() :
     mKillA2DPThread = false;
     mA2dpThreadAlive = false;
     mA2dpThread = NULL;
+    mSpdifOutputFormat = UNCOMPRESSED;
+    mHdmiOutputFormat = UNCOMPRESSED;
 }
 
 AudioHardwareALSA::~AudioHardwareALSA()
@@ -374,19 +376,25 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
 
     key = String8(SPDIF_FORMAT_KEY);
     if (param.get(key, value) == NO_ERROR) {
-        if(value == "lpcm" || value == "ac3" || value == "dts")
-            strlcpy(mSpdifOutputFormat,value,sizeof(mSpdifOutputFormat));
+        if(value == "ac3")
+            mSpdifOutputFormat = COMPRESSED_CONVERT_ANY_AC3;
+        else if(value == "dts")
+            mSpdifOutputFormat = COMPRESSED_CONVERT_ANY_DTS;
         else
-            strlcpy(mSpdifOutputFormat,"lpcm",sizeof(mSpdifOutputFormat));
+            mSpdifOutputFormat = UNCOMPRESSED;
+        mALSADevice->mSpdifFormat = mSpdifOutputFormat;
         param.remove(key);
     }
 
     key = String8(HDMI_FORMAT_KEY);
     if (param.get(key, value) == NO_ERROR) {
-        if(value == "lpcm" || value == "ac3" || value == "dts")
-            strlcpy(mHdmiOutputFormat,value,sizeof(mHdmiOutputFormat));
+        if(value == "ac3")
+            mHdmiOutputFormat = COMPRESSED_CONVERT_ANY_AC3;
+        else if(value == "dts")
+            mHdmiOutputFormat = COMPRESSED_CONVERT_ANY_DTS;
         else
-            strlcpy(mHdmiOutputFormat,"lpcm",sizeof(mHdmiOutputFormat));
+            mHdmiOutputFormat = UNCOMPRESSED;
+        mALSADevice->mHdmiFormat = mHdmiOutputFormat;
         param.remove(key);
     }
 
@@ -565,6 +573,8 @@ status_t AudioHardwareALSA::doRouting(int device)
     ALOGV("device = 0x%x,mCurDevice 0x%x", device, mCurDevice);
     if (device == 0)
         device = mCurDevice;
+    if(device & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
+        mALSADevice->updateHDMIEDIDInfo();
     ALOGD("doRouting: device %d newMode %d mIsVoiceCallActive %d mIsFmActive %d",
           device, newMode, mIsVoiceCallActive, mIsFmActive);
     if((newMode == AudioSystem::MODE_IN_CALL) && (mIsVoiceCallActive == 0)) {
@@ -1615,17 +1625,34 @@ uint32_t AudioHardwareALSA::useCaseStringToEnum(const char *usecase) {
 
     if ((!strncmp(usecase, SND_USE_CASE_VERB_HIFI_TUNNEL,
                     strlen(SND_USE_CASE_VERB_HIFI_TUNNEL)+1)) ||
-        (!strncmp(usecase, SND_USE_CASE_MOD_PLAY_TUNNEL1,
-                    strlen(SND_USE_CASE_MOD_PLAY_TUNNEL1)+1))) {
-        activeUsecase = USECASE_HIFI_TUNNEL;
+        (!strncmp(usecase, SND_USE_CASE_MOD_PLAY_TUNNEL,
+                    strlen(SND_USE_CASE_MOD_PLAY_TUNNEL)+1))) {
+        activeUsecase = USECASE_HIFI_TUNNEL1;
     } else if ((!strncmp(usecase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
                     strlen(SND_USE_CASE_VERB_HIFI_TUNNEL2)+1)) ||
                (!strncmp(usecase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
                     strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2)+1))) {
         activeUsecase = USECASE_HIFI_TUNNEL2;
-    } else if (!strncmp(usecase, SND_USE_CASE_MOD_PLAY_TUNNEL3,
-                    strlen(SND_USE_CASE_MOD_PLAY_TUNNEL3)+1)) {
+    } else if ((!strncmp(usecase, SND_USE_CASE_VERB_HIFI_TUNNEL3,
+                    strlen(SND_USE_CASE_VERB_HIFI_TUNNEL3)+1)) ||
+               (!strncmp(usecase, SND_USE_CASE_MOD_PLAY_TUNNEL3,
+                    strlen(SND_USE_CASE_MOD_PLAY_TUNNEL3)+1))) {
         activeUsecase = USECASE_HIFI_TUNNEL3;
+    } else if ((!strncmp(usecase, SND_USE_CASE_VERB_HIFI_TUNNEL4,
+                    strlen(SND_USE_CASE_VERB_HIFI_TUNNEL4)+1)) ||
+               (!strncmp(usecase, SND_USE_CASE_MOD_PLAY_TUNNEL4,
+                    strlen(SND_USE_CASE_MOD_PLAY_TUNNEL4)+1))) {
+        activeUsecase = USECASE_HIFI_TUNNEL4;
+    } else if ((!strncmp(usecase, SND_USE_CASE_VERB_HIFI_TUNNEL5,
+                    strlen(SND_USE_CASE_VERB_HIFI_TUNNEL5)+1)) ||
+               (!strncmp(usecase, SND_USE_CASE_MOD_PLAY_TUNNEL5,
+                    strlen(SND_USE_CASE_MOD_PLAY_TUNNEL5)+1))) {
+        activeUsecase = USECASE_HIFI_TUNNEL5;
+    } else if ((!strncmp(usecase, SND_USE_CASE_VERB_HIFI_TUNNEL6,
+                    strlen(SND_USE_CASE_VERB_HIFI_TUNNEL6)+1)) ||
+               (!strncmp(usecase, SND_USE_CASE_MOD_PLAY_TUNNEL6,
+                    strlen(SND_USE_CASE_MOD_PLAY_TUNNEL6)+1))) {
+        activeUsecase = USECASE_HIFI_TUNNEL6;
     } else if ((!strncmp(usecase, SND_USE_CASE_VERB_HIFI,
                     strlen(SND_USE_CASE_VERB_HIFI)+1)) ||
                (!strncmp(usecase, SND_USE_CASE_MOD_PLAY_MUSIC,

@@ -233,18 +233,9 @@ AudioBroadcastStreamALSA::~AudioBroadcastStreamALSA()
                  strlen(SND_USE_CASE_VERB_HIFI_REC2))) ||
            (!strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC2,
                  strlen(SND_USE_CASE_MOD_CAPTURE_MUSIC2))) ||
-           (!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI3,
-                 strlen(SND_USE_CASE_VERB_HIFI3))) ||
-           (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_MUSIC3,
-                 strlen(SND_USE_CASE_MOD_PLAY_MUSIC3))) ||
-           (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_MUSIC4,
-                 strlen(SND_USE_CASE_MOD_PLAY_MUSIC4)))||
-           (!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
-                 strlen(SND_USE_CASE_VERB_HIFI_TUNNEL2))) ||
-           (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
-                 strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2))) ||
-           (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL3,
-                 strlen(SND_USE_CASE_MOD_PLAY_TUNNEL3)))) {
+           (mALSADevice->isTunnelPlaybackUseCase(it->useCase)) ||
+           (mALSADevice->isMultiChannelPlaybackUseCase(it->useCase))) {
+            mALSADevice->freePlaybackUseCase(it->useCase);
             mParent->mDeviceList.erase(it);
         }
     }
@@ -983,11 +974,19 @@ status_t AudioBroadcastStreamALSA::openPcmDevice(int devices)
     if ((use_case == NULL) ||
         (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
             strlen(SND_USE_CASE_VERB_INACTIVE)))) {
-        status = openRoutingDevice(SND_USE_CASE_VERB_HIFI3, true,
-                     devices);
+        use_case = mALSADevice->getPlaybackUseCase(MULTI_CHANNEL_DRIVER, true/*isVerb*/);
+        if(use_case == NULL) {
+            ALOGE("use case not found to start the playback");
+            return NO_INIT;
+        }
+        status = openRoutingDevice(use_case, true, devices);
     } else {
-        status = openRoutingDevice(SND_USE_CASE_MOD_PLAY_MUSIC3, false,
-                     devices);
+        use_case = mALSADevice->getPlaybackUseCase(MULTI_CHANNEL_DRIVER, false/*isVerb*/);
+        if(use_case == NULL) {
+            ALOGE("use case not found to start the playback");
+            return NO_INIT;
+        }
+        status = openRoutingDevice(use_case, false, devices);
     }
     if(use_case) {
         free(use_case);
@@ -1029,11 +1028,19 @@ status_t AudioBroadcastStreamALSA::openTunnelDevice(int devices)
         snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
         if ((use_case == NULL) || (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
                 strlen(SND_USE_CASE_VERB_INACTIVE)))) {
-            status = openRoutingDevice(SND_USE_CASE_VERB_HIFI_TUNNEL2, true,
-                         devices & ~mTranscodeDevices);
+            use_case = mALSADevice->getPlaybackUseCase(COMRPESSED_DRIVER, true/*isVerb*/);
+            if(use_case == NULL) {
+                ALOGE("use case not found to start the playback");
+                return NO_INIT;
+            }
+            status = openRoutingDevice(use_case, true, devices & ~mTranscodeDevices);
         } else {
-            status = openRoutingDevice(SND_USE_CASE_MOD_PLAY_TUNNEL2, false,
-                         devices & ~mTranscodeDevices);
+            use_case = mALSADevice->getPlaybackUseCase(COMRPESSED_DRIVER, false/*isVerb*/);
+            if(use_case == NULL) {
+                ALOGE("use case not found to start the playback");
+                return NO_INIT;
+            }
+            status = openRoutingDevice(use_case, false, devices & ~mTranscodeDevices);
         }
         ALSAHandleList::iterator it = mParent->mDeviceList.end(); it--;
         mCompreRxHandle = &(*it);
@@ -1137,16 +1144,7 @@ status_t AudioBroadcastStreamALSA::openRoutingDevice(char *useCase,
     else
         alsa_handle.timeStampMode = SNDRV_PCM_TSTAMP_NONE;
 
-    if ((!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
-                          strlen(SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
-        (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL1,
-                          strlen(SND_USE_CASE_MOD_PLAY_TUNNEL1)))) ||
-        (!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
-                          strlen(SND_USE_CASE_VERB_HIFI_TUNNEL2)) ||
-        (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
-                          strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2))) ||
-        (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL3,
-                          strlen(SND_USE_CASE_MOD_PLAY_TUNNEL3))))) {
+    if (mALSADevice->isTunnelPlaybackUseCase(useCase)) {
         if (mUseMS11Decoder == true)
             alsa_handle.type = COMPRESSED_PASSTHROUGH_FORMAT;
         else if (mFormat == AUDIO_FORMAT_DTS || mFormat == AUDIO_FORMAT_DTS_LBR) {
@@ -2028,6 +2026,8 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
             devices &= ~AudioSystem::DEVICE_OUT_SPDIF;
         }
     }
+    if(devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
+        mALSADevice->updateHDMIEDIDInfo();
     if(devices == mDevices) {
         ALOGW("Return same device ");
         if (stopA2DP == true) {
@@ -2314,8 +2314,7 @@ uint32_t AudioBroadcastStreamALSA::setDecoderConfig(char *buffer, size_t bytes)
     if(mFormat == AUDIO_FORMAT_WMA || mFormat == AUDIO_FORMAT_WMA_PRO) {
         if ((mUseTunnelDecoder) && (mWMAConfigDataSet == false)) {
             ALOGV("Configuring the WMA params");
-            status_t err = mALSADevice->setWMAParams(mCompreRxHandle,
-                               (int *)buffer, bytes/sizeof(int));
+            status_t err = mALSADevice->setWMAParams((int *)buffer, bytes/sizeof(int));
             if (err) {
                 ALOGE("WMA param config failed");
                 return BAD_VALUE;
