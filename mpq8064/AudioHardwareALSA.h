@@ -607,6 +607,8 @@ private:
     bool                mTunnelSeeking;
     bool                mReachedExtractorEOS;
     bool                mSkipWrite;
+    bool                mWriteThreadStarted;
+    bool                mEventThreadStarted;
     char                mSpdifOutputFormat[128];
     char                mHdmiOutputFormat[128];
     uint32_t            mCurDevice;
