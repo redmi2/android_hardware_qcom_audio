@@ -623,6 +623,9 @@ static int pcm_write_mmap(struct pcm *pcm, void *data, unsigned count)
     int err;
     int bytes_written;
     int channels;
+    int format = pcm->format;
+    int bytes_per_sample = 0;
+
     if(pcm->flags & PCM_MONO)
         channels = 1;
     else if(pcm->flags & PCM_QUAD)
@@ -633,7 +636,16 @@ static int pcm_write_mmap(struct pcm *pcm, void *data, unsigned count)
         channels = 8;
     else
         channels = 2;
-    frames = count / (2*channels);
+
+    if (format == SNDRV_PCM_FORMAT_S16_LE)
+        bytes_per_sample = 2;
+    else if (format == SNDRV_PCM_FORMAT_S24_LE)
+        bytes_per_sample = 4;
+    else {
+        printf("error invalid format\n");
+        return -EINVAL;
+    }
+    frames = count / (bytes_per_sample * channels);
 
     pcm->sync_ptr->flags = SNDRV_PCM_SYNC_PTR_APPL | SNDRV_PCM_SYNC_PTR_AVAIL_MIN;
     err = sync_ptr(pcm);
@@ -681,6 +693,9 @@ static int pcm_write_nmmap(struct pcm *pcm, void *data, unsigned count)
 {
     struct snd_xferi x;
     int channels;
+    int format = pcm->format;
+    int bytes_per_sample = 0;
+
     if(pcm->flags & PCM_MONO)
         channels = 1;
     else if(pcm->flags & PCM_QUAD)
@@ -694,8 +709,17 @@ static int pcm_write_nmmap(struct pcm *pcm, void *data, unsigned count)
 
     if (pcm->flags & PCM_IN)
         return -EINVAL;
+
+    if (format == SNDRV_PCM_FORMAT_S24_LE)
+        bytes_per_sample = 4;
+    else if (format == SNDRV_PCM_FORMAT_S16_LE)
+        bytes_per_sample = 2;
+    else {
+        printf("error invalid format\n");
+        return -EINVAL;
+    }
     x.buf = data;
-    x.frames =  (count / (channels * 2)) ;
+    x.frames =  (count / (channels * bytes_per_sample)) ;
 
     for (;;) {
         if (!pcm->running) {
@@ -879,6 +903,10 @@ int pcm_close(struct pcm *pcm)
         free(pcm->hw_p);
     if (pcm->sync_ptr)
         free(pcm->sync_ptr);
+    if (pcm->buf->residue_buf)
+        free(pcm->buf->residue_buf);
+    if (pcm->buf)
+        free(pcm->buf);
     free(pcm);
     return 0;
 }
@@ -948,6 +976,14 @@ struct pcm *pcm_open(unsigned flags, char *device)
          return &bad_pcm;
     }
     pcm->flags = flags;
+
+    pcm->buf = (struct buffer *)calloc(1, sizeof(struct pcm_buffer));
+    if (!pcm->buf) {
+        free(pcm);
+        return &bad_pcm;
+    }
+    pcm->buf->residue_buf = NULL;
+    pcm->buf->residue_buf_ptr = 0;
 
     pcm->fd = open(dname, O_RDWR|O_NONBLOCK);
     if (pcm->fd < 0) {

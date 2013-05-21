@@ -42,6 +42,7 @@
 #define ID_DATA 0x61746164
 
 #define FORMAT_PCM 1
+#define FORMAT_PCM_24 65534
 #define LOG_NDEBUG 1
 
 struct output_metadata_handle_t {
@@ -97,7 +98,6 @@ struct wav_header {
     uint32_t data_sz;
 };
 
-
 void updateMetaData(size_t bytes) {
    outputMetadataTunnel.metadataLength = sizeof(outputMetadataTunnel);
    outputMetadataTunnel.timestamp = 0;
@@ -141,9 +141,18 @@ static int set_params(struct pcm *pcm)
          param_set_min(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, period);
      else
          param_set_min(params, SNDRV_PCM_HW_PARAM_PERIOD_TIME, 10);
-     param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 16);
-     param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS,
-                    pcm->channels * 16);
+
+     switch (format) {
+     case SNDRV_PCM_FORMAT_S16_LE:
+         param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 16);
+         param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS, pcm->channels * 16);
+         break;
+     case SNDRV_PCM_FORMAT_S24_LE:
+         param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 32);
+         param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS, pcm->channels * 32);
+         break;
+     }
+
      param_set_int(params, SNDRV_PCM_HW_PARAM_CHANNELS,
                     pcm->channels);
      param_set_int(params, SNDRV_PCM_HW_PARAM_RATE, pcm->rate);
@@ -212,6 +221,80 @@ void send_channel_map_driver(struct pcm *pcm)
     mixer_close(mixer);
 
     return;
+}
+
+int buffer_data(struct pcm *pcm, void *data, unsigned count)
+{
+    int bufsize;
+    int copy = 0;
+    int i, j;
+    void *inflate_data;
+
+    if (pcm->format != SNDRV_PCM_FORMAT_S24_LE || (pcm->flags & PCM_TUNNEL))
+       return 0;
+    printf("Buffering data: count =%d", count);
+    bufsize = (count/4)*3;
+    inflate_data = calloc(1, count);
+    if (pcm->buf->residue_buf == NULL)
+       pcm->buf->residue_buf = calloc(1, bufsize);
+    if (!inflate_data || !pcm->buf->residue_buf) {
+       printf("Could not allocate buffer");
+       if (inflate_data != NULL)
+           free(inflate_data);
+       pcm_close(pcm);
+       return -ENOMEM;
+    }
+    memcpy(inflate_data, pcm->buf->residue_buf,
+    pcm->buf->residue_buf_ptr);
+    copy = bufsize - pcm->buf->residue_buf_ptr;
+    memcpy(inflate_data + pcm->buf->residue_buf_ptr, data, copy);
+    memcpy(pcm->buf->residue_buf, data + copy, count - copy);
+    pcm->buf->residue_buf_ptr = count - copy;
+
+    j = bufsize - 1;
+    for (i = count-1; i >= 0 && j >= 0; i--) {
+       if (i%4 == 0)
+       continue;
+       *((char *)(inflate_data) + i) = *((char *)(inflate_data) + j);
+       j--;
+    }
+    memcpy(data, inflate_data, count);
+    if (inflate_data != NULL)
+       free(inflate_data);
+    return 0;
+}
+
+
+int is_buffer_available(struct pcm *pcm, void *data, int count, int format)
+{
+    int i, j, copy;
+    if (format != SNDRV_PCM_FORMAT_S24_LE || (pcm->flags & PCM_TUNNEL))
+       return 0;
+    copy = (count/4)*3;
+    if (pcm->buf->residue_buf_ptr >= copy) {
+       pcm->buf->residue_buf_ptr -= copy;
+       for (i = 0, j = 0; j < count; j++) {
+           if (j%4 == 0)
+               continue;
+           *((char *)data + j) = *((char *)pcm->buf->residue_buf + i);
+           i++;
+       }
+       printf("Extra buffer available");
+       return 1;
+    }
+    return 0;
+}
+
+int hw_pcm_write(struct pcm *pcm, void *data, unsigned count)
+{
+    int ret = 0, n = 0;
+    ret = buffer_data(pcm, data, count);
+    if (ret)
+        return ret;
+    do {
+        n = pcm_write(pcm, data, count);
+    } while (is_buffer_available(pcm, data, pcm->period_size, pcm->format));
+    return ret;
 }
 
 static int play_file(unsigned rate, unsigned channels, int fd,
@@ -284,6 +367,7 @@ static int play_file(unsigned rate, unsigned channels, int fd,
            default:
                break;
            }
+       compr_params.codec.transcode_dts = 0;
        if (ioctl(pcm->fd, SNDRV_COMPRESS_SET_PARAMS, &compr_params)) {
           fprintf(stderr, "Aplay: SNDRV_COMPRESS_SET_PARAMS,failed Error no %d \n", errno);
           pcm_close(pcm);
@@ -524,7 +608,7 @@ start_done:
         }
 
         while (read(fd, data, bufsize) > 0) {
-            if (pcm_write(pcm, data, bufsize)){
+            if (hw_pcm_write(pcm, data, bufsize)){
                 fprintf(stderr, "Aplay: pcm_write failed\n");
                 free(data);
                 pcm_close(pcm);
@@ -542,6 +626,7 @@ start_done:
         }
         free(data);
     }
+
     fprintf(stderr, "Aplay: Done playing\n");
     pcm_close(pcm);
     return 0;
@@ -601,19 +686,40 @@ int play_wav(const char *fg, int rate, int ch, const char *device, const char *f
             fprintf(stderr, "Aplay:aplay: cannot read header\n");
             return -errno;
         }
-
+        if (hdr.bits_per_sample == 16) {
+            format = SNDRV_PCM_FORMAT_S16_LE;
+        } else if(hdr.bits_per_sample == 24) {
+            format = SNDRV_PCM_FORMAT_S24_LE;
+        }
+        if (hdr.bits_per_sample > 16) {
+            int temp = 0;
+            /* parse the file until 'data' chunk is found */
+            while (temp != 0x61746164) {
+                if(read(fd, &temp, 4) != 4) {
+                    fprintf(stderr, "DATA ID is not found in the header");
+                    return -EINVAL;
+                }
+                fprintf(stderr, "temp 0x%x", temp);
+            }
+            hdr.data_id = 0x61746164;
+            read(fd, &hdr.data_sz, 4);
+            fprintf(stderr, "data_id 0x%x data_sz = 0x%x",hdr.data_id,hdr.data_sz);
+        }
         if ((hdr.riff_id != ID_RIFF) ||
             (hdr.riff_fmt != ID_WAVE) ||
             (hdr.fmt_id != ID_FMT)) {
             fprintf(stderr, "Aplay:aplay: '%s' is not a riff/wave file\n", fn);
             return -EINVAL;
         }
-        if ((hdr.audio_format != FORMAT_PCM) ||
-            (hdr.fmt_sz != 16)) {
+        fprintf(stderr, "hdr.fmt_sz %d hdr.bits_per_sample = %d"
+                        "hdr.audio_format = %d\n",
+                        hdr.fmt_sz, hdr.bits_per_sample, hdr.audio_format);
+        if ((hdr.audio_format != FORMAT_PCM && hdr.audio_format != FORMAT_PCM_24) ||
+            (hdr.fmt_sz != 16 && hdr.fmt_sz != 40)) {
             fprintf(stderr, "Aplay:aplay: '%s' is not pcm format\n", fn);
             return -EINVAL;
         }
-        if (hdr.bits_per_sample != 16) {
+        if (hdr.bits_per_sample != 16 && hdr.bits_per_sample != 24) {
             fprintf(stderr, "Aplay:aplay: '%s' is not 16bit per sample\n", fn);
             return -EINVAL;
         }
@@ -631,6 +737,7 @@ ignore_header:
         flag = PCM_NMMAP;
     fprintf(stderr, "aplay: Playing '%s':%s\n", fn, get_format_desc(format) );
 
+    fprintf(stderr, "aplay: Samplerate[%d]Channels[%d]\n", hdr.sample_rate, hdr.num_channels);
     return play_file(hdr.sample_rate, hdr.num_channels, fd, flag, device, hdr.data_sz);
 }
 
@@ -780,7 +887,7 @@ int main(int argc, char **argv)
        }
 
     }
-    filename = (char*) calloc(1, 30);
+    filename = (char*) calloc(1, 128);
     if (!filename) {
           fprintf(stderr, "Aplay:Failed to allocate filename!");
           return -ENOMEM;
@@ -789,11 +896,11 @@ int main(int argc, char **argv)
        free(filename);
        filename = NULL;
     } else {
-       strlcpy(filename, argv[optind++], 30);
+       strlcpy(filename, argv[optind++], 128);
     }
 
     if (pcm_flag) {
-   if (format == SNDRV_PCM_FORMAT_S16_LE)
+        if (format == SNDRV_PCM_FORMAT_S16_LE || format == SNDRV_PCM_FORMAT_S24_LE)
              rc = play_wav(mmap, rate, ch, device, filename);
          else
              rc = play_raw(mmap, rate, ch, device, filename);
