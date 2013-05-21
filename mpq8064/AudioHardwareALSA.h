@@ -219,17 +219,18 @@ enum {
 
 enum {
     INVALID_FORMAT               = -1,
-    PCM_FORMAT                   = 0,
-    COMPRESSED_FORMAT            = 1,
-    COMPRESSED_FORCED_PCM_FORMAT = 2,
-    COMPRESSED_PASSTHROUGH_FORMAT = 3
+    PCM_FORMAT                   = 0x0,
+    COMPRESSED_FORMAT            = 0x1,
+    COMPRESSED_FORCED_PCM_FORMAT = 0x2,
+    PASSTHROUGH_FORMAT = 0x4,
+    TRANSCODE_FORMAT = 0x8
 };
 
 struct alsa_handle_t {
     ALSADevice*         module;
     uint64_t            devices;
     char                useCase[MAX_STR_LEN];
-    uint8_t             type;            // Device Node Type, i.e. PCM/COMPRESSED/PASSTHROUGH
+    uint8_t             type; // Device Node Type, i.e. PCM/COMPRESSED/PASSTHROUGH/TRANSCODE
     struct pcm *        handle;
     snd_pcm_format_t    format;
     uint16_t            channels;
@@ -318,7 +319,7 @@ public:
                                               enum audio_parser_code_type codec_type);
 
     status_t    setPlaybackVolume(int, char *);
-    status_t    setPlaybackFormat(const char *value, int device, int dtsTranscode);
+    status_t    setPlaybackFormat(const char *value, int device);
     status_t    setCaptureFormat(const char *value);
     status_t    setChannelMap(alsa_handle_t *handle, int maxChannels,
                               char *channelMap);
@@ -909,6 +910,7 @@ private:
     status_t            openTunnelDevice(int devices);
     void                bufferAlloc(alsa_handle_t *handle, int bufIndex);
     void                bufferDeAlloc(int bufIndex);
+    status_t            openTranscodeDevice(alsa_handle_t * handle);
     status_t            createPlaybackThread();
     void                playbackThreadEntry();
     static void *       playbackThreadWrapper(void *me);

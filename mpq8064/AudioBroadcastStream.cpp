@@ -750,7 +750,6 @@ void AudioBroadcastStreamALSA::setRoutingFlagsBasedOnConfig()
         mRoutePcmAudio = false;
         mPCMDevices = 0;
     }
-
     if((mDevices & AudioSystem::DEVICE_OUT_SPDIF) &&
         (mDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) && (mSpdifFormat != mHdmiFormat))
         mUseDualTunnel=true;
@@ -759,7 +758,8 @@ void AudioBroadcastStreamALSA::setRoutingFlagsBasedOnConfig()
         mSecDevices |= AudioSystem::DEVICE_OUT_SPDIF;
     if(mHdmiFormat == COMPRESSED_FORMAT)
         mSecDevices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
-    ALOGD("mPCMDevices = 0x%x, mUseDualTunnel = %d, mSecDevices = 0x%x", mPCMDevices, mUseDualTunnel, mSecDevices);
+    ALOGD("mPCMDevices = 0x%x, mUseDualTunnel = %d, mTranscodeDevices =%x, mSecDevices = 0x%x",
+                                   mPCMDevices, mUseDualTunnel, mTranscodeDevices, mSecDevices);
     return;
 }
 
@@ -771,6 +771,8 @@ void AudioBroadcastStreamALSA::setSpdifHdmiRoutingFlags(int devices)
         mHdmiFormat = INVALID_FORMAT;
 
     mDtsTranscode = false;
+    mTranscodeDevices = 0;
+
     if(!strncmp(mSpdifOutputFormat,"lpcm",sizeof(mSpdifOutputFormat))) {
         if(mDevices & AudioSystem::DEVICE_OUT_SPDIF)
             mSpdifFormat = PCM_FORMAT;
@@ -799,32 +801,27 @@ void AudioBroadcastStreamALSA::setSpdifHdmiRoutingFlags(int devices)
     }
     if(!strncmp(mSpdifOutputFormat,"dts",sizeof(mSpdifOutputFormat))) {
         if(mDevices & AudioSystem::DEVICE_OUT_SPDIF) {
-            if(mFormat != AUDIO_FORMAT_PCM_16_BIT && mUseTunnelDecoder == true) {
-                mSpdifFormat = COMPRESSED_FORMAT;
-                if(mFormat != AUDIO_FORMAT_DTS && mFormat != AUDIO_FORMAT_DTS_LBR) {
-                    mTranscodeDevices |= AudioSystem::DEVICE_OUT_SPDIF;
-                    mDtsTranscode = true;
-                }
-            }
-            else
-                mSpdifFormat = COMPRESSED_FORCED_PCM_FORMAT;
+            mSpdifFormat = COMPRESSED_FORMAT;
         // 44.1, 22.05 and 11.025K are not supported on Spdif for Passthrough
-            if (mSampleRate == 44100 || mSampleRate == 22050 ||
-                mSampleRate == 11025)
+            if((mFormat != AUDIO_FORMAT_DTS && mFormat != AUDIO_FORMAT_DTS_LBR) ||
+              (mSampleRate == 44100 || mSampleRate == 22050 || mSampleRate == 11025)) {
+                mTranscodeDevices |= AudioSystem::DEVICE_OUT_SPDIF;
+                mDtsTranscode = true;
+            }
+            if (mUseTunnelDecoder == false)
                 mSpdifFormat = COMPRESSED_FORCED_PCM_FORMAT;
         }
     }
     if(!strncmp(mHdmiOutputFormat,"dts",sizeof(mHdmiOutputFormat))) {
-        if(mDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
-            if(mFormat != AUDIO_FORMAT_PCM_16_BIT && mUseTunnelDecoder == true) {
-                mHdmiFormat = COMPRESSED_FORMAT;
-                if(mFormat != AUDIO_FORMAT_DTS && mFormat != AUDIO_FORMAT_DTS_LBR) {
-                    mTranscodeDevices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
-                    mDtsTranscode = true;
-                }
+        if(mDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+            mHdmiFormat = COMPRESSED_FORMAT;
+            if(mFormat != AUDIO_FORMAT_DTS && mFormat != AUDIO_FORMAT_DTS_LBR) {
+                mTranscodeDevices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+                mDtsTranscode = true;
             }
-            else
+            if (mUseTunnelDecoder == false)
                 mHdmiFormat = COMPRESSED_FORCED_PCM_FORMAT;
+        }
     }
     ALOGV("mSpdifFormat- %d, mHdmiFormat- %d", mSpdifFormat, mHdmiFormat);
 
@@ -1005,43 +1002,46 @@ status_t AudioBroadcastStreamALSA::openPcmDevice(int devices)
     }
     mInputBufferSize = DEFAULT_OUT_BUFFER_SIZE_PER_CHANNEL * mChannels;
     mInputBufferCount = MULTI_CHANNEL_PERIOD_COUNT;
-    snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
-    if ((use_case == NULL) ||
-        (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
-            strlen(SND_USE_CASE_VERB_INACTIVE)))) {
-        status = openRoutingDevice(SND_USE_CASE_VERB_HIFI3, true,
-                     devices);
-    } else {
-        status = openRoutingDevice(SND_USE_CASE_MOD_PLAY_MUSIC3, false,
-                     devices);
-    }
-    if(use_case) {
-        free(use_case);
-        use_case = NULL;
-    }
-    if(status != NO_ERROR) {
-        return status;
-    }
-    ALSAHandleList::iterator it = mParent->mDeviceList.end(); it--;
-    mPcmRxHandle = &(*it);
-    mBufferSize = mPcmRxHandle->periodSize;
+    if(mPcmRxHandle == NULL) {
+        snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
+        if ((use_case == NULL) ||
+            (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
+                strlen(SND_USE_CASE_VERB_INACTIVE)))) {
+            status = openRoutingDevice(SND_USE_CASE_VERB_HIFI3, true,
+                         devices & ~mTranscodeDevices);
+        } else {
+            status = openRoutingDevice(SND_USE_CASE_MOD_PLAY_MUSIC3, false,
+                         devices & ~mTranscodeDevices);
+        }
+        if(use_case) {
+            free(use_case);
+            use_case = NULL;
+        }
+        if(status != NO_ERROR) {
+            return status;
+        }
+        ALSAHandleList::iterator it = mParent->mDeviceList.end(); it--;
+        mPcmRxHandle = &(*it);
+        mBufferSize = mPcmRxHandle->periodSize;
+        pcm_prepare(mPcmRxHandle->handle);
 
-    if(mPcmRxHandle) {
-         if(mPcmRxHandle->type == PCM_FORMAT) {
-             status = mPcmRxHandle->module->setPlaybackVolume(mStreamVol,
+        if(mPcmRxHandle) {
+            if(mPcmRxHandle->type == PCM_FORMAT) {
+                status = mPcmRxHandle->module->setPlaybackVolume(mStreamVol,
                                                 mPcmRxHandle->useCase);
-         }
-    }
+            }
+        }
 
-    if(mUseMS11Decoder && (mPcmRxHandle->channels > 2))
-        setChannelMap(mPcmRxHandle);
-    else if(mPcmRxHandle->channels > 2)
-        setPCMChannelMap(mPcmRxHandle);
+        if(mUseMS11Decoder && (mPcmRxHandle->channels > 2))
+            setChannelMap(mPcmRxHandle);
+        else if(mPcmRxHandle->channels > 2)
+            setPCMChannelMap(mPcmRxHandle);
 
-    mPcmWriteTempBuffer = (char *) malloc(mBufferSize);
-    if(mPcmWriteTempBuffer == NULL) {
-        ALOGE("Memory allocation of temp buffer to write pcm to driver failed");
-        return BAD_VALUE;
+        mPcmWriteTempBuffer = (char *) malloc(mBufferSize);
+        if(mPcmWriteTempBuffer == NULL) {
+            ALOGE("Memory allocation of temp buffer to write pcm to driver failed");
+            return BAD_VALUE;
+        }
     }
 
     return NO_ERROR;
@@ -1149,7 +1149,7 @@ status_t AudioBroadcastStreamALSA::openTunnelDevice(int devices)
         ALOGE("setPlaybackFormat Failed");
         return BAD_VALUE;
     }
-    if (mCompreRxHandle == NULL && (devices & ~mSecDevices & ~mTranscodeDevices)) {
+    if (mCompreRxHandle == NULL && (devices & ~mSecDevices)) {
         hw_ptr[0] = 0;
         snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
         if ((use_case == NULL) || (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
@@ -1176,22 +1176,6 @@ status_t AudioBroadcastStreamALSA::openTunnelDevice(int devices)
             return status;
         }
     }
-    if (mDtsTranscode) {
-        mTranscodeHandle = (alsa_handle_t *) calloc(1, sizeof(alsa_handle_t));
-        mTranscodeHandle->devices = mTranscodeDevices;
-        mTranscodeHandle->activeDevice= mTranscodeDevices;
-        mTranscodeHandle->mode = mParent->mode();
-        mTranscodeHandle->ucMgr = mUcMgr;
-        mTranscodeHandle->module = mALSADevice;
-        //Passthrough to be configured with 2 channels
-        mTranscodeHandle->channels = 2;
-        mTranscodeHandle->sampleRate = mSampleRate > 48000 ? 48000: mSampleRate;
-        ALOGV("Transcode devices = %x", mTranscodeDevices);
-        strlcpy(mTranscodeHandle->useCase, mCompreRxHandle->useCase, sizeof(mTranscodeHandle->useCase));
-        strncat(mTranscodeHandle->useCase, SND_USE_CASE_PSEUDO_TUNNEL_SUFFIX, sizeof(mTranscodeHandle->useCase));
-        mALSADevice->setUseCase(mTranscodeHandle, false);
-        mALSADevice->configureTranscode(mTranscodeHandle);
-    }
     if(use_case != NULL) {
         free(use_case);
         use_case = NULL;
@@ -1199,7 +1183,7 @@ status_t AudioBroadcastStreamALSA::openTunnelDevice(int devices)
     if(status != NO_ERROR) {
         return status;
     }
-    if (mCompreRxHandle !=NULL && (devices & ~mSecDevices & ~mTranscodeDevices)) {
+    if (mCompreRxHandle !=NULL && (devices & ~mSecDevices)) {
         //prepare the driver for playback
         status = pcm_prepare(mCompreRxHandle->handle);
         if (status) {
@@ -1256,25 +1240,50 @@ status_t AudioBroadcastStreamALSA::openTunnelDevice(int devices)
     return NO_ERROR;
 }
 
+status_t AudioBroadcastStreamALSA::openTranscodeDevice(alsa_handle_t * handle)
+{
+    if (mDtsTranscode) {
+        mTranscodeHandle = (alsa_handle_t *) calloc(1, sizeof(alsa_handle_t));
+        mTranscodeHandle->devices = mTranscodeDevices;
+        mTranscodeHandle->activeDevice = mTranscodeDevices;
+        mTranscodeHandle->mode = mParent->mode();
+        mTranscodeHandle->ucMgr = mUcMgr;
+        mTranscodeHandle->module = mALSADevice;
+        //Passthrough to be configured with 2 channels
+        mTranscodeHandle->channels = 2;
+        mTranscodeHandle->sampleRate = 48000;
+        ALOGV("Transcode devices = %d", mTranscodeDevices);
+        strlcpy(mTranscodeHandle->useCase, handle->useCase, sizeof(mTranscodeHandle->useCase));
+        strncat(mTranscodeHandle->useCase, SND_USE_CASE_PSEUDO_TUNNEL_SUFFIX, sizeof(mTranscodeHandle->useCase));
+        mALSADevice->setUseCase(mTranscodeHandle, false);
+        mALSADevice->configureTranscode(mTranscodeHandle);
+    }
+    return NO_ERROR;
+}
+
 status_t AudioBroadcastStreamALSA::setPlaybackFormat()
 {
     status_t status = NO_ERROR;
 
     if((mSpdifFormat == PCM_FORMAT) ||
-              (mSpdifFormat == COMPRESSED_FORCED_PCM_FORMAT)) {
+              (mSpdifFormat == COMPRESSED_FORCED_PCM_FORMAT &&
+              !(mTranscodeDevices & AudioSystem::DEVICE_OUT_SPDIF))) {
         status = mALSADevice->setPlaybackFormat("LPCM",
-                           AudioSystem::DEVICE_OUT_SPDIF, mDtsTranscode);
-    } else if(mSpdifFormat == COMPRESSED_FORMAT) {
+                           AudioSystem::DEVICE_OUT_SPDIF);
+    } else if(mSpdifFormat == COMPRESSED_FORMAT ||
+               mTranscodeDevices & AudioSystem::DEVICE_OUT_SPDIF) {
         status = mALSADevice->setPlaybackFormat("Compr",
-                           AudioSystem::DEVICE_OUT_SPDIF, mDtsTranscode);
+                           AudioSystem::DEVICE_OUT_SPDIF);
     }
     if((mHdmiFormat == PCM_FORMAT) ||
-               (mHdmiFormat == COMPRESSED_FORCED_PCM_FORMAT)) {
+               (mHdmiFormat == COMPRESSED_FORCED_PCM_FORMAT &&
+                 !(mTranscodeDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL))) {
         status = mALSADevice->setPlaybackFormat("LPCM",
-                           AudioSystem::DEVICE_OUT_AUX_DIGITAL, mDtsTranscode);
-    } else if (mHdmiFormat == COMPRESSED_FORMAT) {
+                           AudioSystem::DEVICE_OUT_AUX_DIGITAL);
+    } else if (mHdmiFormat == COMPRESSED_FORMAT ||
+                mTranscodeDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
         status = mALSADevice->setPlaybackFormat("Compr",
-                           AudioSystem::DEVICE_OUT_AUX_DIGITAL, mDtsTranscode);
+                           AudioSystem::DEVICE_OUT_AUX_DIGITAL);
     }
     return status;
 }
@@ -1314,23 +1323,20 @@ status_t AudioBroadcastStreamALSA::openRoutingDevice(char *useCase,
                           strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2))) ||
         (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL3,
                           strlen(SND_USE_CASE_MOD_PLAY_TUNNEL3))))) {
+            alsa_handle.type = COMPRESSED_FORMAT;
         if (mUseMS11Decoder == true)
-            alsa_handle.type = COMPRESSED_PASSTHROUGH_FORMAT;
+            alsa_handle.type |= PASSTHROUGH_FORMAT;
         else if (mFormat == AUDIO_FORMAT_DTS || mFormat == AUDIO_FORMAT_DTS_LBR) {
             if(mUseDualTunnel) {
                 if(((mSpdifFormat == COMPRESSED_FORMAT) || (mHdmiFormat == COMPRESSED_FORMAT))
                     && devices == mSecDevices)
-                    alsa_handle.type = COMPRESSED_PASSTHROUGH_FORMAT;
-                else
-                    alsa_handle.type = COMPRESSED_FORMAT;
+                    alsa_handle.type |= PASSTHROUGH_FORMAT;
             }
             else if (((mSpdifFormat == COMPRESSED_FORMAT) &&
                     (mDevices & (AudioSystem::DEVICE_OUT_SPDIF))) ||
                     ((mHdmiFormat == COMPRESSED_FORMAT) &&
                     (mDevices & (AudioSystem::DEVICE_OUT_AUX_DIGITAL))))
-                    alsa_handle.type = COMPRESSED_PASSTHROUGH_FORMAT;
-            else
-                alsa_handle.type = COMPRESSED_FORMAT;
+                    alsa_handle.type |= PASSTHROUGH_FORMAT;
         }
     }
     else
@@ -1339,6 +1345,13 @@ status_t AudioBroadcastStreamALSA::openRoutingDevice(char *useCase,
 
     if (mALSADevice->setUseCase(&alsa_handle, bIsUseCase))
         return NO_INIT;
+    if (!(alsa_handle.type & PASSTHROUGH_FORMAT) &&
+        (!strncmp(mSpdifOutputFormat,"dts",sizeof(mSpdifOutputFormat))
+         || !strncmp(mHdmiOutputFormat,"dts",sizeof(mHdmiOutputFormat)))) {
+        alsa_handle.type |= TRANSCODE_FORMAT;
+        if (mDtsTranscode)
+            openTranscodeDevice(&alsa_handle);
+    }
     status = mALSADevice->open(&alsa_handle);
     if(status != NO_ERROR) {
         ALOGE("Could not open the ALSA device for use case %s",
@@ -2213,13 +2226,14 @@ int32_t AudioBroadcastStreamALSA::writeToCompressedDriver(char *buffer, int byte
 
         //TODO : Is this code reqd - start seems to fail?
         if(mCompreRxHandle) {
+            local_handle = (struct pcm *)mCompreRxHandle->handle;
             if (ioctl(mCompreRxHandle->handle->fd, SNDRV_PCM_IOCTL_START) < 0)
                 ALOGE("AUDIO Start failed");
             else
                 mCompreRxHandle->handle->start = 1;
         }
         if(mSecCompreRxHandle){
-            // last handle used was for secCompreRx, need to set handle to CompreRx
+            local_handle = (struct pcm *)mSecCompreRxHandle->handle;
             if (ioctl(mSecCompreRxHandle->handle->fd, SNDRV_PCM_IOCTL_START) < 0)
                 ALOGE("AUDIO Start failed");
             else
@@ -2321,7 +2335,6 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
     status_t status = NO_ERROR;
     char *use_case;
     Mutex::Autolock autoLock(mParent->mLock);
-//    Mutex::Autolock autoLock1(mRoutingLock);
 
     if(devices == 0)
         return status;
@@ -2358,6 +2371,7 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
     int PrevSecDevices = mSecDevices;
     bool CloseDecSession = true;
     bool ClosePassThSession = true;
+    int prevTranscodeDevice = mTranscodeDevices;
 
     mDevices = devices;
     setRoutingFlagsBasedOnConfig();
@@ -2508,21 +2522,20 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
                 ALOGV("poll fd2 set to -1");
             }
             /*Device handling for the DTS transcode*/
-            if (!mDtsTranscode && mTranscodeHandle) {
-                Mutex::Autolock autoLock(mLock);
-                closeDevice(mTranscodeHandle);
-                free(mTranscodeHandle);
-                mTranscodeHandle = NULL;
+            if (!mDtsTranscode && mTranscodeHandle &&
+                 (prevTranscodeDevice != mTranscodeDevices)) {
                 struct snd_compr_routing params;
                 params.session_type = TRANSCODE_SESSION;
                 params.operation = DISCONNECT_STREAM;
                 if (ioctl(mCompreRxHandle->handle->fd, SNDRV_COMPRESS_SET_ROUTING, &params) < 0) {
                     ALOGE("disconnect stream failed");
                 }
+                closeDevice(mTranscodeHandle);
+                free(mTranscodeHandle);
+                mTranscodeHandle = NULL;
             }
             if ((mDtsTranscode && mTranscodeHandle == NULL)) {
-                Mutex::Autolock autoLock(mLock);
-                status = openTunnelDevice(mTranscodeDevices);
+                status = openTranscodeDevice(mCompreRxHandle);
                 if(status != NO_ERROR) {
                     ALOGE("Error opening Transocde device in doRouting");
                     return BAD_VALUE;
@@ -2552,7 +2565,7 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
             if(mPcmRxHandle == NULL) {
                 Mutex::Autolock autoLock(mLock);
                 mRoutePcmAudio = true;
-                status = openPcmDevice(mPCMDevices);
+                status = openPcmDevice(mPCMDevices & ~mTranscodeDevices);
                 if(status != NO_ERROR) {
                     ALOGE("Error opening PCM device in doRouting");
                     return BAD_VALUE;
@@ -2616,8 +2629,8 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
             }
         }
         if(mPcmRxHandle && mPCMDevices)
-            mALSADevice->switchDeviceUseCase(mPcmRxHandle, mPCMDevices,
-                                 mParent->mode());
+            mALSADevice->switchDeviceUseCase(mPcmRxHandle,
+                     mPCMDevices & ~mTranscodeDevices, mParent->mode());
         if(closePcmDevice && mPcmRxHandle) {
             alsa_handle_t *tmp_handle;
             tmp_handle = mPcmRxHandle;
@@ -2629,6 +2642,36 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
                 return BAD_VALUE;
             }
         }
+            /*Device handling for the DTS transcode*/
+            if (!mDtsTranscode && mTranscodeHandle &&
+                (prevTranscodeDevice != mTranscodeDevices)) {
+                ALOGD("Close the transcode handle");
+                struct snd_pcm_transcode_param params;
+                params.transcode_dts = 0;
+                params.session_type = TRANSCODE_SESSION;
+                params.operation = DISCONNECT_STREAM;
+                if (ioctl(mPcmRxHandle->handle->fd, SNDRV_PCM_CONFIGURE_TRANSCODE, &params) < 0) {
+                    ALOGE("disconnect stream failed");
+                }
+                closeDevice(mTranscodeHandle);
+                free(mTranscodeHandle);
+                mTranscodeHandle = NULL;
+            }
+            if (mDtsTranscode && mTranscodeHandle == NULL && mPcmRxHandle!=NULL) {
+                ALOGD("Open the transcode handle");
+                status = openTranscodeDevice(mPcmRxHandle);
+                if(status != NO_ERROR) {
+                    ALOGE("Error opening Transocde device in doRouting");
+                    return BAD_VALUE;
+                }
+                struct snd_pcm_transcode_param params;
+                params.transcode_dts = 0;
+                params.session_type = TRANSCODE_SESSION;
+                params.operation = CONNECT_STREAM;
+                if (ioctl(mPcmRxHandle->handle->fd, SNDRV_PCM_CONFIGURE_TRANSCODE, &params) < 0) {
+                    ALOGE("Connect stream failed");
+                }
+           }
     }
     if(stopA2DP) {
         ALOGD("doRouting-stopA2dpPlayback_l-usecase %x", mA2dpUseCase);
