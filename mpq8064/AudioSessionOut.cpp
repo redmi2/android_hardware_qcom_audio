@@ -1745,9 +1745,11 @@ status_t AudioSessionOutALSA::openDevice(char *useCase, bool bIsUseCase, int dev
 
     switch(mFormat) {
     case AUDIO_FORMAT_PCM_16_BIT:
+    case AUDIO_FORMAT_PCM_16_BIT_TE:
         alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
         break;
     case AUDIO_FORMAT_PCM_24_BIT:
+    case AUDIO_FORMAT_PCM_24_BIT_TE:
         alsa_handle.format = SNDRV_PCM_FORMAT_S24_LE;
         break;
     default:
@@ -1790,7 +1792,8 @@ status_t AudioSessionOutALSA::openDevice(char *useCase, bool bIsUseCase, int dev
     if (mALSADevice->setUseCase(&alsa_handle, bIsUseCase))
         return NO_INIT;
 
-    if (!(alsa_handle.type & PASSTHROUGH_FORMAT) &&
+    if ((mFormat & AUDIO_FORMAT_SUB_MASK & AUDIO_FORMAT_SUB_DTS_TE) &&
+        !(alsa_handle.type & PASSTHROUGH_FORMAT) &&
         (!strncmp(mSpdifOutputFormat,"dts",sizeof(mSpdifOutputFormat))
          || !strncmp(mHdmiOutputFormat,"dts",sizeof(mHdmiOutputFormat)))) {
         alsa_handle.type |= TRANSCODE_FORMAT;
@@ -2209,12 +2212,18 @@ void AudioSessionOutALSA::setSpdifHdmiRoutingFlags(int devices)
         if(devices & AudioSystem::DEVICE_OUT_SPDIF) {
             mSpdifFormat = COMPRESSED_FORMAT;
         // 44.1, 22.05 and 11.025K are not supported on Spdif for Passthrough
-            if(((mFormat & AUDIO_FORMAT_MAIN_MASK) != AUDIO_FORMAT_DTS &&
-              (mFormat & AUDIO_FORMAT_MAIN_MASK) != AUDIO_FORMAT_DTS_LBR) ||
-              (mFormat & AUDIO_FORMAT_SUB_MASK & AUDIO_FORMAT_SUB_DTS_TE) ||
-              (mSampleRate == 44100 || mSampleRate == 22050 || mSampleRate == 11025)) {
+            // non pcm(wav) and non dts transcode along with
+            // not supported SR are disabled to go for transcode in broadcast
+            // since it is not any requirement as of now, will be enabled once
+            // this gerrit is reverted.
+            if(mFormat & AUDIO_FORMAT_SUB_MASK & AUDIO_FORMAT_SUB_DTS_TE) {
                  mTranscodeDevices |= AudioSystem::DEVICE_OUT_SPDIF;
                  mDtsTranscode = true;
+            } else if(((mFormat & AUDIO_FORMAT_MAIN_MASK) != AUDIO_FORMAT_DTS &&
+                      (mFormat & AUDIO_FORMAT_MAIN_MASK) != AUDIO_FORMAT_DTS_LBR) ||
+                      mSampleRate == 44100 || mSampleRate == 22050 ||
+                      mSampleRate == 11025) {
+                mSpdifFormat = COMPRESSED_FORCED_PCM_FORMAT;
             }
 
             if (mUseTunnelDecoder == false)
@@ -2225,12 +2234,16 @@ void AudioSessionOutALSA::setSpdifHdmiRoutingFlags(int devices)
         if(devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
 
             mHdmiFormat = COMPRESSED_FORMAT;
-            if(((mFormat & AUDIO_FORMAT_MAIN_MASK) != AUDIO_FORMAT_DTS &&
-              (mFormat & AUDIO_FORMAT_MAIN_MASK) != AUDIO_FORMAT_DTS_LBR) ||
-              (mFormat & AUDIO_FORMAT_SUB_MASK & AUDIO_FORMAT_SUB_DTS_TE)) {
+            // non pcm(wav) and non dts transcode is disabled
+            // since it is not any requirement as of now, will be enabled once
+            // this gerrit is reverted.
+            if(mFormat & AUDIO_FORMAT_SUB_MASK & AUDIO_FORMAT_SUB_DTS_TE) {
                 mTranscodeDevices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
                 mDtsTranscode = true;
-            }
+            } else if ((mFormat & AUDIO_FORMAT_MAIN_MASK) != AUDIO_FORMAT_DTS &&
+                       (mFormat & AUDIO_FORMAT_MAIN_MASK) != AUDIO_FORMAT_DTS_LBR)
+                mHdmiFormat = COMPRESSED_FORCED_PCM_FORMAT;
+
             if (mUseTunnelDecoder == false)
                 mHdmiFormat = COMPRESSED_FORCED_PCM_FORMAT;
         }
