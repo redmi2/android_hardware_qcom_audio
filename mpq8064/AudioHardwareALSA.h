@@ -1121,6 +1121,9 @@ public:
     status_t    startA2dpPlayback_l(uint32_t activeUsecase);
     status_t    stopA2dpPlayback_l(uint32_t activeUsecase);
     bool        suspendA2dpPlayback_l(uint32_t activeUsecase);
+    int         buffer_data(struct pcm *pcm, void *data, unsigned count);
+    int         is_buffer_available(struct pcm *pcm, void *data, int count, int format);
+    int         hw_pcm_write(struct pcm *pcm, void *data, unsigned count);
 
     /**This method dumps the state of the audio hardware */
     //virtual status_t dumpState(int fd, const Vector<String16>& args);

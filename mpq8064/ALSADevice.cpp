@@ -296,6 +296,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
              return BAD_VALUE;
         }
         if (handle->type & TRANSCODE_FORMAT) {
+             handle->handle->flags |= PCM_TUNNEL;
              property_get("ro.build.modelid",dtsModelId,"0");
              ALOGD("from property modelId=%s,length=%d\n",
                 dtsModelId, strlen(dtsModelId));
@@ -359,15 +360,25 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     param_set_mask(params, SNDRV_PCM_HW_PARAM_ACCESS,
         (handle->handle->flags & PCM_MMAP) ? SNDRV_PCM_ACCESS_MMAP_INTERLEAVED
         : SNDRV_PCM_ACCESS_RW_INTERLEAVED);
-    param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT,
-                   SNDRV_PCM_FORMAT_S16_LE);
+    if ((handle->handle->flags & PCM_TUNNEL) || handle->format == SNDRV_PCM_FORMAT_S24_LE) {
+        param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT,
+                       SNDRV_PCM_FORMAT_S24_LE);
+        param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 32);
+        param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS,
+                       handle->channels * 32);
+        handle->handle->format = SNDRV_PCM_FORMAT_S24_LE;
+    } else {
+        param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT,
+                       SNDRV_PCM_FORMAT_S16_LE);
+        param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 16);
+        param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS,
+                       handle->channels * 16);
+        handle->handle->format = SNDRV_PCM_FORMAT_S16_LE;
+    }
     param_set_mask(params, SNDRV_PCM_HW_PARAM_SUBFORMAT,
                    SNDRV_PCM_SUBFORMAT_STD);
     param_set_int(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, handle->periodSize);
 
-    param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 16);
-    param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS,
-                   handle->channels * 16);
     param_set_int(params, SNDRV_PCM_HW_PARAM_CHANNELS,
                   handle->channels);
     param_set_int(params, SNDRV_PCM_HW_PARAM_RATE, handle->sampleRate);
@@ -384,9 +395,9 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     handle->handle->buffer_size = pcm_buffer_size(params);
     handle->handle->period_size = pcm_period_size(params);
     handle->handle->period_cnt = handle->handle->buffer_size/handle->handle->period_size;
-    ALOGD("setHardwareParams: buffer_size %d, period_size %d, period_cnt %d",
+    ALOGD("setHardwareParams: buffer_size %d, period_size %d, period_cnt %d, format %d",
         handle->handle->buffer_size, handle->handle->period_size,
-        handle->handle->period_cnt);
+        handle->handle->period_cnt, handle->handle->format);
     handle->handle->rate = handle->sampleRate;
     handle->handle->channels = handle->channels;
     handle->periodSize = handle->handle->period_size;
@@ -455,8 +466,13 @@ status_t ALSADevice::setSoftwareParams(alsa_handle_t *handle)
     if (handle->type & COMPRESSED_FORMAT) {
         params->period_step = 1;
         params->avail_min = handle->channels - 1 ? periodSize/2 : periodSize/4;
-        params->start_threshold = handle->channels - 1 ? periodSize : periodSize/2;
-        params->xfer_align = handle->handle->period_size/(2*channels);
+        if (handle->handle->flags & PCM_TUNNEL) {
+            params->start_threshold = periodSize/(4*(handle->channels));
+            params->xfer_align = handle->handle->period_size/(4*channels);
+        } else {
+            params->start_threshold = periodSize/(2*(handle->channels));
+            params->xfer_align = handle->handle->period_size/(2*channels);
+        }
     }
     params->silence_threshold = 0;
     params->silence_size = 0;
@@ -2357,6 +2373,8 @@ status_t ALSADevice::openProxyDevice()
     param_set_int(params, SNDRV_PCM_HW_PARAM_RATE,
             mProxyParams.mProxyPcmHandle->rate);
 
+    //default the format to SNDRV_PCM_FORMAT_S16_LE
+    mProxyParams.mProxyPcmHandle->format = SNDRV_PCM_FORMAT_S16_LE;
     param_set_hw_refine(mProxyParams.mProxyPcmHandle, params);
 
     if (param_set_hw_params(mProxyParams.mProxyPcmHandle, params)) {
