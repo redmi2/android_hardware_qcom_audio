@@ -807,15 +807,18 @@ void AudioBroadcastStreamALSA::setSpdifHdmiRoutingFlags(int devices)
             // not supported SR are disabled to go for transcode in broadcast
             // since it is not any requirement as of now, will be enabled once
             // this gerrit is reverted.
+            if(((mFormat & AUDIO_FORMAT_MAIN_MASK) == AUDIO_FORMAT_DTS ||
+                      (mFormat & AUDIO_FORMAT_MAIN_MASK) == AUDIO_FORMAT_DTS_LBR) &&
+                      (mSampleRate == 44100 || mSampleRate == 22050 ||
+                      mSampleRate == 11025)) {
+                mFormat |= AUDIO_FORMAT_SUB_DTS_TE;
+            }
             if(mFormat & AUDIO_FORMAT_SUB_MASK & AUDIO_FORMAT_SUB_DTS_TE) {
                 mTranscodeDevices |= AudioSystem::DEVICE_OUT_SPDIF;
                 mDtsTranscode = true;
-            } else if(((mFormat & AUDIO_FORMAT_MAIN_MASK) != AUDIO_FORMAT_DTS &&
-                       (mFormat & AUDIO_FORMAT_MAIN_MASK) != AUDIO_FORMAT_DTS_LBR) ||
-                       mSampleRate == 44100 || mSampleRate == 22050 ||
-                       mSampleRate == 11025) {
+            } else if((mFormat & AUDIO_FORMAT_MAIN_MASK) != AUDIO_FORMAT_DTS &&
+                       (mFormat & AUDIO_FORMAT_MAIN_MASK) != AUDIO_FORMAT_DTS_LBR)
                 mSpdifFormat = COMPRESSED_FORCED_PCM_FORMAT;
-            }
 
             if (mUseTunnelDecoder == false)
                 mSpdifFormat = COMPRESSED_FORCED_PCM_FORMAT;
@@ -2929,18 +2932,26 @@ bool AudioBroadcastStreamALSA::decode(char *buffer, size_t bytes)
 
         // set channel status
         if(mChannelStatusSet == false) {
-            if(mSpdifFormat == PCM_FORMAT) {
+            if(mSpdifFormat == PCM_FORMAT ||
+               (mSpdifFormat == COMPRESSED_FORCED_PCM_FORMAT &&
+                !(mTranscodeDevices & AudioSystem::DEVICE_OUT_SPDIF))) {
                 if(mALSADevice->get_linearpcm_channel_status(mSampleRate,
                                     mChannelStatus)) {
                     ALOGE("channel status set error ");
                     return BAD_VALUE;
                 }
                 mALSADevice->setChannelStatus(mChannelStatus);
-            } else if(mSpdifFormat == COMPRESSED_FORMAT) {
-                if(mALSADevice->get_compressed_channel_status(
-                               mBitstreamSM->getOutputBufferPtr(SPDIF_OUT),
-                               copyBytesMS11,
-                               mChannelStatus,AUDIO_PARSER_CODEC_AC3)) {
+            } else if(mSpdifFormat == COMPRESSED_FORMAT ||
+                      (mSpdifFormat == COMPRESSED_FORCED_PCM_FORMAT &&
+                      (mTranscodeDevices & AudioSystem::DEVICE_OUT_SPDIF))) {
+                int ret = 0;
+                if (mTranscodeDevices & AudioSystem::DEVICE_OUT_SPDIF)
+                    mALSADevice->get_compressed_channel_status(mChannelStatus);
+                else
+                    ret = mALSADevice->get_compressed_channel_status(
+                                     buffer, bytes, mChannelStatus,
+                                     AUDIO_PARSER_CODEC_DTS);
+                if (ret) {
                     ALOGE("channel status set error ");
                     return BAD_VALUE;
                 }
@@ -2977,16 +2988,25 @@ bool AudioBroadcastStreamALSA::decode(char *buffer, size_t bytes)
         continueDecode = false;
         // set channel status
         if(mChannelStatusSet == false) {
-            if(mSpdifFormat == PCM_FORMAT) {
+            if(mSpdifFormat == PCM_FORMAT ||
+               (mSpdifFormat == COMPRESSED_FORCED_PCM_FORMAT &&
+                !(mTranscodeDevices & AudioSystem::DEVICE_OUT_SPDIF))) {
                 if (mALSADevice->get_linearpcm_channel_status(mSampleRate,
                                       mChannelStatus)) {
                     ALOGE("channel status set error ");
                 }
                 mALSADevice->setChannelStatus(mChannelStatus);
-            } else if(mSpdifFormat == COMPRESSED_FORMAT) {
-                if (mALSADevice->get_compressed_channel_status(
+            } else if(mSpdifFormat == COMPRESSED_FORMAT ||
+                      (mSpdifFormat == COMPRESSED_FORCED_PCM_FORMAT &&
+                      (mTranscodeDevices & AudioSystem::DEVICE_OUT_SPDIF))) {
+                int ret = 0;
+                if (mTranscodeDevices & AudioSystem::DEVICE_OUT_SPDIF)
+                    mALSADevice->get_compressed_channel_status(mChannelStatus);
+                else
+                    ret = mALSADevice->get_compressed_channel_status(
                                      buffer, bytes, mChannelStatus,
-                                     AUDIO_PARSER_CODEC_DTS)) {
+                                     AUDIO_PARSER_CODEC_DTS);
+                if (ret) {
                     ALOGE("channel status set error ");
                 }
                 mALSADevice->setChannelStatus(mChannelStatus);
@@ -3021,9 +3041,25 @@ bool AudioBroadcastStreamALSA::decode(char *buffer, size_t bytes)
         continueDecode = false;
         // set channel status
         if(mChannelStatusSet == false) {
-            if(mSpdifFormat == PCM_FORMAT) {
+            if(mSpdifFormat == PCM_FORMAT ||
+               (mSpdifFormat == COMPRESSED_FORCED_PCM_FORMAT &&
+                !(mTranscodeDevices & AudioSystem::DEVICE_OUT_SPDIF))) {
                 if (mALSADevice->get_linearpcm_channel_status(mSampleRate,
                                       mChannelStatus)) {
+                    ALOGE("channel status set error ");
+                }
+                mALSADevice->setChannelStatus(mChannelStatus);
+            } else if(mSpdifFormat == COMPRESSED_FORMAT ||
+                      (mSpdifFormat == COMPRESSED_FORCED_PCM_FORMAT &&
+                       (mTranscodeDevices & AudioSystem::DEVICE_OUT_SPDIF))) {
+                int ret = 0;
+                if (mTranscodeDevices & AudioSystem::DEVICE_OUT_SPDIF)
+                    mALSADevice->get_compressed_channel_status(mChannelStatus);
+                else
+                    ret = mALSADevice->get_compressed_channel_status(
+                                     buffer, bytes, mChannelStatus,
+                                     AUDIO_PARSER_CODEC_DTS);
+                if (ret) {
                     ALOGE("channel status set error ");
                 }
                 mALSADevice->setChannelStatus(mChannelStatus);
@@ -3058,9 +3094,25 @@ bool AudioBroadcastStreamALSA::decode(char *buffer, size_t bytes)
         continueDecode = false;
         // set channel status
         if(mChannelStatusSet == false) {
-            if(mSpdifFormat == PCM_FORMAT) {
+            if(mSpdifFormat == PCM_FORMAT ||
+                (mSpdifFormat == COMPRESSED_FORCED_PCM_FORMAT &&
+                 !(mTranscodeDevices & AudioSystem::DEVICE_OUT_SPDIF))) {
                 if (mALSADevice->get_linearpcm_channel_status(mSampleRate,
                                       mChannelStatus)) {
+                    ALOGE("channel status set error ");
+                }
+                mALSADevice->setChannelStatus(mChannelStatus);
+            } else if(mSpdifFormat == COMPRESSED_FORMAT ||
+                      (mSpdifFormat == COMPRESSED_FORCED_PCM_FORMAT &&
+                      (mTranscodeDevices & AudioSystem::DEVICE_OUT_SPDIF))) {
+                int ret = 0;
+                if (mTranscodeDevices & AudioSystem::DEVICE_OUT_SPDIF)
+                    mALSADevice->get_compressed_channel_status(mChannelStatus);
+                else
+                    ret = mALSADevice->get_compressed_channel_status(
+                                     buffer, bytes, mChannelStatus,
+                                     AUDIO_PARSER_CODEC_DTS);
+                if (ret) {
                     ALOGE("channel status set error ");
                 }
                 mALSADevice->setChannelStatus(mChannelStatus);
