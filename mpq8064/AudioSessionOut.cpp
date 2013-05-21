@@ -140,6 +140,8 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     mFirstBuffer         = true;
     mADTSHeaderPresent    = false;
     mFirstAACBuffer      = NULL;
+    mEventThreadStarted  = false;
+    mWriteThreadStarted  = false;
     mFirstAACBufferLength = 0;
     mA2dpUseCase = AudioHardwareALSA::USECASE_NONE;
 
@@ -867,8 +869,20 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
 int32_t AudioSessionOutALSA::writeToCompressedDriver(char *buffer, int bytes)
 {
         int n;
-        ALOGV("Signal Event thread\n");
-        mEventCv.signal();
+
+        mEventMutex.lock();
+        mWriteThreadStarted = true;
+        if (!mEventThreadStarted && !mKillEventThread) {
+            ALOGV("Event Thread not up wait\n");
+            mEventCv.wait(mEventMutex);
+            ALOGV("Event thread mutex unlocked\n");
+            mEventMutex.unlock();
+        } else {
+            ALOGV("signal event thread\n");
+            mEventCv.signal();
+            mEventMutex.unlock();
+        }
+
         mInputMemMutex.lock();
         ALOGV("write Empty Queue1 size() = %d, Queue2 size() = %d\
         Filled Queue1 size() = %d, Queue2 size() = %d",\
@@ -1000,6 +1014,8 @@ void AudioSessionOutALSA::requestAndWaitForEventThreadExit() {
     mKillEventThread = true;
     if(mEfd != -1) {
         ALOGE("Writing to mEfd %d",mEfd);
+        mWriteThreadStarted = false;
+        mEventThreadStarted = false;
         uint64_t writeValue = KILL_EVENT_THREAD;
         sys_write::lib_write(mEfd, &writeValue, sizeof(uint64_t));
     }
@@ -1032,12 +1048,17 @@ void  AudioSessionOutALSA::eventThreadEntry() {
     androidSetThreadPriority(tid, ANDROID_PRIORITY_AUDIO);
     prctl(PR_SET_NAME, (unsigned long)"HAL Audio EventThread", 0, 0, 0);
     mEventMutex.lock();
-    if(!mKillEventThread){
-       ALOGV("eventThreadEntry wait for signal \n");
-       mEventCv.wait(mEventMutex);
-       ALOGV("eventThreadEntry ready to work \n");
+    mEventThreadStarted = true;
+    if (!mWriteThreadStarted && !mKillEventThread) {
+        ALOGV("write thread not up wait\n");
+        mEventCv.wait(mEventMutex);
+        ALOGV("write thread mutex unlocked\n");
+        mEventMutex.unlock();
+    } else {
+        ALOGV("signal write thread\n");
+        mEventCv.signal();
+        mEventMutex.unlock();
     }
-    mEventMutex.unlock();
 
     ALOGV("Allocating poll fd");
     if(!mKillEventThread) {
@@ -1060,6 +1081,7 @@ void  AudioSessionOutALSA::eventThreadEntry() {
                 ALOGV("poll fd2 set to -1");
         }
     }
+
     while(!mKillEventThread && ((err_poll = poll(pfd, NUM_AUDIOSESSION_FDS, timeout)) >=0)) {
         ALOGV("pfd[0].revents =%d ", pfd[0].revents);
         ALOGV("pfd[1].revents =%d ", pfd[1].revents);
