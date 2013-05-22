@@ -29,6 +29,8 @@
 #include <system/audio.h>
 #include <hardware/audio.h>
 #include <utils/threads.h>
+#include "AudioUtil.h"
+
 #ifdef QCOM_USBAUDIO_ENABLED
 #include <AudioUsbALSA.h>
 #endif
@@ -224,12 +226,12 @@ enum {
 };
 
 enum {
-    INVALID_FORMAT               = -1,
-    PCM_FORMAT                   = 0x0,
-    COMPRESSED_FORMAT            = 0x1,
-    COMPRESSED_FORCED_PCM_FORMAT = 0x2,
-    PASSTHROUGH_FORMAT = 0x4,
-    TRANSCODE_FORMAT = 0x8
+    INVALID_FORMAT               = 0x0,
+    PCM_FORMAT                   = 0x1,
+    COMPRESSED_FORMAT            = 0x2,
+    COMPRESSED_FORCED_PCM_FORMAT = 0x4,
+    PASSTHROUGH_FORMAT = 0x8,
+    TRANSCODE_FORMAT = 0x10
 };
 
 struct alsa_handle_t {
@@ -343,6 +345,9 @@ public:
     status_t    openCapture(alsa_handle_t *handle, bool isMmapMode,
                             bool isCompressed);
     status_t    configureTranscode(alsa_handle_t *handle);
+    void        updateHDMIEDIDInfo();
+    int         getFormatHDMIIndexEDIDInfo(EDID_AUDIO_FORMAT_ID formatId);
+    void        getDevicesBasedOnOutputChannels(int devices, int *stereoDevices, int *multiChDevices);
 protected:
     friend class AudioHardwareALSA;
 
@@ -391,6 +396,7 @@ private:
     struct mixer*  mMixer;
     ALSAUseCaseList mUseCaseList;
     ALSAHandleList  *mDeviceList;
+    EDID_AUDIO_INFO mEDIDInfo;
 
     struct proxy_params {
         bool                mExitRead;
@@ -629,12 +635,13 @@ private:
     //Structure to hold mem buffer information
     class BuffersAllocated {
     public:
-        BuffersAllocated(void *buf1, int32_t nSize) :
-        memBuf(buf1), memBufsize(nSize), bytesToWrite(0)
+        BuffersAllocated(void *buf1, int32_t nSize, uint32_t no) :
+        memBuf(buf1), memBufsize(nSize), bytesToWrite(0), bufNo(no)
         {}
         void* memBuf;
         int32_t memBufsize;
         uint32_t bytesToWrite;
+        uint32_t bufNo;
     };
 
     AudioHardwareALSA  *mParent;
@@ -664,7 +671,7 @@ private:
     status_t            openDevice(char *pUseCase, bool bIsUseCase, int devices,int channels);
     status_t            closeDevice(alsa_handle_t *pDevice);
     status_t            doRouting(int devices);
-    void                getPcmDevices(int devices, int *stereoDevices, int *multiChDevices);
+    void                fixUpHdmiFormatBasedOnEDID();
     void                createThreadsForTunnelDecode();
     void                bufferAlloc(alsa_handle_t *handle, int bufIndex);
     void                bufferDeAlloc(int bufIndex);
