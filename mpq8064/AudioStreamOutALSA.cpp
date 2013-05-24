@@ -153,6 +153,7 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
             use_case = NULL;
         }
         mHandle->activeDevice = mDevices;
+        mHandle->devices = mDevices;
         if((!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,
                                  strlen(SND_USE_CASE_VERB_IP_VOICECALL))) ||
            (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP,

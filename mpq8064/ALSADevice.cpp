@@ -1297,9 +1297,9 @@ void ALSADevice::disableDevice(alsa_handle_t *handle)
                         if ((&(*it)) != handle && handle->activeDevice && it->activeDevice && (getDevices(it->activeDevice, NULL, NULL) & actualDevices)) {
                             ALOGD("disableRxDevice - false use case %s active Device %llx deviceToDisable %llx",
                                   it->useCase, it->activeDevice, deviceToDisable);
-                            if(getDeviceType(getDevices(it->activeDevice, NULL, NULL) & actualDevices, 0) & DEVICE_TYPE_RX)
+                            if(getDeviceType(getDevices(it->activeDevice, NULL, NULL) & actualDevices, 0) & getUseCaseType(it->useCase) & DEVICE_TYPE_RX)
                                 disableRxDevice = false;
-                            if(getDeviceType(getDevices(it->activeDevice, NULL, NULL) & actualDevices, 0) & DEVICE_TYPE_TX)
+                            if(getDeviceType(getDevices(it->activeDevice, NULL, NULL) & actualDevices, 0) & getUseCaseType(it->useCase) & DEVICE_TYPE_TX)
                                 disableTxDevice = false;
                         }
                     }
@@ -2147,7 +2147,7 @@ int ALSADevice::setUseCase(alsa_handle_t *handle, bool bIsUseCaseSet)
             return -1;
         }
     }
-    handle->devices = handle->activeDevice = updateDevices(handle->useCase, handle->devices);
+    handle->devices = handle->activeDevice = updateDevices(handle->useCase, handle->activeDevice);
     enableDevice(handle, bIsUseCaseSet);
 
    return 0;
