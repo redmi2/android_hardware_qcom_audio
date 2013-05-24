@@ -1001,6 +1001,11 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
       alsa_handle.mode = mode();
       alsa_handle.ucMgr = mUcMgr;
       alsa_handle.timeStampMode = SNDRV_PCM_TSTAMP_NONE;
+      alsa_handle.playbackMode = PLAY;
+      alsa_handle.hdmiFormat = devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL ?
+                               ROUTE_UNCOMPRESSED : ROUTE_NONE;
+      alsa_handle.spdifFormat = devices & AudioSystem::DEVICE_OUT_SPDIF ?
+                                 ROUTE_UNCOMPRESSED : ROUTE_NONE;
 
       char *use_case;
       snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
@@ -1734,5 +1739,85 @@ uint32_t AudioHardwareALSA::useCaseStringToEnum(const char *usecase) {
                                       , activeUsecase, usecase);
     return activeUsecase;
 }
+
+void AudioHardwareALSA::updatePCMHandleStatesOfOtherStreams(int device, int state)
+{
+    ALOGV("updatePCMHandleStatesOfOtherStreams- device : %d, state: %d", device, state);
+    Mutex::Autolock autolock1(mDeviceStateLock);
+    if(state == STANDBY) {
+        for(ALSAHandleList::iterator it = mDeviceList.begin();
+            it != mDeviceList.end(); ++it) {
+            /*
+            System tones go through HIFI
+            If any other PCM playback needs to be modified, update it here
+            */
+            if((!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI,
+                strlen(SND_USE_CASE_VERB_HIFI))) ||
+               (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_MUSIC,
+                strlen(SND_USE_CASE_MOD_PLAY_MUSIC)))) {
+                if(it->handle == NULL) {
+                    it->playbackMode = state;
+                    it->activeDevice = 0;
+                } else if(it->activeDevice == device) {
+                    mALSADevice->standby(&(*it));
+                    it->playbackMode = state;
+                    it->activeDevice = 0;
+                } else {
+                    mALSADevice->switchDeviceUseCase(&(*it),
+                                                     it->activeDevice & ~device,
+                                                     mode());
+                }
+            }
+        }
+    } else if(state == PLAY) {
+        for(ALSAHandleList::iterator it = mDeviceList.begin();
+            it != mDeviceList.end(); ++it) {
+            /*
+            System tones go through HIFI
+            If any other PCM playback needs to be modified, update it here
+            */
+            if((!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI,
+                strlen(SND_USE_CASE_VERB_HIFI))) ||
+               (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_MUSIC,
+                strlen(SND_USE_CASE_MOD_PLAY_MUSIC)))) {
+                if(it->handle == NULL) {
+                    it->playbackMode = PLAY;
+                } else {
+                    if(device & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+                        mALSADevice->setPlaybackFormat("LPCM",
+                                                       AudioSystem::DEVICE_OUT_AUX_DIGITAL,
+                                                       false);
+                        mALSADevice->setHdmiOutputProperties(&(*it), ROUTE_UNCOMPRESSED);
+                    }
+                    if(device & AudioSystem::DEVICE_OUT_SPDIF) {
+                        mALSADevice->setPlaybackFormat("LPCM",
+                                                       AudioSystem::DEVICE_OUT_SPDIF,
+                                                       false);
+                    }
+                    mALSADevice->switchDeviceUseCase(&(*it),
+                                                     it->activeDevice|device,
+                                                     mode());
+                }
+            }
+        }
+    }
+}
+
+int AudioHardwareALSA::getUnComprDeviceInCurrDevices(int devices)
+{
+    for(ALSAHandleList::iterator it = mDeviceList.begin();
+        it != mDeviceList.end(); ++it) {
+        if(mALSADevice->isTunnelPlaybackUseCase(it->useCase)) {
+            if((it->devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) &&
+               (it->type != ROUTE_UNCOMPRESSED))
+                devices &= ~AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+            if((it->devices & AudioSystem::DEVICE_OUT_SPDIF) &&
+               (it->type != ROUTE_UNCOMPRESSED))
+                devices &= ~AudioSystem::DEVICE_OUT_SPDIF;
+        }
+    }
+    return devices;
+}
+
 
 }       // namespace android_audio_legacy
