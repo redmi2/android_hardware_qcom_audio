@@ -313,6 +313,7 @@ public:
     int         getUseCaseType(const char *useCase);
     int32_t     get_linearpcm_channel_status(uint32_t sampleRate,
                                              unsigned char *channel_status);
+    void        get_compressed_channel_status(unsigned char *channel_status);
     int32_t     get_compressed_channel_status(void *audio_stream_data,
                                               uint32_t audio_frame_size,
                                               unsigned char *channel_status,

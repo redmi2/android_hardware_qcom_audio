@@ -1739,6 +1739,26 @@ int32_t ALSADevice::get_linearpcm_channel_status(uint32_t sampleRate,
     return status;
 }
 
+void ALSADevice::get_compressed_channel_status(
+                                 unsigned char *channel_status)
+{
+    int32_t status = 0;
+    unsigned char bit_index;
+    memset(channel_status,0,24);
+    bit_index = 0;
+    /* block start bit in preamble bit 3 */
+    set_bits(channel_status, 1, 1, &bit_index);
+
+    //compre out
+    bit_index = 1;
+    set_bits(channel_status, 1, 1, &bit_index);
+
+    // sample rate; fixed 48K for default/transcode
+    bit_index = 24;
+    set_bits(channel_status, 4, 0x04, &bit_index);
+
+}
+
 int32_t ALSADevice::get_compressed_channel_status(void *audio_stream_data,
                                                   uint32_t audio_frame_size,
                                                   unsigned char *channel_status,
@@ -1747,15 +1767,23 @@ int32_t ALSADevice::get_compressed_channel_status(void *audio_stream_data,
                                                   //            - AUDIO_PARSER_CODEC_DTS
 {
     unsigned char *streamPtr;
+    int ret = 0;
     streamPtr = (unsigned char *)audio_stream_data;
 
+    if (audio_stream_data == NULL || audio_frame_size == 0) {
+        ALOGW("no buffer to get channel status, return default for compress");
+        get_compressed_channel_status(channel_status);
+        return ret;
+    }
+
+    memset(channel_status,0,24);
     if(init_audio_parser(streamPtr, audio_frame_size, codec_type) == -1)
     {
         ALOGE("init audio parser failed");
         return -1;
     }
-    get_channel_status(channel_status, codec_type);
-    return 0;
+    ret = get_channel_status(channel_status, codec_type);
+    return ret;
 }
 
 status_t ALSADevice::setPlaybackVolume(int value, char *useCase)
