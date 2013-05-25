@@ -680,6 +680,15 @@ status_t ALSADevice::open(alsa_handle_t *handle)
         }
         return err;
     }
+    // if handle type is PCM_FORMAT and spdif or hdmi is present as active device
+    // set playbackformat for them with LPCM (they are not set from AudioHardwareALSA)
+    if (handle->type == PCM_FORMAT) {
+        ALOGV("setting spdif/hdmi format to lpcm: devices %x", (int)handle->activeDevice);
+        if (handle->activeDevice & AudioSystem::DEVICE_OUT_SPDIF)
+            setPlaybackFormat("LPCM", AudioSystem::DEVICE_OUT_SPDIF);
+        if (handle->activeDevice & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
+            setPlaybackFormat("LPCM", AudioSystem::DEVICE_OUT_AUX_DIGITAL);
+    }
 
     free(devName);
     return NO_ERROR;
