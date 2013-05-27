@@ -1492,9 +1492,11 @@ int AudioSessionOutALSA::getBufferLength()
     case AUDIO_FORMAT_HE_AAC_V1:
     case AUDIO_FORMAT_HE_AAC_V2:
     case AUDIO_FORMAT_AAC_ADIF:
+        bufferSize = AAC_BLOCK_PER_CHANNEL_MS11 * mChannels;
+        break;
     case AUDIO_FORMAT_AC3:
     case AUDIO_FORMAT_EAC3:
-        bufferSize = MS11_INPUT_BUFFER_SIZE;
+        bufferSize = AC3_BUFFER_SIZE;
         break;
     case AUDIO_FORMAT_DTS:
     case AUDIO_FORMAT_DTS_LBR:
