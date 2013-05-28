@@ -430,6 +430,21 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         param.remove(key);
     }
 
+    key = String8(SPDIF_DELAY_KEY);
+    if (param.getInt(key, devValue) == NO_ERROR) {
+      ALOGD("AudioHardwareALSA:setParameters:Delay for SPDIF = %d\n", devValue);
+      mALSADevice->setPlaybackOutputDelay(AudioSystem::DEVICE_OUT_SPDIF,
+                                          devValue);
+      param.remove(key);
+    }
+
+    key = String8(HDMI_DELAY_KEY);
+    if (param.getInt(key, devValue) == NO_ERROR) {
+      ALOGD("AudioHardwareALSA:setParameters:Delay for HDMI = %d\n", devValue);
+      mALSADevice->setPlaybackOutputDelay(AudioSystem::DEVICE_OUT_AUX_DIGITAL,
+                                          devValue);
+      param.remove(key);
+    }
 
     if (param.size()) {
         status = BAD_VALUE;

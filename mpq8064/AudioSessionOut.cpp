@@ -670,6 +670,8 @@ void AudioSessionOutALSA::updateDeviceSupportedFormats()
                ALOGV("Fallback to uncompressed as EAC3 pass through not supported on SPDIF");
                mSpdifFormat = UNCOMPRESSED;
            }
+        } else {
+           mSpdifFormat = UNCOMPRESSED;
         }
     }
 
@@ -686,6 +688,8 @@ void AudioSessionOutALSA::updateDeviceSupportedFormats()
                 ALOGD("fallback to uncompressed as sample rate is less than 32kHz");
                 mHdmiFormat = UNCOMPRESSED;
             }
+        } else {
+           mHdmiFormat = UNCOMPRESSED;
         }
         fixUpHdmiFormatBasedOnEDID();
     }
@@ -1901,13 +1905,13 @@ void AudioSessionOutALSA::setSpdifChannelStatus(char *buffer, size_t bytes,
                                                 audio_parser_code_type codec_type)
 {
     ALOGV("setSpdifChannelStatus");
-    if(mSpdifFormat == FORMAT_PCM) {
+    if(mSpdifFormat == UNCOMPRESSED) {
         if (mALSADevice->get_linearpcm_channel_status(mSampleRate,
                               mChannelStatus)) {
             ALOGE("channel status set error ");
         }
         mALSADevice->setChannelStatus(mChannelStatus);
-    } else if(mSpdifFormat == FORMAT_COMPR) {
+    } else {
         if (mALSADevice->get_compressed_channel_status(
                              buffer, bytes, mChannelStatus,
                              codec_type)) {
