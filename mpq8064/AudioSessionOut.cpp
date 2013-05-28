@@ -1821,12 +1821,19 @@ status_t AudioSessionOutALSA::openDevice(char *useCase, bool bIsUseCase, int dev
             // make sure that buffersize is 32 byte aligned
             // and greater minimum value supported in driver
             mInputBufferSize = 32*((int)(mInputBufferSize + 2*32)/(int)(4*32));
-            alsa_handle.bufferSize = mInputBufferSize * mInputBufferCount;
-            alsa_handle.periodSize = mInputBufferSize;
         }
     }
-    else
+    else {
        alsa_handle.type = PCM_FORMAT;
+       if (mSampleRate <= 16000) {
+           ALOGD("low frequency clip, reducing buff size to 1/4th");
+           //Add dummy count to make sure buffersize is 32 byte aligned and divisible by no.of channles
+           if(mChannels == 7) mInputBufferSize = 32*((int)(MULTI_CHANNEL_MAX_PERIOD_SIZE + 7*32)/(int)(4*32));
+           else mInputBufferSize = 32*((int)(MULTI_CHANNEL_MAX_PERIOD_SIZE + 15*32)/(int)(4*32));
+       }
+    }
+    alsa_handle.bufferSize = mInputBufferSize * mInputBufferCount;
+    alsa_handle.periodSize = mInputBufferSize;
     strlcpy(alsa_handle.useCase, useCase, sizeof(alsa_handle.useCase));
 
     if (mALSADevice->setUseCase(&alsa_handle, bIsUseCase))
