@@ -2063,7 +2063,12 @@ status_t AudioSessionOutALSA::doRouting(int devices)
 
     if(devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
         mALSADevice->updateHDMIEDIDInfo();
-    updateDeviceSupportedFormats();
+
+     mDevices = devices;
+     updateDeviceSupportedFormats();
+     //calling updateDecodeTypeAndRoutingStates() here to update
+     // routing flags for the new device
+     updateDecodeTypeAndRoutingStates();
 
     if(isInputBufferingModeReqd())
         mBitstreamSM->startInputBufferingMode();
@@ -2142,6 +2147,7 @@ void AudioSessionOutALSA::handleSwitchAndOpenForDeviceSwitch(int devices, int fo
                 mALSADevice->switchDeviceUseCase(mRxHandle[index],
                                                  devices,
                                                  mParent->mode());
+                mRxHandleDevices[index] = devices;
                 break;
             }
         }
