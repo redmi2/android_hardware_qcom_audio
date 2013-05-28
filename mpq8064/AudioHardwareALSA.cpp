@@ -127,6 +127,8 @@ AudioHardwareALSA::AudioHardwareALSA() :
     mA2dpThread = NULL;
     mSpdifOutputFormat = UNCOMPRESSED;
     mHdmiOutputFormat = UNCOMPRESSED;
+    mHdmiOutputChannels = MAX_INPUT_CHANNELS_SUPPORTED;
+    mSpdifOutputChannels = STEREO_CHANNELS;
 }
 
 AudioHardwareALSA::~AudioHardwareALSA()
@@ -237,6 +239,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
     status_t status = NO_ERROR;
     int device;
     int btRate;
+    int devValue;
     ALOGD("setParameters() %s", keyValuePairs.string());
 
     key = String8(TTY_MODE_KEY);
@@ -374,29 +377,59 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         param.remove(key);
     }
 
-    key = String8(SPDIF_FORMAT_KEY);
-    if (param.get(key, value) == NO_ERROR) {
-        if(value == "ac3")
-            mSpdifOutputFormat = COMPRESSED_CONVERT_ANY_AC3;
-        else if(value == "dts")
-            mSpdifOutputFormat = COMPRESSED_CONVERT_ANY_DTS;
-        else
-            mSpdifOutputFormat = UNCOMPRESSED;
-        mALSADevice->mSpdifFormat = mSpdifOutputFormat;
+    key = String8(HDMI_FORMAT_KEY);
+    if (param.getInt(key, devValue) == NO_ERROR) {
+        ALOGD("format set on HDMI: %d", devValue);
+        mHdmiOutputFormat = (devValue < UNCOMPRESSED) ||
+                            (devValue >= ALL_DEVICE_FORMATS) ?
+                            UNCOMPRESSED : devValue;
         param.remove(key);
     }
 
-    key = String8(HDMI_FORMAT_KEY);
-    if (param.get(key, value) == NO_ERROR) {
-        if(value == "ac3")
-            mHdmiOutputFormat = COMPRESSED_CONVERT_ANY_AC3;
-        else if(value == "dts")
-            mHdmiOutputFormat = COMPRESSED_CONVERT_ANY_DTS;
-        else
-            mHdmiOutputFormat = UNCOMPRESSED;
-        mALSADevice->mHdmiFormat = mHdmiOutputFormat;
+    key = String8(HDMI_MUTE_KEY);
+    if (param.getInt(key, devValue) == NO_ERROR) {
+        ALOGD("mute option on HDMI, 1-on, 0-off: %d", devValue);
+        mHdmiMuteOn = devValue ? true : false;
+        mALSADevice->setDeviceMute(AudioSystem::DEVICE_OUT_AUX_DIGITAL, mHdmiMuteOn);
         param.remove(key);
     }
+
+    key = String8(HDMI_OCHANNELS_KEY);
+    if (param.getInt(key, devValue) == NO_ERROR) {
+        ALOGD("output channels set forced on  HDMI: %d", devValue);
+        mHdmiOutputChannels = devValue < DEFAULT_CHANNEL_MODE ?
+                              DEFAULT_CHANNEL_MODE :
+                              devValue > MAX_SUPPORTED_CHANNELS ?
+                                  MAX_SUPPORTED_CHANNELS: devValue;
+        mALSADevice->mHdmiOutputChannels = mHdmiOutputChannels;
+        param.remove(key);
+    }
+
+    key = String8(SPDIF_FORMAT_KEY);
+    if (param.getInt(key, devValue) == NO_ERROR) {
+        ALOGD("format set on SPDIF: %d", devValue);
+        mSpdifOutputFormat = (devValue < UNCOMPRESSED) ||
+                            (devValue >= ALL_DEVICE_FORMATS) ?
+                            UNCOMPRESSED : devValue;
+        param.remove(key);
+    }
+
+    key = String8(SPDIF_MUTE_KEY);
+    if (param.getInt(key, devValue) == NO_ERROR) {
+        ALOGD("mute option on SPDIF, 1-on, 0-off: %d", devValue);
+        mSpdifMuteOn = devValue ? true : false;
+        mALSADevice->setDeviceMute(AudioSystem::DEVICE_OUT_SPDIF, mSpdifMuteOn);
+        param.remove(key);
+    }
+
+    key = String8(SPDIF_OCHANNELS_KEY);
+    if (param.getInt(key, devValue) == NO_ERROR) {
+        ALOGD("output channels set forced on SPDIF: %d", devValue);
+        mSpdifOutputChannels = DEFAULT_CHANNEL_MODE;
+        mALSADevice->mSpdifOutputChannels = mSpdifOutputChannels;
+        param.remove(key);
+    }
+
 
     if (param.size()) {
         status = BAD_VALUE;
