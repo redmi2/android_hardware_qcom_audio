@@ -1840,6 +1840,7 @@ char *use_case;
     }
     else {
         ALOGE("AudioHardwareAlsa: voice call setup was unsuccesfull");
+        mDeviceList.erase(it);
         return NO_INIT;
     }
 
