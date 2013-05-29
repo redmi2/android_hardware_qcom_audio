@@ -133,6 +133,7 @@ BIT STREAM STATEMACHINE
 #define PCM_BLOCK_PER_CHANNEL_MS11      1536*2
 #define AAC_BLOCK_PER_CHANNEL_MS11      768
 #define NUMBER_BITS_IN_A_BYTE           8
+#define AC3_BUFFER_SIZE                 1920*2
 
 #define PCM_2CH_OUT                 0
 #define PCM_OUT                     0 // should be same as PCM_OUT
