@@ -113,6 +113,9 @@ KEYVALUE PAIR FOR SET/GET PARAMETER
 #define HDMI_OCHANNELS_KEY  "hdmi_output_channels"
 #define SPDIF_DELAY_KEY     "spdif_delay"
 #define HDMI_DELAY_KEY      "hdmi_delay"
+#define STANDBY_DEVICES_KEY "standby_devices"
+#define RESUME_DEVICES_KEY  "resume_devices"
+#define COMPR_STANDBY_DEVICES_KEY   "compr_standby_devices"
 
 #define ANC_FLAG        0x00000001
 #define DMIC_FLAG       0x00000002
@@ -334,13 +337,14 @@ enum {
 playback controls
 */
 enum {
-    PLAY = 0,
-    PAUSE,
-    RESUME,
-    SEEK,
-    EOS,
-    STOP,
-    STANDBY
+    PLAY = 1,
+    PAUSE = 1<<1,
+    RESUME = 1<<2,
+    SEEK = 1<<3,
+    EOS = 1<<4,
+    STOP = 1<<5,
+    STANDBY = 1<<6,
+    DEROUTE = 1<<7
 };
 /*
 Multiple instance of use case
@@ -538,6 +542,16 @@ enum {
     COMPRESSED_FORCED_PCM_FORMAT = 2,
     COMPRESSED_PASSTHROUGH_FORMAT = 3
 };
+
+enum {
+    STANDBY_LPCM_SPDIF  = 1,
+    STANDBY_LPCM_HDMI   = 1<<1,
+    STANDBY_COMPR_SPDIF = 1<<3,
+    STANDBY_COMPR_HDMI  = 1<<4,
+    STANDBY_LPCM_ALL    = STANDBY_LPCM_SPDIF | STANDBY_LPCM_HDMI,
+    STANDBY_COMPR_ALL   = STANDBY_COMPR_SPDIF | STANDBY_COMPR_HDMI
+};
+
 /******************************************************************************
 FLUENCE
 *******************************************************************************/
@@ -652,7 +666,7 @@ public:
                                               enum audio_parser_code_type codec_type);
 
     status_t    setPlaybackVolume(alsa_handle_t *handle, int volume);
-    status_t    setPlaybackFormat(const char *value, int device, int dtsTranscode);
+    status_t    setPlaybackFormat(int device, bool isCompressed);
     status_t    setCaptureFormat(const char *value);
     status_t    setChannelMap(alsa_handle_t *handle, int maxChannels,
                               char *channelMap);
@@ -678,7 +692,7 @@ public:
     bool        isTunnelPseudoPlaybackUseCase(const char *useCase);
     char*       getPlaybackUseCase(int type, bool isModifier);
     void        freePlaybackUseCase(const char *useCase);
-    void        setHdmiOutputProperties(alsa_handle_t *handlem, int type);
+    void        setHdmiOutputProperties(int type);
     int         mSpdifFormat;
     int         mHdmiFormat;
     int         mSpdifOutputChannels;
@@ -833,13 +847,9 @@ public:
 
     virtual status_t    standby();
 
-    virtual status_t    setParameters(const String8& keyValuePairs) {
-        return ALSAStreamOps::setParameters(keyValuePairs);
-    }
+    virtual status_t    setParameters(const String8& keyValuePairs);
 
-    virtual String8     getParameters(const String8& keys) {
-        return ALSAStreamOps::getParameters(keys);
-    }
+    virtual String8     getParameters(const String8& keys);
 
     // return the number of audio frames written by the audio dsp to DAC since
     // the output has exited standby
@@ -942,7 +952,9 @@ private:
     int                 mHdmiOutputFormat;
     int                 mSpdifFormat;
     int                 mHdmiFormat;
-
+    int                 mStandByDevices;
+    int                 mStandByFormats;
+    bool                mConfiguringSessions;
     // decoder specifics
     int                 mDecoderType;
     bool                mDecoderConfigSet;
@@ -1024,7 +1036,6 @@ private:
     status_t            openTempBufForMetadataModeRendering();
     status_t            closeDevice(alsa_handle_t *pHandle);
     status_t            a2dpRenderingControl(int state);
-    status_t            setPlaybackFormat(int devices, int deviceFormat);
     void                setMS11ChannelMap(alsa_handle_t *handle);
     void                setPCMChannelMap(alsa_handle_t *handle);
     int                 setDecodeConfig(char *buffer, size_t bytes);
@@ -1041,8 +1052,10 @@ private:
     void                resetRxHandleState(int index);
     void                handleSwitchAndOpenForDeviceSwitch(int devices, int format);
     void                handleCloseForDeviceSwitch(int format);
-    void                handleIgnoringPCMBeforeEnableComprPassthrough();
-    void                updatePCMHandleStatesInDeviceList(int devices, int state);
+    void                updateSessionDevices(int device);
+    void                updateDevicesInSessionList(int devices, int state);
+    void                updateStandByDevices(int device, int enable);
+    bool                isDeviceinStandByFormats(int devices);
 #ifdef DEBUG
     enum {
         INPUT = 0,
@@ -1250,7 +1263,6 @@ private:
     // Playback
     void                setRoutingFlagsBasedOnConfig();
     void                setSpdifHdmiRoutingFlags(int devices);
-    status_t            setPlaybackFormat();
     status_t            openRoutingDevice(char *useCase, bool bIsUseCase,
                                           int devices);
     status_t            openPcmDevice(int devices);
@@ -1465,7 +1477,7 @@ public:
     int         buffer_data(struct pcm *pcm, void *data, unsigned count);
     int         is_buffer_available(struct pcm *pcm, void *data, int count, int format);
     int         hw_pcm_write(struct pcm *pcm, void *data, unsigned count);
-    void        updatePCMHandleStatesOfOtherStreams(int device, int state);
+    void        updateDevicesOfOtherSessions(int device, int state);
     int         getUnComprDeviceInCurrDevices(int devices);
 
     /**This method dumps the state of the audio hardware */
@@ -1488,7 +1500,7 @@ private:
     uint32_t    getA2DPActiveUseCases_l();
     void        clearA2DPActiveUseCases_l(uint32_t activeUsecase);
     uint32_t    useCaseStringToEnum(const char *usecase);
-
+    void        standbySessionDevice(int device);
 protected:
     virtual status_t    dump(int fd, const Vector<String16>& args);
     status_t            doRouting(int device);
@@ -1524,6 +1536,8 @@ protected:
     bool                mHdmiMuteOn;
     int                 mSpdifOutputChannels;
     int                 mHdmiOutputChannels;
+    int                 mSpdifRenderFormat;
+    int                 mHdmiRenderFormat;
 
     //A2DP variables
     audio_stream_out   *mA2dpStream;
@@ -1553,7 +1567,7 @@ protected:
       USECASE_HWOUTPUT = 0x11,
     };
     uint32_t mA2DPActiveUseCases;
-
+    List <AudioStreamOut *> mSessions;
 public:
     bool mRouteAudioToA2dp;
 };
