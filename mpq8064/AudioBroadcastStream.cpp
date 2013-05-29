@@ -1619,12 +1619,18 @@ void AudioBroadcastStreamALSA::captureThreadEntry()
                      ALOGD("format: %d, frameSize: %d", mReadMetaData.formatId,
                                          frameSize);
                 }
-                if(NO_ERROR != doRoutingSetup()){
-                  /*If there is some failure while doing the routing setup then break the while loop
-                    and kill the capture thread. This can not be communicated to TvPlayer as
-                    OpenBroadCast call has returned after creating the capture thread*/
-                    break;
-                 }
+                {
+                     Mutex::Autolock autoLock(mParent->mLock);
+                     ALOGD("Setup the output path");
+                     if(NO_ERROR != doRoutingSetup()){
+                       /*If there is some failure while doing the routing
+                         setup then break the while loop and kill the capture
+                         thread. This can not be communicated to TvPlayer as
+                         OpenBroadCast call has returned after creating
+                         the capture thread*/
+                         break;
+                      }
+                }
                 mSignalToSetupRoutingPath = false;
             } else if(mRoutingSetupDone == false) {
                 ALOGD("Routing Setup is not ready. Dropping the samples");
