@@ -2689,11 +2689,13 @@ status_t ALSADevice::setPlaybackHardwareParams(alsa_handle_t *handle)
         break;
     case AUDIO_FORMAT_EAC3:
         ALOGV("EAC3 CODEC");
-        //NOTE: change this to eac3 pass through
         compr_params.codec.id = (handle->type == ROUTE_COMPRESSED) ?
-                                compr_cap.codecs[2] /* eac3 pas through */ :
+                                compr_cap.codecs[14] :
                                 (handle->type == ROUTE_SW_TRANSCODED_COMPRESSED) ?
-                                    compr_cap.codecs[2]: compr_cap.codecs[2];
+                                compr_cap.codecs[2]: compr_cap.codecs[2];
+        // EAC3 pass through needs to be confogured with 4 time the sample rate
+        handle->sampleRate = (handle->type == ROUTE_COMPRESSED) ?
+                             handle->sampleRate*4 : handle->sampleRate;
         break;
     case AUDIO_FORMAT_MP3:
          ALOGV("MP3 CODEC");
@@ -2759,7 +2761,7 @@ Compressed driver to handle both meta and no meta data mode.
 */
     }
     if(handle->sampleRate > MAX_SUPPORTED_SAMPLING_RATE) {
-        ALOGE("Sample rate > max supported, opening the driver with max: %d",
+        ALOGD("Sample rate > max supported, opening the driver with max: %d",
               MAX_SUPPORTED_SAMPLING_RATE);
         handle->sampleRate     = MAX_SUPPORTED_SAMPLING_RATE;
     }
