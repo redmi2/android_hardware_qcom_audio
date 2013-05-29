@@ -340,8 +340,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     char *ddpEndpParams = NULL;
 
     ALOGD("handle->format: 0x%x", handle->format);
-    if ((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
-        (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL)) ||
+    if (isTunnelUseCase(handle->useCase) ||
         (!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED)) ||
         (!strcmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED)) ||
         (!strcmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_COMPRESSED_VOICE_DL)) ||
@@ -477,8 +476,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     param_init(params);
     if ((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) ||
         (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_LPA)) ||
-        (!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
-        (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL))) {
+        isTunnelUseCase(handle->useCase)) {
         param_set_mask(params, SNDRV_PCM_HW_PARAM_ACCESS,
                        SNDRV_PCM_ACCESS_MMAP_INTERLEAVED);
     }
@@ -497,7 +495,13 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
 #endif
             ) {
             if ((strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL)) &&
+                (strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2)) &&
+                (strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL3)) &&
+                (strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL4)) &&
                 (strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL)) &&
+                (strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2)) &&
+                (strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL3)) &&
+                (strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL4)) &&
                 (strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED)) &&
                 (strcmp(handle->useCase, SND_USE_CASE_MOD_CAPTURE_COMPRESSED_VOICE_UL_DL)) &&
                 (strcmp(handle->useCase, SND_USE_CASE_VERB_CAPTURE_COMPRESSED_VOICE_UL_DL)) &&
@@ -723,7 +727,8 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
         }
     }
 #endif
-
+    if (mSpkrProt)
+        mSpkrProt->cancelCalibration();
     snd_use_case_get(handle->ucMgr, "_verb", (const char **)&use_case);
     mods_size = snd_use_case_get_list(handle->ucMgr, "_enamods", &mods_list);
     if (rxDevice != NULL) {
@@ -955,8 +960,7 @@ status_t ALSADevice::open(alsa_handle_t *handle)
     // should not be used.
     if ((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER)) ||
         (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_LPA)) ||
-        (!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
-        (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL))) {
+        isTunnelUseCase(handle->useCase)) {
         ALOGD("LPA/tunnel use case");
         flags |= PCM_MMAP;
         flags |= DEBUG_ON;
@@ -1037,8 +1041,7 @@ status_t ALSADevice::open(alsa_handle_t *handle)
     }
 
 #ifdef TARGET_B_FAMILY
-    if(!((!strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
-        (!strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL))))
+    if(!(isTunnelUseCase(handle->useCase)))
         if(handle->channels > 2)
             setChannelMap(handle, MAX_HDMI_CHANNEL_CNT);
 #endif
@@ -1607,7 +1610,8 @@ status_t ALSADevice::route(alsa_handle_t *handle, uint32_t devices, int mode)
 int ALSADevice::getUseCaseType(const char *useCase)
 {
     ALOGD("use case is %s\n", useCase);
-    if (!strncmp(useCase, SND_USE_CASE_VERB_HIFI,
+    if (isTunnelUseCase(useCase) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_HIFI,
             MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_HIFI2,
             MAX_LEN(useCase, SND_USE_CASE_VERB_HIFI2)) ||
@@ -1615,8 +1619,6 @@ int ALSADevice::getUseCaseType(const char *useCase)
             MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI_LOWLATENCY_MUSIC)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER,
             MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI_LOW_POWER)) ||
-        !strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
-            MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI_TUNNEL)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_HIFI2,
             MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI2)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_DIGITAL_RADIO,
@@ -1631,8 +1633,6 @@ int ALSADevice::getUseCaseType(const char *useCase)
             MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_MUSIC2)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_LPA,
             MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_LPA)) ||
-        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL,
-            MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_TUNNEL)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_FM,
             MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_FM))) {
         return USECASE_TYPE_RX;
@@ -2911,7 +2911,7 @@ status_t ALSADevice::openProxyDevice()
            mProxyParams.mProxyPcmHandle->period_size/2
            : mProxyParams.mProxyPcmHandle->period_size/4;
    sparams->start_threshold = 1;
-   sparams->stop_threshold = mProxyParams.mProxyPcmHandle->buffer_size;
+   sparams->stop_threshold = INT_MAX;
    sparams->xfer_align = (mProxyParams.mProxyPcmHandle->flags & PCM_MONO) ?
            mProxyParams.mProxyPcmHandle->period_size/2
            : mProxyParams.mProxyPcmHandle->period_size/4; /* needed for old kernels */
