@@ -703,6 +703,8 @@ private:
     FILE *mFpDumpInput;
     FILE *mFpDumpPCMOutput;
 #endif
+    int64_t  mSavedTimestamp;
+
 };
 
 // ----------------------------------------------------------------------------
