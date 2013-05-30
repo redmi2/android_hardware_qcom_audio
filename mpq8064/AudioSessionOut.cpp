@@ -147,6 +147,11 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     -------------------------------------------------------------------------*/
     updateRxHandleStates();
     /* ------------------------------------------------------------------------
+    Ignoring pcm on hdmi or spdif if the required playback on the devices is
+    compressed pass through
+    -------------------------------------------------------------------------*/
+    handleIgnoringPCMBeforeEnableComprPassthrough();
+    /* ------------------------------------------------------------------------
     setup routing
     -------------------------------------------------------------------------*/
     *status = routingSetup();
@@ -1258,6 +1263,7 @@ status_t AudioSessionOutALSA::openPlaybackDevice(int index, int devices,
                                                  int deviceFormat)
 {
     ALOGV("openPlaybackDevice");
+    Mutex::Autolock autolock1(mParent->mDeviceStateLock);
     status_t status = NO_ERROR;
     char *use_case;
 
@@ -1319,6 +1325,11 @@ status_t AudioSessionOutALSA::openPlaybackDevice(int index, int devices,
         mRxHandle[index]->mode = mParent->mode();
         mRxHandle[index]->ucMgr = mUcMgr;
         mRxHandle[index]->module = mALSADevice;
+        mRxHandle[index]->playbackMode = PLAY;
+        mRxHandle[index]->hdmiFormat = devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL ?
+                                       ROUTE_DSP_TRANSCODED_COMPRESSED : ROUTE_NONE;
+        mRxHandle[index]->spdifFormat = devices & AudioSystem::DEVICE_OUT_SPDIF ?
+                                       ROUTE_DSP_TRANSCODED_COMPRESSED : ROUTE_NONE;
         //Passthrough to be configured with 2 channels
         mRxHandle[index]->channels = 2;
         mRxHandle[index]->sampleRate = 48000;
@@ -1398,6 +1409,11 @@ status_t AudioSessionOutALSA::openDevice(const char *useCase, bool bIsUseCase,
     alsa_handle.metaDataMode= true;
     alsa_handle.format      = format;
     alsa_handle.type        = deviceFormat;
+    alsa_handle.playbackMode = PLAY;
+    alsa_handle.hdmiFormat  = devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL ?
+                              deviceFormat : ROUTE_NONE;
+    alsa_handle.spdifFormat = devices & AudioSystem::DEVICE_OUT_SPDIF ?
+                              deviceFormat : ROUTE_NONE;
 
     strlcpy(alsa_handle.useCase, useCase, sizeof(alsa_handle.useCase));
     if (mALSADevice->setUseCase(&alsa_handle, bIsUseCase))
@@ -1535,6 +1551,9 @@ status_t AudioSessionOutALSA::closeDevice(alsa_handle_t *pHandle)
     if(pHandle) {
         ALOGV("useCase %s", pHandle->useCase);
         status = mALSADevice->close(pHandle);
+        if(pHandle->type != ROUTE_UNCOMPRESSED)
+            updatePCMHandleStatesInDeviceList(pHandle->devices, PLAY);
+        Mutex::Autolock autolock1(mParent->mDeviceStateLock);
         for(ALSAHandleList::iterator it = mParent->mDeviceList.begin();
             it != mParent->mDeviceList.end(); ++it) {
             alsa_handle_t *it_dup = &(*it);
@@ -2155,6 +2174,8 @@ void AudioSessionOutALSA::handleSwitchAndOpenForDeviceSwitch(int devices, int fo
         }
     }
     if(index == mNumRxHandlesActive) {
+        if(format != ROUTE_UNCOMPRESSED)
+            updatePCMHandleStatesInDeviceList(devices, STANDBY);
         mRxHandleDevices[index] = devices;
         mRxHandleRouteFormat[index] = format;
         mRxHandleRouteFormatType[index] = getDeviceFormat(devices);
@@ -2192,6 +2213,38 @@ void AudioSessionOutALSA::handleCloseForDeviceSwitch(int format)
         }
     }
     return;
+}
+
+/*******************************************************************************
+Description: Ignoring pcm on hdmi or spdif if the required playback on the
+             devices is compressed pass through
+*******************************************************************************/
+void AudioSessionOutALSA::handleIgnoringPCMBeforeEnableComprPassthrough()
+{
+    ALOGV("handleIgnoringPCMBeforeEnableComprPassthrough");
+    for(int index = 0; index < mNumRxHandlesActive; index++) {
+        ALOGV("mRxHandleDevices: %d", mRxHandleDevices[index]);
+        if(mRxHandleRouteFormat[index] != ROUTE_UNCOMPRESSED) {
+            updatePCMHandleStatesInDeviceList(mRxHandleDevices[index], STANDBY);
+        }
+    }
+}
+
+
+/*******************************************************************************
+Description: update the pcm handle statues of pcm streams (system tones) for
+             HDMI and SPDIF
+*******************************************************************************/
+void AudioSessionOutALSA::updatePCMHandleStatesInDeviceList(int devices, int state)
+{
+    if(devices & AudioSystem::DEVICE_OUT_SPDIF)
+        mParent->updatePCMHandleStatesOfOtherStreams(
+                                                 AudioSystem::DEVICE_OUT_SPDIF,
+                                                 state);
+    if(devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
+        mParent->updatePCMHandleStatesOfOtherStreams(
+                                                 AudioSystem::DEVICE_OUT_AUX_DIGITAL,
+                                                 state);
 }
 
 #if DEBUG

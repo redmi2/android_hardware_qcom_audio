@@ -2768,28 +2768,8 @@ Compressed driver to handle both meta and no meta data mode.
     if(handle->channels > MAX_SUPPORTED_CHANNELS)
         handle->channels = MAX_SUPPORTED_CHANNELS;
 
-    EDID_AUDIO_INFO info = { 0 };
-
-    if (handle->devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
-        int hdmiChannels = 2;
-        char channelMap[MAX_HDMI_CHANNEL_CNT] = {PCM_CHANNEL_FL, PCM_CHANNEL_FR,
-                                                 0, 0, 0, 0, 0 , 0};
-        int channelAllocation = 0;
-        if(handle->type == ROUTE_UNCOMPRESSED) {
-            int index = getFormatHDMIIndexEDIDInfo(LPCM);
-            if(index >=0) {
-                hdmiChannels = mEDIDInfo.AudioBlocksArray[index].nChannels;
-                ALOGV("hdmiChannels form edid: %d", hdmiChannels);
-                memcpy(channelMap, mEDIDInfo.channelMap, MAX_HDMI_CHANNEL_CNT);
-                channelAllocation = mEDIDInfo.channelAllocation;
-            }
-        }
-        setHDMIChannelCount(hdmiChannels);
-        pcm_set_channel_map(NULL, mMixer, MAX_HDMI_CHANNEL_CNT,
-                            channelMap);
-        setChannelAlloc(channelAllocation);
-    }
-
+    if (handle->devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
+        setHdmiOutputProperties(handle, handle->type);
     ALOGD("setHardwareParams: reqBuffSize %d, periodSize %d, channels %d, sampleRate %d.",
          (int) reqBuffSize, handle->periodSize, handle->channels, handle->sampleRate);
 
@@ -2842,6 +2822,27 @@ Compressed driver to handle both meta and no meta data mode.
         handle->latency = 0;
 
     return NO_ERROR;
+}
+
+void ALSADevice::setHdmiOutputProperties(alsa_handle_t *handle, int type)
+{
+    int hdmiChannels = 2;
+    char channelMap[MAX_HDMI_CHANNEL_CNT] = {PCM_CHANNEL_FL, PCM_CHANNEL_FR,
+                                             0, 0, 0, 0, 0 , 0};
+    int channelAllocation = 0;
+    if(type == ROUTE_UNCOMPRESSED) {
+        int index = getFormatHDMIIndexEDIDInfo(LPCM);
+        if(index >=0) {
+            hdmiChannels = mEDIDInfo.AudioBlocksArray[index].nChannels;
+            ALOGV("hdmiChannels form edid: %d", hdmiChannels);
+            memcpy(channelMap, mEDIDInfo.channelMap, MAX_HDMI_CHANNEL_CNT);
+            channelAllocation = mEDIDInfo.channelAllocation;
+        }
+    }
+    setHDMIChannelCount(hdmiChannels);
+    pcm_set_channel_map(NULL, mMixer, MAX_HDMI_CHANNEL_CNT,
+                        channelMap);
+    setChannelAlloc(channelAllocation);
 }
 
 status_t ALSADevice::setPlaybackSoftwareParams(alsa_handle_t *handle)

@@ -338,7 +338,9 @@ enum {
     PAUSE,
     RESUME,
     SEEK,
-    EOS
+    EOS,
+    STOP,
+    STANDBY
 };
 /*
 Multiple instance of use case
@@ -565,6 +567,9 @@ struct alsa_handle_t {
     unsigned int        periodSize;
     struct pcm *        rxHandle;
     uint32_t            activeDevice;
+    uint8_t             playbackMode;
+    uint8_t             hdmiFormat;
+    uint8_t             spdifFormat;
     snd_use_case_mgr_t  *ucMgr;
 };
 typedef List<alsa_handle_t> ALSAHandleList;
@@ -673,6 +678,7 @@ public:
     bool        isTunnelPseudoPlaybackUseCase(const char *useCase);
     char*       getPlaybackUseCase(int type, bool isModifier);
     void        freePlaybackUseCase(const char *useCase);
+    void        setHdmiOutputProperties(alsa_handle_t *handlem, int type);
     int         mSpdifFormat;
     int         mHdmiFormat;
     int         mSpdifOutputChannels;
@@ -1035,7 +1041,8 @@ private:
     void                resetRxHandleState(int index);
     void                handleSwitchAndOpenForDeviceSwitch(int devices, int format);
     void                handleCloseForDeviceSwitch(int format);
-
+    void                handleIgnoringPCMBeforeEnableComprPassthrough();
+    void                updatePCMHandleStatesInDeviceList(int devices, int state);
 #ifdef DEBUG
     enum {
         INPUT = 0,
@@ -1458,6 +1465,8 @@ public:
     int         buffer_data(struct pcm *pcm, void *data, unsigned count);
     int         is_buffer_available(struct pcm *pcm, void *data, int count, int format);
     int         hw_pcm_write(struct pcm *pcm, void *data, unsigned count);
+    void        updatePCMHandleStatesOfOtherStreams(int device, int state);
+    int         getUnComprDeviceInCurrDevices(int devices);
 
     /**This method dumps the state of the audio hardware */
     //virtual status_t dumpState(int fd, const Vector<String16>& args);
@@ -1494,7 +1503,7 @@ protected:
     snd_use_case_mgr_t *mUcMgr;
     ALSAHandleList      mDeviceList;
     Mutex               mLock;
-
+    Mutex               mDeviceStateLock;
 
     uint32_t            mCurDevice;
     uint32_t            mCurMode;

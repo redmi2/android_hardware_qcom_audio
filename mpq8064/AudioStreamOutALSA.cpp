@@ -118,6 +118,26 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
 
     int write_pending = bytes;
     bool bIsUseCaseSet = false;
+    int devices;
+
+    /*
+    If the handle was made to NULL and put to STOP by other streams,
+    fake that the handle is valid and rendering data in real time to AudioFlinger
+    so that no underruns happen in framework
+    */
+    {
+        Mutex::Autolock autolock1(mParent->mDeviceStateLock);
+        devices = mParent->getUnComprDeviceInCurrDevices(mDevices);
+        ALOGV("mDevices: %d, devices: %d", mDevices, devices);
+        if((mHandle->handle == NULL) && (mHandle->playbackMode == STANDBY) &&
+           (mHandle->channels)) {
+            mParent->mDeviceStateLock.unlock();
+            int periodTimeInUS = (int)((bytes*1000)/(96*mHandle->channels));
+            ALOGD("Ignoring pcm on device with compressed pass through playback");
+            usleep(periodTimeInUS);
+            return bytes;
+        }
+    }
     if((mHandle->handle == NULL) && (mHandle->rxHandle == NULL) &&
          (strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,
                               strlen(SND_USE_CASE_VERB_IP_VOICECALL))) &&
@@ -152,7 +172,12 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
             free(use_case);
             use_case = NULL;
         }
-        mHandle->activeDevice = mDevices;
+        mHandle->activeDevice = devices;
+        mHandle->playbackMode = PLAY;
+        mHandle->hdmiFormat = devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL ?
+                              ROUTE_UNCOMPRESSED : ROUTE_NONE;
+        mHandle->spdifFormat = devices & AudioSystem::DEVICE_OUT_SPDIF ?
+                              ROUTE_UNCOMPRESSED : ROUTE_NONE;
         if((!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,
                                  strlen(SND_USE_CASE_VERB_IP_VOICECALL))) ||
            (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP,
@@ -278,6 +303,7 @@ status_t AudioStreamOutALSA::close()
 status_t AudioStreamOutALSA::standby()
 {
      Mutex::Autolock autoLock(mParent->mLock);
+     Mutex::Autolock autolock1(mParent->mDeviceStateLock);
      if((!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,
                               strlen(SND_USE_CASE_VERB_IP_VOICECALL))) ||
        (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP,
@@ -286,7 +312,8 @@ status_t AudioStreamOutALSA::standby()
          return NO_ERROR;
      }
 
-    mHandle->module->standby(mHandle);
+    if(mHandle->handle != NULL)
+        mHandle->module->standby(mHandle);
     ALOGD("standby = %d", mParent->mRouteAudioToA2dp);
 
     if (mParent->mRouteAudioToA2dp) {
