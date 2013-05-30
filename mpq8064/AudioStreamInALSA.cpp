@@ -153,6 +153,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
             mHandle->mode = mParent->mode();
         }
         mHandle->activeDevice = mDevices;
+        mHandle->devices = mDevices;
        if (mHandle->module->setUseCase(&(*mHandle), bIsUseCaseSet))
            return NO_INIT;
        if((!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,
