@@ -115,12 +115,19 @@ static int set_params(struct pcm *pcm)
      unsigned int periodTime, bufferTime;
      unsigned int requestedRate = pcm->rate;
      int channels;
+     int bytes_per_sample;
      if(pcm->flags & PCM_MONO)
          channels = 1;
+     else if(pcm->flags & PCM_TRIPLE)
+         channels = 3;
      else if(pcm->flags & PCM_QUAD)
          channels = 4;
+     else if(pcm->flags & PCM_PENTA)
+         channels = 5;
      else if(pcm->flags & PCM_5POINT1)
          channels = 6;
+     else if(pcm->flags & PCM_7POINT)
+         channels = 7;
      else if(pcm->flags & PCM_7POINT1)
          channels = 8;
      else
@@ -151,10 +158,12 @@ static int set_params(struct pcm *pcm)
      case SNDRV_PCM_FORMAT_S16_LE:
          param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 16);
          param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS, pcm->channels * 16);
+         bytes_per_sample = 2;
          break;
      case SNDRV_PCM_FORMAT_S24_LE:
          param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 32);
          param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS, pcm->channels * 32);
+         bytes_per_sample = 4;
          break;
      }
 
@@ -187,10 +196,10 @@ static int set_params(struct pcm *pcm)
     sparams->tstamp_mode = SNDRV_PCM_TSTAMP_NONE;
     sparams->period_step = 1;
 
-    sparams->avail_min = pcm->period_size/(channels * 2) ;
-    sparams->start_threshold =  pcm->period_size/(channels * 2) ;
+    sparams->avail_min = pcm->period_size/(channels * bytes_per_sample) ;
+    sparams->start_threshold =  pcm->period_size/(channels * bytes_per_sample) ;
     sparams->stop_threshold =  pcm->buffer_size ;
-    sparams->xfer_align =  pcm->period_size/(channels * 2) ; /* needed for old kernels */
+    sparams->xfer_align =  pcm->period_size/(channels * bytes_per_sample) ; /* needed for old kernels */
 
     sparams->silence_size = 0;
     sparams->silence_threshold = 0;
@@ -326,12 +335,18 @@ static int play_file(unsigned rate, unsigned channels, int fd,
 
     if (channels == 1)
         flags |= PCM_MONO;
+    else if (channels == 3)
+        flags |= PCM_TRIPLE;
     else if (channels == 4)
-	flags |= PCM_QUAD;
+        flags |= PCM_QUAD;
+    else if (channels == 5)
+        flags |= PCM_PENTA;
     else if (channels == 6)
-	flags |= PCM_5POINT1;
+        flags |= PCM_5POINT1;
+    else if (channels == 7)
+        flags |= PCM_7POINT;
     else if (channels == 8)
-	flags |= PCM_7POINT1;
+        flags |= PCM_7POINT1;
     else
         flags |= PCM_STEREO;
 

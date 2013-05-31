@@ -490,18 +490,6 @@ int mmap_buffer(struct pcm *pcm)
     char *ptr;
     unsigned size;
     struct snd_pcm_channel_info ch;
-    int channels;
-
-    if(pcm->flags & PCM_MONO)
-        channels = 1;
-    else if(pcm->flags & PCM_QUAD)
-        channels = 4;
-    else if(pcm->flags & PCM_5POINT1)
-        channels = 6;
-    else if(pcm->flags & PCM_7POINT1)
-        channels = 8;
-    else
-        channels = 2;
 
     size = pcm->buffer_size;
     if (pcm->flags & DEBUG_ON)
@@ -528,10 +516,16 @@ u_int8_t *dst_address(struct pcm *pcm)
     int channels;
     if(pcm->flags & PCM_MONO)
         channels = 1;
+    else if(pcm->flags & PCM_TRIPLE)
+        channels = 3;
     else if(pcm->flags & PCM_QUAD)
         channels = 4;
+    else if(pcm->flags & PCM_PENTA)
+        channels = 5;
     else if(pcm->flags & PCM_5POINT1)
         channels = 6;
+    else if(pcm->flags & PCM_7POINT)
+        channels = 7;
     else if(pcm->flags & PCM_7POINT1)
         channels = 8;
     else
@@ -553,10 +547,16 @@ int mmap_transfer(struct pcm *pcm, void *data, unsigned offset,
     int channels;
     if(pcm->flags & PCM_MONO)
         channels = 1;
+    else if(pcm->flags & PCM_TRIPLE)
+        channels = 3;
     else if(pcm->flags & PCM_QUAD)
         channels = 4;
+    else if(pcm->flags & PCM_PENTA)
+        channels = 5;
     else if(pcm->flags & PCM_5POINT1)
         channels = 6;
+    else if(pcm->flags & PCM_7POINT)
+        channels = 7;
     else if(pcm->flags & PCM_7POINT1)
         channels = 8;
     else
@@ -587,10 +587,16 @@ int mmap_transfer_capture(struct pcm *pcm, void *data, unsigned offset,
 
     if(pcm->flags & PCM_MONO)
         channels = 1;
+    else if(pcm->flags & PCM_TRIPLE)
+        channels = 3;
     else if(pcm->flags & PCM_QUAD)
         channels = 4;
+    else if(pcm->flags & PCM_PENTA)
+        channels = 5;
     else if(pcm->flags & PCM_5POINT1)
         channels = 6;
+    else if(pcm->flags & PCM_7POINT)
+        channels = 7;
     else if(pcm->flags & PCM_7POINT1)
         channels = 8;
     else
@@ -630,10 +636,16 @@ static int pcm_write_mmap(struct pcm *pcm, void *data, unsigned count)
 
     if(pcm->flags & PCM_MONO)
         channels = 1;
+    else if(pcm->flags & PCM_TRIPLE)
+        channels = 3;
     else if(pcm->flags & PCM_QUAD)
         channels = 4;
+    else if(pcm->flags & PCM_PENTA)
+        channels = 5;
     else if(pcm->flags & PCM_5POINT1)
         channels = 6;
+    else if(pcm->flags & PCM_7POINT)
+        channels = 7;
     else if(pcm->flags & PCM_7POINT1)
         channels = 8;
     else
@@ -700,10 +712,16 @@ static int pcm_write_nmmap(struct pcm *pcm, void *data, unsigned count)
 
     if(pcm->flags & PCM_MONO)
         channels = 1;
+    else if(pcm->flags & PCM_TRIPLE)
+        channels = 3;
     else if(pcm->flags & PCM_QUAD)
         channels = 4;
+    else if(pcm->flags & PCM_PENTA)
+        channels = 5;
     else if(pcm->flags & PCM_5POINT1)
         channels = 6;
+    else if(pcm->flags & PCM_7POINT)
+        channels = 7;
     else if(pcm->flags & PCM_7POINT1)
         channels = 8;
     else

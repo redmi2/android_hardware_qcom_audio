@@ -54,12 +54,6 @@ struct pcm {
 #define PCM_OUT        0x00000000
 #define PCM_IN         0x10000000
 
-#define PCM_STEREO     0x00000000
-#define PCM_MONO       0x01000000
-#define PCM_QUAD       0x02000000
-#define PCM_5POINT1    0x04000000
-#define PCM_7POINT1    0x08000000
-
 #define PCM_44100HZ    0x00000000
 #define PCM_48000HZ    0x00100000
 #define PCM_8000HZ     0x00200000
@@ -68,7 +62,16 @@ struct pcm {
 #define PCM_MMAP       0x00010000
 #define PCM_NMMAP      0x00000000
 
-#define PCM_LINEAR     0x00000100
+#define PCM_MONO       0x00000100
+#define PCM_STEREO     0x00000000
+#define PCM_TRIPLE     0x00000200
+#define PCM_QUAD       0x00000400
+#define PCM_PENTA      0x00000800
+#define PCM_5POINT1    0x00001000
+#define PCM_7POINT     0x00002000
+#define PCM_7POINT1    0x00004000
+
+#define PCM_LINEAR     0x00000020
 #define PCM_TUNNEL     0x00000010
 
 #define DEBUG_ON       0x00000001
