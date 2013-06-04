@@ -630,7 +630,9 @@ static int adev_open_broadcast_stream(struct audio_hw_device *dev,
                                       uint32_t channels,
                                       uint32_t sample_rate,
                                       uint32_t audio_source,
-                                      struct audio_broadcast_stream **stream_out)
+                                      struct audio_broadcast_stream **stream_out,
+                                      cb_func_ptr cb,
+                                      void* private_data)
 {
     struct qcom_audio_device *qadev = to_ladev(dev);
     status_t status;
@@ -642,7 +644,7 @@ static int adev_open_broadcast_stream(struct audio_hw_device *dev,
         return -ENOMEM;
 
     out->qcom_out = qadev->hwif->openBroadcastStream(devices, format, channels,
-                                                    sample_rate, audio_source, &status);
+                                                    sample_rate, audio_source, &status, cb, private_data);
     if (!out->qcom_out) {
         ret = status;
         goto err_open;

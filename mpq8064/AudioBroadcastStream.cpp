@@ -28,7 +28,7 @@
 #include <math.h>
 
 #define LOG_TAG "AudioBroadcastStreamALSA"
-//#define LOG_NDEBUG 0
+#define LOG_NDEBUG 0
 #define LOG_NDDEBUG 0
 #include <utils/Log.h>
 #include <utils/String8.h>
@@ -46,6 +46,9 @@
 #include <linux/unistd.h>
 
 #define COMPRE_CAPTURE_HEADER_SIZE (sizeof(struct snd_compr_audio_info))
+#define PCM_CAPTURE_PATH_DELAY_US 15000 //In usec
+#define COMPRESS_CAPTURE_PATH_DELAY_US 30000 //In usec
+#define FRAME_WIDTH 2
 
 namespace sys_broadcast {
     ssize_t lib_write(int fd, const void *buf, size_t count) {
@@ -67,12 +70,16 @@ AudioBroadcastStreamALSA::AudioBroadcastStreamALSA(AudioHardwareALSA *parent,
                                                    uint32_t channels,
                                                    uint32_t sampleRate,
                                                    uint32_t audioSource,
-                                                   status_t *status)
+                                                   status_t *status,
+                                                   cb_func_ptr cb,
+                                                   void* private_data)
 {
     /* ------------------------------------------------------------------------
     Description: Initialize Flags and device handles
     -------------------------------------------------------------------------*/
     initialization();
+    if(cb != NULL)
+        registerAudioSetupCompleCB(cb, private_data);
 
     /* ------------------------------------------------------------------------
     Description: set config parameters from input arguments and error handling
@@ -208,6 +215,12 @@ AudioBroadcastStreamALSA::~AudioBroadcastStreamALSA()
         mRouteAudioToA2dp = false;
     }
 
+    exitFromTimerThread();
+
+    mCapturePool.clear();
+    mCaptureEmptyQueue.clear();
+    mCaptureFilledQueue.clear();
+
     for(ALSAHandleList::iterator it = mParent->mDeviceList.begin();
         it != mParent->mDeviceList.end(); ++it) {
         alsa_handle_t *it_dup = &(*it);
@@ -308,13 +321,20 @@ status_t AudioBroadcastStreamALSA::start(int64_t absTimeToStart)
     status_t status = NO_ERROR;
     // 1. Set the absolute time stamp
     // ToDo: We need the ioctl from driver to set the time stamp
+    if(mCaptureCompressedFromDSP)
+        avSyncDelayUS = absTimeToStart - COMPRESS_CAPTURE_PATH_DELAY_US /*Capturepath delay in us*/;
+    else
+        avSyncDelayUS = absTimeToStart - PCM_CAPTURE_PATH_DELAY_US /*Capturepath delay in us*/;
+    ALOGV("start: absTimeToStart (in us):%lld, avSyncDelayUS (in us):%lld", absTimeToStart, avSyncDelayUS);
 
-    // 2. Signal the driver to start rendering data
-    if (ioctl(mPcmRxHandle->handle->fd, SNDRV_PCM_IOCTL_START)) {
-        ALOGE("start:SNDRV_PCM_IOCTL_START failed\n");
-        status = BAD_VALUE;
-    }
     return status;
+}
+
+void AudioBroadcastStreamALSA::registerAudioSetupCompleCB(cb_func_ptr cb, void* private_data)
+{
+    AudioSetupCompleteCB = cb;
+    cbPvtData = private_data;
+    ALOGV("register cb func: cb:%x", cb);
 }
 
 status_t AudioBroadcastStreamALSA::mute(bool mute)
@@ -595,6 +615,12 @@ void AudioBroadcastStreamALSA::initialization()
     mKillPlaybackThread      = false;
     mPlaybackThreadAlive     = false;
     mPlaybackfd              = -1;
+
+    mTimerThread             = NULL;
+    mTimerThreadAlive        = false;
+    mKillTimerThread         = false;
+    mTimerfd                 = -1;
+
     // playback controls
     mSkipWrite               = false;
     mPlaybackReachedEOS      = false;
@@ -616,6 +642,10 @@ void AudioBroadcastStreamALSA::initialization()
     mPcmWriteTempBuffer       = NULL;
     mCompreWriteTempBuffer    = NULL;
 
+    AudioSetupCompleteCB      = NULL;
+    avSyncFlag                = 0;
+    avSyncDelayUS             = 0;
+    internalBufRendered       = 0;
     return;
 }
 
@@ -905,7 +935,8 @@ status_t AudioBroadcastStreamALSA::openPCMCapturePath()
     char *use_case;
 
     alsa_handle.module = mParent->mALSADevice;
-    alsa_handle.periodSize = DEFAULT_IN_BUFFER_SIZE_BROADCAST_COMPRESSED;
+    // make sure that periodSize is 32 byte aligned
+    alsa_handle.periodSize = 32*((((PCM_CAPTURE_PATH_DELAY_US/1000) * mSampleRate * mChannels * FRAME_WIDTH)/1000)/32) + COMPRE_CAPTURE_HEADER_SIZE;
     alsa_handle.devices = 0;
     alsa_handle.activeDevice = 0;
     alsa_handle.handle = 0;
@@ -958,7 +989,8 @@ status_t AudioBroadcastStreamALSA::openCompressedCapturePath()
     status_t status = NO_ERROR;
 
     alsa_handle.module = mParent->mALSADevice;
-    alsa_handle.periodSize = DEFAULT_IN_BUFFER_SIZE_BROADCAST_COMPRESSED;
+    // make sure that periodSize is 32 byte aligned
+    alsa_handle.periodSize = 32*((((COMPRESS_CAPTURE_PATH_DELAY_US/1000) * mSampleRate * mChannels * FRAME_WIDTH)/1000)/32) + COMPRE_CAPTURE_HEADER_SIZE;
     alsa_handle.devices = 0;
     alsa_handle.activeDevice = 0;
     alsa_handle.handle = 0;
@@ -1458,6 +1490,26 @@ status_t AudioBroadcastStreamALSA::createPlaybackThread()
     return status;
 }
 
+status_t AudioBroadcastStreamALSA::createTimerThread()
+{
+    ALOGV("createTimerThread");
+    status_t status = NO_ERROR;
+
+    mKillTimerThread = false;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+    status = pthread_create(&mTimerThread, (const pthread_attr_t *) NULL,
+                            timerThreadWrapper, this);
+    if(status) {
+        ALOGE("create timer thread failed = %d", status);
+    } else {
+        ALOGD("Timer Thread created");
+        mTimerThreadAlive = true;
+    }
+    return status;
+}
+
 void * AudioBroadcastStreamALSA::captureThreadWrapper(void *me)
 {
     static_cast<AudioBroadcastStreamALSA *>(me)->captureThreadEntry();
@@ -1467,6 +1519,12 @@ void * AudioBroadcastStreamALSA::captureThreadWrapper(void *me)
 void * AudioBroadcastStreamALSA::playbackThreadWrapper(void *me)
 {
     static_cast<AudioBroadcastStreamALSA *>(me)->playbackThreadEntry();
+    return NULL;
+}
+
+void * AudioBroadcastStreamALSA::timerThreadWrapper(void *me)
+{
+    static_cast<AudioBroadcastStreamALSA *>(me)->timerThreadEntry();
     return NULL;
 }
 
@@ -1643,7 +1701,10 @@ void AudioBroadcastStreamALSA::captureThreadEntry()
                         frameSize = mReadMetaData.frameSize;
                         ALOGV("format: %d, frameSize: %d",
                                   mReadMetaData.formatId, frameSize);
-                        write_l(bufPtr, frameSize);
+                        /*If avsync delay is present then save buffers and render once delay timer expires.
+                          Render buffers normally in case of no avsync delay*/
+                        if ((avSyncDelayUS > 0) && !internalBufRendered) captureBuffers(bufPtr, frameSize);
+                        else write_l(bufPtr, frameSize);
                     }
                 } else {
                     updatePCMCaptureMetaData(tempBuffer);
@@ -1651,7 +1712,8 @@ void AudioBroadcastStreamALSA::captureThreadEntry()
                                  mReadMetaData.dataOffset;
                     frameSize = mReadMetaData.frameSize;
                     ALOGV("frameSize: %d", frameSize);
-                    write_l(bufPtr, frameSize);
+                    if (avSyncDelayUS > 0) captureBuffers(bufPtr, frameSize);
+                    else write_l(bufPtr, frameSize);
                 }
             }
         }
@@ -1660,6 +1722,57 @@ void AudioBroadcastStreamALSA::captureThreadEntry()
     resetCapturePathVariables();
     mCaptureThreadAlive = false;
     ALOGD("Capture Thread is dying");
+}
+
+void AudioBroadcastStreamALSA::captureBuffers(char *bufPtr, uint32_t frameSize)
+{
+    if(mRoutingSetupDone) {
+        if(!avSyncFlag) ALOGV("Waiting for av sync timer to expire, save buffers in internal memory");
+        struct pcm * local_handle = (struct pcm *)mCaptureHandle->handle;
+        char *buffer = NULL;
+        void  *mem_buf = NULL;
+        buffer = (char*) malloc(local_handle->period_size);
+        if(buffer != NULL) {
+            int32_t nSize = local_handle->period_size;
+            mem_buf = (int32_t *)buffer;
+            BuffersAllocated buf(mem_buf, nSize);
+            memset(buf.memBuf, 0x0, nSize);
+            ALOGD("MEM that is allocated - buffer is %x", (unsigned int)mem_buf);
+
+            memcpy(buf.memBuf, bufPtr, frameSize);
+
+            buf.bytesToWrite = frameSize;
+            if(frameSize) {
+                mCaptureFilledQueue.push_back(buf);
+                mCapturePool.push_back(buf);
+            }
+
+            if(avSyncFlag && (!(mCaptureFilledQueue.empty()))) {
+                List<BuffersAllocated>::iterator it = mCaptureFilledQueue.begin();
+                if(mCaptureCompressedFromDSP) {
+                    for(;it != mCaptureFilledQueue.end(); it++) {
+                        BuffersAllocated buf = *it;
+                        mCaptureFilledQueue.erase(mCaptureFilledQueue.begin());
+                        ALOGD("Writing buffer %x with framesize %d", buf.memBuf, buf.bytesToWrite);
+                        write_l((char *)buf.memBuf, buf.bytesToWrite);
+                        free(buf.memBuf);
+                    }
+                    internalBufRendered = 1;
+                }
+                else {
+                    BuffersAllocated buf = *it;
+                    mCaptureFilledQueue.erase(mCaptureFilledQueue.begin());
+                    ALOGD("Writing buffer %x with framesize %d", buf.memBuf, buf.bytesToWrite);
+                    write_l((char *)buf.memBuf, buf.bytesToWrite);
+                    free(buf.memBuf);
+                }
+            }
+        }
+        else
+            ALOGE("cannot allocate memory, discarding buffer");
+    }
+    else
+        ALOGV("Discard data until audio setup completes");
 }
 status_t AudioBroadcastStreamALSA::doRoutingSetup()
 {
@@ -1741,8 +1854,25 @@ status_t AudioBroadcastStreamALSA::doRoutingSetup()
         } else
             status = BAD_VALUE;
     }
-    mRoutingSetupDone = true;
 
+    //flush data
+    struct pcm * capture_handle = (struct pcm *)mCaptureHandle->handle;
+    ALOGV("Flush data after completing routing setup");
+    pcm_prepare(mCaptureHandle->handle);
+    if(!capture_handle->start) {
+        if(ioctl(capture_handle->fd, SNDRV_PCM_IOCTL_START))
+            ALOGV("IOCTL start failed");
+    }
+    mRoutingSetupDone = true;
+    if(avSyncDelayUS > 0) {
+        createTimerThread();
+        if(!mTimerThreadAlive) avSyncDelayUS = 0;
+    }
+
+    if(AudioSetupCompleteCB != NULL) {
+        ALOGV("Issue setup complete cb to MPQ app");
+        AudioSetupCompleteCB(cbPvtData);
+    }
     ALOGV("Routing setup done returning");
     return status;
 }
@@ -2020,6 +2150,20 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
     return;
 }
 
+void AudioBroadcastStreamALSA::timerThreadEntry()
+{
+    ALOGV("timerThreadEntry");
+    while(!mKillTimerThread) {
+        if(mRoutingSetupDone) {
+            ALOGV("starting av sync timer");
+            usleep(avSyncDelayUS);
+            ALOGV("av sync timer expired");
+            avSyncFlag = 1;
+            mKillTimerThread = true;
+        }
+    }
+}
+
 void AudioBroadcastStreamALSA::exitFromCaptureThread()
 {
     ALOGV("exitFromCapturePath");
@@ -2061,6 +2205,26 @@ void AudioBroadcastStreamALSA::exitFromPlaybackThread()
     ALOGD("Playback thread killed");
 
     resetPlaybackPathVariables();
+    return;
+}
+
+void AudioBroadcastStreamALSA::exitFromTimerThread()
+{
+    ALOGD("exitFromTimerThread");
+    if (!mTimerThreadAlive)
+        return;
+
+    mTimerMutex.lock();
+    mKillTimerThread = true;
+    if(mTimerfd != -1) {
+        ALOGD("Writing to mTimerfd %d",mTimerfd);
+        uint64_t writeValue = KILL_TIMER_THREAD;
+        sys_broadcast::lib_write(mTimerfd, &writeValue, sizeof(uint64_t));
+    }
+    mTimerMutex.unlock();
+    pthread_join(mTimerThread,NULL);
+    ALOGD("Timer thread killed");
+
     return;
 }
 
@@ -2470,7 +2634,7 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
                         bufferDeAlloc(PASSTHRUQUEUEINDEX);
                         {
                             Mutex::Autolock autoLock(mInputMemMutex);
-                           copyBuffers(mSecCompreRxHandle, mInputMemFilledQueue[0]);
+                            copyBuffers(mSecCompreRxHandle, mInputMemFilledQueue[0]);
                             initFilledQueue(mSecCompreRxHandle, PASSTHRUQUEUEINDEX, mInputMemFilledQueue[0].size());
                         }
                         mPlaybackPfd[2].fd = mSecCompreRxHandle->handle->timer_fd;
