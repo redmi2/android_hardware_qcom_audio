@@ -1266,6 +1266,7 @@ status_t AudioSessionOutALSA::openPlaybackDevice(int index, int devices,
     Mutex::Autolock autolock1(mParent->mDeviceStateLock);
     status_t status = NO_ERROR;
     char *use_case;
+    char *use_case1;
 
     if(deviceFormat == ROUTE_UNCOMPRESSED ||
        deviceFormat == ROUTE_COMPRESSED ||
@@ -1279,15 +1280,15 @@ status_t AudioSessionOutALSA::openPlaybackDevice(int index, int devices,
         if ((use_case == NULL) ||
             (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
              strlen(SND_USE_CASE_VERB_INACTIVE)))) {
-            use_case = mALSADevice->getPlaybackUseCase(COMRPESSED_DRIVER, true/*isVerb*/);
-            if(use_case == NULL)
+            use_case1 = mALSADevice->getPlaybackUseCase(COMRPESSED_DRIVER, true/*isVerb*/);
+            if(use_case1 == NULL)
                 return NO_INIT;
-            status = openDevice(use_case, true/*bIsUseCase*/, devices, deviceFormat);
+            status = openDevice(use_case1, true/*bIsUseCase*/, devices, deviceFormat);
         } else {
-            use_case = mALSADevice->getPlaybackUseCase(COMRPESSED_DRIVER, false/*isVerb*/);
-            if(use_case == NULL)
+            use_case1 = mALSADevice->getPlaybackUseCase(COMRPESSED_DRIVER, false/*isVerb*/);
+            if(use_case1 == NULL)
                 return NO_INIT;
-            status = openDevice(use_case, false/*bIsUseCase*/, devices, deviceFormat);
+            status = openDevice(use_case1, false/*bIsUseCase*/, devices, deviceFormat);
         }
         if(use_case) {
             free(use_case);
