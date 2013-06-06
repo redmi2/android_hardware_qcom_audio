@@ -1161,7 +1161,8 @@ status_t AudioSessionOutALSA::routingSetup()
                     ALOGE("setPlaybackVolume for WMA playback failed");
             }
         }
-        status = openTempBufForMetadataModeRendering();
+        if(!status)
+            status = openTempBufForMetadataModeRendering();
 
         if(!status && mRouteAudioToA2dp)
             status = a2dpRenderingControl(A2DP_RENDER_SETUP);
@@ -1290,6 +1291,8 @@ status_t AudioSessionOutALSA::openPlaybackDevice(int index, int devices,
                 return NO_INIT;
             status = openDevice(use_case1, false/*bIsUseCase*/, devices, deviceFormat);
         }
+        if(status != NO_ERROR)
+            mALSADevice->freePlaybackUseCase(use_case1);
         if(use_case) {
             free(use_case);
             use_case = NULL;
@@ -1428,7 +1431,7 @@ status_t AudioSessionOutALSA::openDevice(const char *useCase, bool bIsUseCase,
     }
     ALOGD("openDevice: X");
 
-    return NO_ERROR;
+    return status;
 }
 
 /*******************************************************************************
