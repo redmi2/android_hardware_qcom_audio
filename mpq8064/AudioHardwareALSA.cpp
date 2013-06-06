@@ -129,6 +129,8 @@ AudioHardwareALSA::AudioHardwareALSA() :
     mHdmiOutputFormat = UNCOMPRESSED;
     mHdmiOutputChannels = MAX_INPUT_CHANNELS_SUPPORTED;
     mSpdifOutputChannels = STEREO_CHANNELS;
+    mSpdifRenderFormat = UNCOMPRESSED;
+    mHdmiRenderFormat = UNCOMPRESSED;
 }
 
 AudioHardwareALSA::~AudioHardwareALSA()
@@ -873,6 +875,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
          devices, *channels, *sampleRate, flags);
 
     status_t err = BAD_VALUE;
+
     if (flags & AUDIO_OUTPUT_FLAG_TUNNEL) {
         int sessionId = 3;
         devices |= AudioSystem::DEVICE_OUT_SPDIF;
@@ -882,6 +885,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
             delete out;
             out = NULL;
         }
+        mSessions.push_back(out);
         if (status) *status = err;
         return out;
     }
@@ -894,9 +898,10 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
         return out;
     }
 
+    devices |= AudioSystem::DEVICE_OUT_SPDIF;
     if(devices & AudioSystem::DEVICE_OUT_ALL_A2DP) {
         ALOGE("Set Capture from proxy true");
-        devices &= ~AudioSystem::DEVICE_OUT_ALL_A2DP;
+        devices &= ~(AudioSystem::DEVICE_OUT_ALL_A2DP | AudioSystem::DEVICE_OUT_SPDIF);
         devices |=  AudioSystem::DEVICE_OUT_PROXY;
         mRouteAudioToA2dp = true;
 
@@ -936,7 +941,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
           alsa_handle.module = mALSADevice;
           alsa_handle.periodSize  = bufferSize;
           alsa_handle.devices = devices;
-          alsa_handle.activeDevice = devices;
+          alsa_handle.activeDevice = getUnComprDeviceInCurrDevices(devices);
           alsa_handle.handle = 0;
           alsa_handle.type = PCM_FORMAT;
           alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
@@ -947,6 +952,10 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
           alsa_handle.mode = AudioSystem::MODE_IN_COMMUNICATION;
           alsa_handle.ucMgr = mUcMgr;
           alsa_handle.timeStampMode = SNDRV_PCM_TSTAMP_NONE;
+          if (alsa_handle.activeDevice)
+              alsa_handle.playbackMode = PLAY;
+          else
+              alsa_handle.playbackMode = STANDBY;
           char *use_case;
           snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
           if ((use_case == NULL) || (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
@@ -974,6 +983,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
       }
       out = new AudioStreamOutALSA(this, &(*it));
       err = out->set(format, channels, sampleRate, devices);
+      mSessions.push_back(out);
       if(err == NO_ERROR) {
           mVoipStreamCount++;   //increment VoipstreamCount only if success
           ALOGD("openoutput mVoipStreamCount %d",mVoipStreamCount);
@@ -990,7 +1000,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
       alsa_handle.module = mALSADevice;
       alsa_handle.periodSize  = bufferSize;
       alsa_handle.devices = devices;
-      alsa_handle.activeDevice = devices;
+      alsa_handle.activeDevice = getUnComprDeviceInCurrDevices(devices);
       alsa_handle.handle = 0;
       alsa_handle.type = PCM_FORMAT;
       alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
@@ -1001,12 +1011,14 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
       alsa_handle.mode = mode();
       alsa_handle.ucMgr = mUcMgr;
       alsa_handle.timeStampMode = SNDRV_PCM_TSTAMP_NONE;
-      alsa_handle.playbackMode = PLAY;
       alsa_handle.hdmiFormat = devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL ?
                                ROUTE_UNCOMPRESSED : ROUTE_NONE;
       alsa_handle.spdifFormat = devices & AudioSystem::DEVICE_OUT_SPDIF ?
                                  ROUTE_UNCOMPRESSED : ROUTE_NONE;
-
+      if (alsa_handle.activeDevice)
+          alsa_handle.playbackMode = PLAY;
+      else
+          alsa_handle.playbackMode = STANDBY;
       char *use_case;
       snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
       if ((use_case == NULL) || (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
@@ -1032,6 +1044,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
       } else {
           out = new AudioStreamOutALSA(this, &(*it));
           err = out->set(format, channels, sampleRate, devices);
+          mSessions.push_back(out);
       }
 
       if (status) *status = err;
@@ -1042,6 +1055,14 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
 void
 AudioHardwareALSA::closeOutputStream(AudioStreamOut* out)
 {
+    ALOGD("closeOutputStream");
+    List <AudioStreamOut *>::iterator it;
+    for(it = mSessions.begin(); it != mSessions.end(); ++it) {
+        if(*it == out) {
+           mSessions.erase(it);
+           break;
+        }
+    }
     delete out;
 }
 #ifdef QCOM_TUNNEL_LPA_ENABLED
@@ -1740,82 +1761,71 @@ uint32_t AudioHardwareALSA::useCaseStringToEnum(const char *usecase) {
     return activeUsecase;
 }
 
-void AudioHardwareALSA::updatePCMHandleStatesOfOtherStreams(int device, int state)
+void AudioHardwareALSA::standbySessionDevice(int device) {
+    List <AudioStreamOut * >::iterator it;
+    String8 key = String8(STANDBY_DEVICES_KEY);
+    AudioParameter param = AudioParameter(key);
+    param.addInt(key, device);
+    for(it = mSessions.begin(); it != mSessions.end(); ++it)
+        (*it)->setParameters(param.toString());
+}
+/**
+* device: Devices for which the state should be modified in other sessions
+* state: State of devices in the other sessions STANDBY/PLAY
+* For the PCM playback, we send the STANDBY command with device to compressed session
+* For the Compressed playback we send the STANDBY command with device to PCM sessions
+* PLAY is to resume the devices once the compressed/LPCM playback is closed.
+**/
+
+void AudioHardwareALSA::updateDevicesOfOtherSessions(int device, int state)
 {
-    ALOGV("updatePCMHandleStatesOfOtherStreams- device : %d, state: %d", device, state);
-    Mutex::Autolock autolock1(mDeviceStateLock);
+    ALOGV("updateDevicesOfOtherSessions- device : %d, state: %d", device, state);
+    List <AudioStreamOut * >::iterator it;
+    String8 key;
     if(state == STANDBY) {
-        for(ALSAHandleList::iterator it = mDeviceList.begin();
-            it != mDeviceList.end(); ++it) {
-            /*
-            System tones go through HIFI
-            If any other PCM playback needs to be modified, update it here
-            */
-            if((!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI,
-                strlen(SND_USE_CASE_VERB_HIFI))) ||
-               (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_MUSIC,
-                strlen(SND_USE_CASE_MOD_PLAY_MUSIC)))) {
-                if(it->handle == NULL) {
-                    it->playbackMode = state;
-                    it->activeDevice = 0;
-                } else if(it->activeDevice == device) {
-                    mALSADevice->standby(&(*it));
-                    it->playbackMode = state;
-                    it->activeDevice = 0;
-                } else {
-                    mALSADevice->switchDeviceUseCase(&(*it),
-                                                     it->activeDevice & ~device,
-                                                     mode());
-                }
+        standbySessionDevice(device);
+    } else if(state == PLAY) {
+        /* FCFS for the compressed handles*/
+        for(it = mSessions.begin(); device && it != mSessions.end(); ++it) {
+            int devices;
+            /*Search for the compressed handle first. If match found then skip the others.*/
+            key = String8(COMPR_STANDBY_DEVICES_KEY);
+            AudioParameter param = AudioParameter((*it)->getParameters(key));
+            if(param.getInt(key, devices) == NO_ERROR && (devices & device)) {
+                devices = devices & device;
+                /*Standby other devices*/
+                standbySessionDevice(devices);
+                /*Resume other devices*/
+                if(devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
+                    mHdmiRenderFormat = COMPRESSED;
+                if(devices & AudioSystem::DEVICE_OUT_SPDIF)
+                    mSpdifRenderFormat = COMPRESSED;
+                key = String8(RESUME_DEVICES_KEY);
+                param = AudioParameter(key);
+                param.addInt(key, devices);
+                (*it)->setParameters(param.toString());
+                device &= ~devices;
             }
         }
-    } else if(state == PLAY) {
-        for(ALSAHandleList::iterator it = mDeviceList.begin();
-            it != mDeviceList.end(); ++it) {
-            /*
-            System tones go through HIFI
-            If any other PCM playback needs to be modified, update it here
-            */
-            if((!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI,
-                strlen(SND_USE_CASE_VERB_HIFI))) ||
-               (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_MUSIC,
-                strlen(SND_USE_CASE_MOD_PLAY_MUSIC)))) {
-                if(it->handle == NULL) {
-                    it->playbackMode = PLAY;
-                } else {
-                    if(device & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
-                        mALSADevice->setPlaybackFormat("LPCM",
-                                                       AudioSystem::DEVICE_OUT_AUX_DIGITAL,
-                                                       false);
-                        mALSADevice->setHdmiOutputProperties(&(*it), ROUTE_UNCOMPRESSED);
-                    }
-                    if(device & AudioSystem::DEVICE_OUT_SPDIF) {
-                        mALSADevice->setPlaybackFormat("LPCM",
-                                                       AudioSystem::DEVICE_OUT_SPDIF,
-                                                       false);
-                    }
-                    mALSADevice->switchDeviceUseCase(&(*it),
-                                                     it->activeDevice|device,
-                                                     mode());
-                }
-            }
+        for(it = mSessions.begin(); device && it != mSessions.end(); ++it) {
+            if(device & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
+                mHdmiRenderFormat = UNCOMPRESSED;
+            if(device & AudioSystem::DEVICE_OUT_SPDIF)
+                mSpdifRenderFormat = UNCOMPRESSED;
+            key = String8(RESUME_DEVICES_KEY);
+            AudioParameter param = AudioParameter(key);
+            param.addInt(key, device);
+            (*it)->setParameters(param.toString());
         }
     }
 }
 
 int AudioHardwareALSA::getUnComprDeviceInCurrDevices(int devices)
 {
-    for(ALSAHandleList::iterator it = mDeviceList.begin();
-        it != mDeviceList.end(); ++it) {
-        if(mALSADevice->isTunnelPlaybackUseCase(it->useCase)) {
-            if((it->devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) &&
-               (it->type != ROUTE_UNCOMPRESSED))
-                devices &= ~AudioSystem::DEVICE_OUT_AUX_DIGITAL;
-            if((it->devices & AudioSystem::DEVICE_OUT_SPDIF) &&
-               (it->type != ROUTE_UNCOMPRESSED))
-                devices &= ~AudioSystem::DEVICE_OUT_SPDIF;
-        }
-    }
+    if(mHdmiRenderFormat == COMPRESSED)
+       devices &= ~AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+    if(mSpdifRenderFormat == COMPRESSED)
+       devices &= ~AudioSystem::DEVICE_OUT_SPDIF;
     return devices;
 }
 

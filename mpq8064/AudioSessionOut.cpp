@@ -150,7 +150,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     Ignoring pcm on hdmi or spdif if the required playback on the devices is
     compressed pass through
     -------------------------------------------------------------------------*/
-    handleIgnoringPCMBeforeEnableComprPassthrough();
+    updateSessionDevices(mDevices);
     /* ------------------------------------------------------------------------
     setup routing
     -------------------------------------------------------------------------*/
@@ -411,46 +411,92 @@ Description: setParameters
 *******************************************************************************/
 status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
 {
-    ALOGV("setParameters");
+    ALOGV("setParameters keyvalue = %s", keyValuePairs.string());
     Mutex::Autolock autoLock(mControlLock);
     AudioParameter param = AudioParameter(keyValuePairs);
     String8 key = String8(AudioParameter::keyRouting);
+    String8 keyStandby = String8(STANDBY_DEVICES_KEY);
+    String8 keyResume = String8(RESUME_DEVICES_KEY);
     int device;
     if (param.getInt(key, device) == NO_ERROR) {
         // Ignore routing if device is 0.
         if(device) {
             device |= AudioSystem::DEVICE_OUT_SPDIF;
             ALOGD("setParameters(): keyRouting with device %d", device);
+            if(!(device & AudioSystem::DEVICE_OUT_SPDIF)) {
+                mStandByDevices &= ~AudioSystem::DEVICE_OUT_SPDIF;
+                mStandByFormats &= ~(STANDBY_LPCM_SPDIF | STANDBY_COMPR_SPDIF);
+            }
+            if(!(device & AudioSystem::DEVICE_OUT_AUX_DIGITAL)) {
+                mStandByDevices &= ~AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+                mStandByFormats &= ~(STANDBY_LPCM_HDMI | STANDBY_COMPR_HDMI);
+            }
+            device &= ~mStandByDevices;
+            ALOGD("updated mStandByFormats %d", mStandByFormats);
             doRouting(device);
         }
         param.remove(key);
+    } else if(param.getInt(keyStandby, device) == NO_ERROR) {
+        if((device & mStandByDevices) == device || mConfiguringSessions)
+            return NO_ERROR;
+        updateStandByDevices(device, true);
+        mConfiguringSessions = true;
+        doRouting(mDevices & ~mStandByDevices);
+        mConfiguringSessions = false;
+        ALOGD("set mStandByFormats = %d", mStandByFormats);
+    } else if (param.getInt(keyResume, device) == NO_ERROR) {
+        if(!isDeviceinStandByFormats(device) || mConfiguringSessions)
+            return NO_ERROR;
+        device = device & mStandByDevices;
+        updateStandByDevices(device, false);
+        mConfiguringSessions = true;
+        doRouting(mDevices | device);
+        mConfiguringSessions = false;
     } else {
         mControlLock.unlock();
         mParent->setParameters(keyValuePairs);
     }
     return NO_ERROR;
 }
-
+bool AudioSessionOutALSA::isDeviceinStandByFormats(int devices) {
+    if(((devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) &&
+        (mStandByFormats & (STANDBY_LPCM_HDMI | STANDBY_COMPR_HDMI))) ||
+        ((devices & AudioSystem::DEVICE_OUT_SPDIF) &&
+        (mStandByFormats & (STANDBY_LPCM_SPDIF | STANDBY_COMPR_SPDIF))))
+        return true;
+    return false;
+}
 /*******************************************************************************
 Description: getParameters
 *******************************************************************************/
 String8 AudioSessionOutALSA::getParameters(const String8& keys)
 {
-    ALOGV("getParameters");
+    ALOGV("getParameters %s mDevices %d mRouteAudioToA2dp %d", keys.string(), mDevices, mRouteAudioToA2dp);
     Mutex::Autolock autoLock(mControlLock);
     AudioParameter param = AudioParameter(keys);
     String8 value;
     String8 key = String8(AudioParameter::keyRouting);
-    int devices = mDevices;
-    ALOGV("getParameters mDevices %d mRouteAudioToA2dp %d", mDevices, mRouteAudioToA2dp);
+    String8 keyComprStandby = String8(COMPR_STANDBY_DEVICES_KEY);
+    int devices;
     if (param.get(key, value) == NO_ERROR) {
+        devices = mDevices;
         if((mDevices & AudioSystem::DEVICE_OUT_PROXY) && mRouteAudioToA2dp) {
             devices |= AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP;
             devices &= ~AudioSystem::DEVICE_OUT_PROXY;
         }
         param.addInt(key, (int)devices);
+    } else if(param.get(keyComprStandby, value) == NO_ERROR) {
+        devices = 0;
+        if (!mPaused) {
+             if(mStandByFormats & STANDBY_COMPR_HDMI)
+                 devices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+             if(mStandByFormats & STANDBY_COMPR_SPDIF)
+                 devices |= AudioSystem::DEVICE_OUT_SPDIF;
+             param.addInt(keyComprStandby, devices);
+        } else {
+            param.addInt(keyComprStandby, 0);
+        }
     }
-
     ALOGV("getParameters() %s", param.toString().string());
     return param.toString();
 }
@@ -678,6 +724,8 @@ void AudioSessionOutALSA::updateDeviceSupportedFormats()
         } else {
            mSpdifFormat = UNCOMPRESSED;
         }
+        if(mStandByFormats & STANDBY_COMPR_SPDIF)
+            mSpdifFormat = UNCOMPRESSED;
     }
 
     if(!(mDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)) {
@@ -697,6 +745,8 @@ void AudioSessionOutALSA::updateDeviceSupportedFormats()
            mHdmiFormat = UNCOMPRESSED;
         }
         fixUpHdmiFormatBasedOnEDID();
+        if(mStandByFormats & STANDBY_COMPR_HDMI)
+            mHdmiFormat = UNCOMPRESSED;
     }
     ALOGV("After fix up mSpdifFormat: %d, mHdmiFormat: %d",
            mSpdifFormat, mHdmiFormat);
@@ -872,6 +922,9 @@ void AudioSessionOutALSA::reinitialize()
     mChannelStatusSet          = false;
     mWriteTempBuffer           = NULL;
     mNumRxHandlesActive        = 0;
+    mConfiguringSessions       = false;
+    mStandByFormats            = 0;
+    mStandByDevices            = 0;
     for(int i=0; i<NUM_DEVICES_SUPPORT_COMPR_DATA; i++) {
         mRxHandle[i]               = NULL;
         mRxHandleRouteFormat[i]    = ROUTE_UNCOMPRESSED;
@@ -1010,6 +1063,79 @@ void AudioSessionOutALSA::updateDecodeTypeAndRoutingStates()
     }
 }
 
+void AudioSessionOutALSA::updateStandByDevices(int device, int enable) {
+    if(enable) {
+        if(device & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+            if(mHdmiFormat == UNCOMPRESSED) {
+                mStandByFormats |= STANDBY_LPCM_HDMI;
+                mStandByDevices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+            } else if(mHdmiFormat != INVALID_FORMAT) {
+                mStandByFormats |= STANDBY_COMPR_HDMI;
+                if(mParent->mHdmiRenderFormat == UNCOMPRESSED)
+                    mHdmiFormat = UNCOMPRESSED;
+                else {
+                    mStandByDevices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+                    mSpdifFormat = INVALID_FORMAT;
+                }
+            }
+        }
+        if(device & AudioSystem::DEVICE_OUT_SPDIF) {
+            if(mSpdifFormat == UNCOMPRESSED) {
+                mStandByFormats |= STANDBY_LPCM_SPDIF;
+                mStandByDevices |= AudioSystem::DEVICE_OUT_SPDIF;
+            } else if(mSpdifFormat != INVALID_FORMAT) {
+                mStandByFormats |= STANDBY_COMPR_SPDIF;
+                if(mParent->mSpdifRenderFormat == UNCOMPRESSED)
+                    mSpdifFormat = UNCOMPRESSED;
+                else {
+                    mStandByDevices |= AudioSystem::DEVICE_OUT_SPDIF;
+                    mSpdifFormat = INVALID_FORMAT;
+                }
+            }
+        }
+    } else {
+        mStandByDevices &= ~device;
+        if(device & AudioSystem::DEVICE_OUT_SPDIF)
+           mStandByFormats &= ~(STANDBY_LPCM_SPDIF | STANDBY_COMPR_SPDIF);
+        if(device & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
+           mStandByFormats &= ~(STANDBY_LPCM_HDMI | STANDBY_COMPR_HDMI);
+    }
+    ALOGD("updateStandByDevices device %d enable %d mStandByFormats %d mStandByDevices %d", device, enable, mStandByFormats, mStandByDevices);
+}
+
+void AudioSessionOutALSA::updateSessionDevices(int devices) {
+    ALOGD("updateSessiondevices");
+    Mutex::Autolock autolock(mParent->mDeviceStateLock);
+    mConfiguringSessions = true;
+    if(devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+        if (mParent->mHdmiRenderFormat == UNCOMPRESSED) {
+            if(mHdmiFormat != UNCOMPRESSED) {
+                mParent->mHdmiRenderFormat = COMPRESSED;
+                updateDevicesInSessionList(AudioSystem::DEVICE_OUT_AUX_DIGITAL, STANDBY);
+            }
+        } else {
+            /*Compressed session is in progress.
+            So also no other sessions would be running*/
+            mParent->mHdmiRenderFormat = mHdmiFormat == UNCOMPRESSED ? UNCOMPRESSED : COMPRESSED;
+            if(mHdmiFormat == UNCOMPRESSED) {
+                mALSADevice->setHdmiOutputProperties(ROUTE_UNCOMPRESSED);
+            }
+            updateDevicesInSessionList(AudioSystem::DEVICE_OUT_AUX_DIGITAL, STANDBY);
+        }
+    }
+    if(devices & AudioSystem::DEVICE_OUT_SPDIF) {
+        if (mParent->mSpdifRenderFormat == UNCOMPRESSED) {
+            if(mSpdifFormat != UNCOMPRESSED) {
+                mParent->mSpdifRenderFormat = COMPRESSED;
+                updateDevicesInSessionList(AudioSystem::DEVICE_OUT_SPDIF, STANDBY);
+            }
+        } else {
+            mParent->mSpdifRenderFormat = mSpdifFormat == UNCOMPRESSED ? UNCOMPRESSED : COMPRESSED;
+            updateDevicesInSessionList(AudioSystem::DEVICE_OUT_SPDIF, STANDBY);
+        }
+    }
+    mConfiguringSessions = false;
+}
 /*******************************************************************************
 Description: update handle states
 *******************************************************************************/
@@ -1264,7 +1390,6 @@ status_t AudioSessionOutALSA::openPlaybackDevice(int index, int devices,
                                                  int deviceFormat)
 {
     ALOGV("openPlaybackDevice");
-    Mutex::Autolock autolock1(mParent->mDeviceStateLock);
     status_t status = NO_ERROR;
     char *use_case;
     char *use_case1;
@@ -1272,11 +1397,6 @@ status_t AudioSessionOutALSA::openPlaybackDevice(int index, int devices,
     if(deviceFormat == ROUTE_UNCOMPRESSED ||
        deviceFormat == ROUTE_COMPRESSED ||
        deviceFormat == ROUTE_SW_TRANSCODED_COMPRESSED) {
-        setPlaybackFormat(devices, deviceFormat);
-        if(status != NO_ERROR) {
-             ALOGE("setPlaybackFormat Failed");
-             return BAD_VALUE;
-        }
         snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
         if ((use_case == NULL) ||
             (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
@@ -1315,7 +1435,7 @@ status_t AudioSessionOutALSA::openPlaybackDevice(int index, int devices,
     } else if (deviceFormat == ROUTE_DSP_TRANSCODED_COMPRESSED) {
         int routeUnCompressedIndex;
         for(routeUnCompressedIndex = 0; routeUnCompressedIndex < mNumRxHandlesActive;
-            mNumRxHandlesActive++) {
+            routeUnCompressedIndex++) {
             if(mRxHandleRouteFormat[routeUnCompressedIndex] == ROUTE_UNCOMPRESSED)
                 break;
         }
@@ -1350,38 +1470,6 @@ status_t AudioSessionOutALSA::openPlaybackDevice(int index, int devices,
         mALSADevice->configureTranscode(mRxHandle[index]);
     } else if(deviceFormat == ROUTE_NONE) {
         ALOGD("No Routing format to taken an action");
-    }
-    return NO_ERROR;
-}
-
-/*******************************************************************************
-Description: set end device playback format
-*******************************************************************************/
-status_t AudioSessionOutALSA::setPlaybackFormat(int devices, int deviceFormat)
-{
-    ALOGV("setPlaybackFormat");
-    status_t status = NO_ERROR;
-    if(devices & AudioSystem::DEVICE_OUT_SPDIF) {
-        status = mALSADevice->setPlaybackFormat(deviceFormat == ROUTE_UNCOMPRESSED ? "LPCM" : "Compr",
-                                                AudioSystem::DEVICE_OUT_SPDIF,
-                                                false);
-                                              // NOTE: some crazy stuff was done for the
-                                              // last argument. dont see a need now. confirm??
-        if(status) {
-            ALOGE("set playback format failed");
-            return status;
-        }
-    }
-    if(devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
-        status = mALSADevice->setPlaybackFormat(deviceFormat == ROUTE_UNCOMPRESSED ? "LPCM" : "Compr",
-                                                AudioSystem::DEVICE_OUT_AUX_DIGITAL,
-                                                false);
-                                              // NOTE: some crazy stuff was done for the
-                                              // last argument. dont see a need now. confirm??
-        if(status) {
-            ALOGE("set playback format failed");
-            return status;
-        }
     }
     return NO_ERROR;
 }
@@ -1554,10 +1642,25 @@ status_t AudioSessionOutALSA::closeDevice(alsa_handle_t *pHandle)
     ALOGV("closeDevice");
     if(pHandle) {
         ALOGV("useCase %s", pHandle->useCase);
+        int devices = pHandle->activeDevice;
         status = mALSADevice->close(pHandle);
-        if(pHandle->type != ROUTE_UNCOMPRESSED)
-            updatePCMHandleStatesInDeviceList(pHandle->devices, PLAY);
-        Mutex::Autolock autolock1(mParent->mDeviceStateLock);
+        if(!mConfiguringSessions) {
+            if (devices & AudioSystem::DEVICE_OUT_SPDIF) {
+                mStandByDevices &= ~AudioSystem::DEVICE_OUT_SPDIF;
+                mStandByFormats &= ~(STANDBY_LPCM_SPDIF | STANDBY_COMPR_SPDIF);
+            }
+            if (devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+                mStandByDevices &= ~AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+                mStandByFormats &= ~(STANDBY_LPCM_HDMI | STANDBY_COMPR_HDMI);
+            }
+            ALOGD("updated mStandByFormats %d", mStandByFormats);
+            {
+                Mutex::Autolock autolock(mParent->mDeviceStateLock);
+                mConfiguringSessions = true;
+                updateDevicesInSessionList(devices, PLAY);
+                mConfiguringSessions = false;
+            }
+        }
         for(ALSAHandleList::iterator it = mParent->mDeviceList.begin();
             it != mParent->mDeviceList.end(); ++it) {
             alsa_handle_t *it_dup = &(*it);
@@ -2057,9 +2160,6 @@ status_t AudioSessionOutALSA::doRouting(int devices)
     bool stopA2DP = false;
     int index = 0;
     ALOGD("doRouting: devices 0x%x, mDevices = 0x%x", devices,mDevices);
-    Mutex::Autolock autoLock(mParent->mLock);
-    Mutex::Autolock autoLock1(mLock);
-
     if(devices & AudioSystem::DEVICE_OUT_ALL_A2DP) {
         ALOGV("doRouting - Capture from Proxy");
         //NOTE: TODO - donot remove SPDIF device for A2DP device switch
@@ -2078,7 +2178,7 @@ status_t AudioSessionOutALSA::doRouting(int devices)
     //NOTE: make sure to remove this for non a2dp for handling output format
     //change at run time. Format change can happen with device switch to same
     // device but different format
-    if(devices == mDevices) {
+    if((devices == mDevices) && !mConfiguringSessions) {
         ALOGW("Return same device ");
         if(stopA2DP == true) {
             status = a2dpRenderingControl(A2DP_RENDER_STOP);
@@ -2086,39 +2186,47 @@ status_t AudioSessionOutALSA::doRouting(int devices)
         return status;
     }
 
+    Mutex::Autolock autoLock1(mLock);
     if(devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
         mALSADevice->updateHDMIEDIDInfo();
 
-     mDevices = devices;
-     updateDeviceSupportedFormats();
+    int pDevices = mDevices;
+    mDevices = devices;
+    updateDeviceSupportedFormats();
      //calling updateDecodeTypeAndRoutingStates() here to update
      // routing flags for the new device
-     updateDecodeTypeAndRoutingStates();
+    updateDecodeTypeAndRoutingStates();
+
+    if(!mConfiguringSessions)
+        updateSessionDevices(mDevices & ~pDevices);
 
     if(isInputBufferingModeReqd())
         mBitstreamSM->startInputBufferingMode();
     else
         mBitstreamSM->stopInputBufferingMode();
-
-    if(mOpenDecodeRoute) {
-        handleSwitchAndOpenForDeviceSwitch(mDecodeFormatDevices,
-                                        mRouteDecodeFormat);
-    } else {
+    /*
+    For the runtime format change, close the device first to avoid any
+    concurrent PCM + Compressed sessions on the same device.
+    */
+    if(!mOpenDecodeRoute)
         handleCloseForDeviceSwitch(ROUTE_UNCOMPRESSED);
-    }
-    if(mOpenPassthroughRoute) {
-        handleSwitchAndOpenForDeviceSwitch(mPassthroughFormatDevices,
-                                        mRoutePassthroughFormat);
-    } else {
+
+    if(!mOpenPassthroughRoute)
         handleCloseForDeviceSwitch(ROUTE_COMPRESSED);
-    }
-    if(mOpenTranscodeRoute) {
-        handleSwitchAndOpenForDeviceSwitch(mTranscodeFormatDevices,
-                                        mRouteTrancodeFormat);
-    } else {
+
+    if(!mOpenTranscodeRoute)
         handleCloseForDeviceSwitch(ROUTE_SW_TRANSCODED_COMPRESSED|
                                    ROUTE_DSP_TRANSCODED_COMPRESSED);
-    }
+
+    if(mOpenDecodeRoute)
+        handleSwitchAndOpenForDeviceSwitch(mDecodeFormatDevices,
+                                        mRouteDecodeFormat);
+    if(mOpenPassthroughRoute)
+        handleSwitchAndOpenForDeviceSwitch(mPassthroughFormatDevices,
+                                        mRoutePassthroughFormat);
+    if(mOpenTranscodeRoute)
+        handleSwitchAndOpenForDeviceSwitch(mTranscodeFormatDevices,
+                                        mRouteTrancodeFormat);
 
     if(stopA2DP)
         status = a2dpRenderingControl(A2DP_RENDER_STOP);
@@ -2164,22 +2272,23 @@ Description: Handles device switch - switch in the existing handle and opening
 *******************************************************************************/
 void AudioSessionOutALSA::handleSwitchAndOpenForDeviceSwitch(int devices, int format)
 {
-    ALOGV("handleSwitchAndOpenForDeviceSwitch");
+    ALOGV("handleSwitchAndOpenForDeviceSwitch device = %d format = %d", devices, format);
     int index;
     for(index = 0; index < mNumRxHandlesActive; index++) {
+        ALOGD("index format = %d", mRxHandleRouteFormat[index]);
         if(mRxHandleRouteFormat[index] == format) {
             if(mRxHandleDevices[index] != devices) {
                 mALSADevice->switchDeviceUseCase(mRxHandle[index],
                                                  devices,
                                                  mParent->mode());
                 mRxHandleDevices[index] = devices;
-                break;
             }
+            break;
         }
     }
     if(index == mNumRxHandlesActive) {
-        if(format != ROUTE_UNCOMPRESSED)
-            updatePCMHandleStatesInDeviceList(devices, STANDBY);
+        if(!mConfiguringSessions)
+            updateSessionDevices(devices);
         mRxHandleDevices[index] = devices;
         mRxHandleRouteFormat[index] = format;
         mRxHandleRouteFormatType[index] = getDeviceFormat(devices);
@@ -2223,32 +2332,16 @@ void AudioSessionOutALSA::handleCloseForDeviceSwitch(int format)
 Description: Ignoring pcm on hdmi or spdif if the required playback on the
              devices is compressed pass through
 *******************************************************************************/
-void AudioSessionOutALSA::handleIgnoringPCMBeforeEnableComprPassthrough()
+void AudioSessionOutALSA::updateDevicesInSessionList(int devices, int state)
 {
-    ALOGV("handleIgnoringPCMBeforeEnableComprPassthrough");
-    for(int index = 0; index < mNumRxHandlesActive; index++) {
-        ALOGV("mRxHandleDevices: %d", mRxHandleDevices[index]);
-        if(mRxHandleRouteFormat[index] != ROUTE_UNCOMPRESSED) {
-            updatePCMHandleStatesInDeviceList(mRxHandleDevices[index], STANDBY);
-        }
-    }
-}
-
-
-/*******************************************************************************
-Description: update the pcm handle statues of pcm streams (system tones) for
-             HDMI and SPDIF
-*******************************************************************************/
-void AudioSessionOutALSA::updatePCMHandleStatesInDeviceList(int devices, int state)
-{
+    int device = 0;
     if(devices & AudioSystem::DEVICE_OUT_SPDIF)
-        mParent->updatePCMHandleStatesOfOtherStreams(
-                                                 AudioSystem::DEVICE_OUT_SPDIF,
-                                                 state);
+        device |= AudioSystem::DEVICE_OUT_SPDIF;
     if(devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
-        mParent->updatePCMHandleStatesOfOtherStreams(
-                                                 AudioSystem::DEVICE_OUT_AUX_DIGITAL,
-                                                 state);
+        device |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+
+    if (device)
+        mParent->updateDevicesOfOtherSessions(device, state);
 }
 
 #if DEBUG

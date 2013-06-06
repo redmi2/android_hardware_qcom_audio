@@ -141,7 +141,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     char dtsModelId[128];
     int hdmiChannels = 8;
 
-    if (handle->devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+    if (handle->activeDevice & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
         int channel_count = 0;
         for (int i = 0; i < mEDIDInfo.nAudioBlocks && i < MAX_EDID_BLOCKS; i++) {
             if (mEDIDInfo.AudioBlocksArray[i].nFormatId == LPCM &&
@@ -297,7 +297,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     }
     if(handle->channels > MAX_SUPPORTED_CHANNELS)
         handle->channels = MAX_SUPPORTED_CHANNELS;
-    if (handle->devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+    if (handle->activeDevice & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
         err = setHDMIChannelCount(hdmiChannels);
         if(err != OK) {
             ALOGE("setHDMIChannelCount err = %d", err);
@@ -485,7 +485,7 @@ void ALSADevice::switchDeviceUseCase(alsa_handle_t *handle,
 
     enableDevice(handle, bIsUseCaseSet);
 
-    handle->devices = handle->activeDevice = switchTodevices;
+    handle->activeDevice = switchTodevices;
 
     if (use_case != NULL) {
         free(use_case);
@@ -605,7 +605,7 @@ status_t ALSADevice::configureTranscode(alsa_handle_t *handle) {
     param_set_int(params, SNDRV_PCM_HW_PARAM_RATE, handle->sampleRate);
     param_set_int(params, SNDRV_PCM_HW_PARAM_CHANNELS,
                           handle->channels);
-    if (handle->devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+    if (handle->activeDevice & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
         err = setHDMIChannelCount(2);
         if(err != OK) {
             ALOGE("setHDMIChannelCount err = %d", err);
@@ -1218,6 +1218,8 @@ void ALSADevice::enableDevice(alsa_handle_t *handle, bool bIsUseCaseSet)
     while (devices != 0) {
         int deviceToEnable = devices & (-devices);
         getDevices(deviceToEnable, handle->mode, &rxDevice, &txDevice);
+        //PCM_FORMAT needs to removed when the type is initialized ROUTE_UNCOMPRESSED for Stream out
+        setPlaybackFormat(deviceToEnable, handle->type != ROUTE_UNCOMPRESSED && handle->type != PCM_FORMAT);
         if(rxDevice != NULL) {
             usecase_type = getUseCaseType(handle->useCase);
             if (usecase_type & USECASE_TYPE_RX) {
@@ -1615,22 +1617,28 @@ status_t ALSADevice::setPlaybackVolume(alsa_handle_t *handle, int volume)
     return err;
 }
 
-status_t ALSADevice::setPlaybackFormat(const char *value, int device, int dtsTranscode)
+status_t ALSADevice::setPlaybackFormat(int device, bool isCompressed)
 {
     status_t err = NO_ERROR;
-    if (device == AudioSystem::DEVICE_OUT_SPDIF) {
-        err = setMixerControl("SEC RX Format",value);
-        if (!dtsTranscode && !strncmp(value, "Compr", sizeof(value)))
+    if (device & AudioSystem::DEVICE_OUT_SPDIF) {
+        if (isCompressed) {
+            err = setMixerControl("SEC RX Format", "Compr");
             err = setMixerControl("SEC RX Rate", "Variable");
-        else
+        } else {
+            err = setMixerControl("SEC RX Format", "LPCM");
             err = setMixerControl("SEC RX Rate", "Default");
+        }
     }
-    else if(device == AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
-        err = setMixerControl("HDMI RX Format",value);
-        if (!dtsTranscode && !strncmp(value, "Compr", sizeof(value)))
+    else if(device & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+        if (isCompressed) {
+            err = setMixerControl("HDMI RX Format", "Compr");
             err = setMixerControl("HDMI RX Rate", "Variable");
-        else
+            setHdmiOutputProperties(ROUTE_COMPRESSED);
+        } else {
+            err = setMixerControl("HDMI RX Format", "LPCM");
             err = setMixerControl("HDMI RX Rate", "Default");
+            setHdmiOutputProperties(ROUTE_UNCOMPRESSED);
+        }
     }
     if(err) {
         ALOGE("setPlaybackFormat error = %d",err);
@@ -2796,8 +2804,8 @@ Compressed driver to handle both meta and no meta data mode.
     if(handle->channels > MAX_SUPPORTED_CHANNELS)
         handle->channels = MAX_SUPPORTED_CHANNELS;
 
-    if (handle->devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
-        setHdmiOutputProperties(handle, handle->type);
+    if (handle->activeDevice & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
+        setHdmiOutputProperties(handle->type);
     ALOGD("setHardwareParams: reqBuffSize %d, periodSize %d, channels %d, sampleRate %d.",
          (int) reqBuffSize, handle->periodSize, handle->channels, handle->sampleRate);
 
@@ -2836,7 +2844,7 @@ Compressed driver to handle both meta and no meta data mode.
     }
     param_dump(params);
 
-    handle->handle->buffer_size = pcm_buffer_size(params);
+    handle->handle->buffer_size = handle->handle->period_size * handle->handle->period_cnt;;
     handle->handle->period_size = pcm_period_size(params);
     handle->handle->period_cnt = handle->handle->buffer_size/handle->handle->period_size;
     ALOGD("setHardwareParams: buffer_size %d, period_size %d, period_cnt %d, format %d",
@@ -2852,7 +2860,7 @@ Compressed driver to handle both meta and no meta data mode.
     return NO_ERROR;
 }
 
-void ALSADevice::setHdmiOutputProperties(alsa_handle_t *handle, int type)
+void ALSADevice::setHdmiOutputProperties(int type)
 {
     int hdmiChannels = 2;
     char channelMap[MAX_HDMI_CHANNEL_CNT] = {PCM_CHANNEL_FL, PCM_CHANNEL_FR,

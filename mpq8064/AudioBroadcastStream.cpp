@@ -963,11 +963,6 @@ status_t AudioBroadcastStreamALSA::openPcmDevice(int devices)
     if(mCaptureFromProxy) {
         devices = AudioSystem::DEVICE_OUT_PROXY;
     }
-    status = setPlaybackFormat();
-    if(status != NO_ERROR) {
-        ALOGE("setPlaybackFormat Failed");
-        return BAD_VALUE;
-    }
     mInputBufferSize = DEFAULT_OUT_BUFFER_SIZE_PER_CHANNEL * mChannels;
     mInputBufferCount = MULTI_CHANNEL_PERIOD_COUNT;
     snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
@@ -1018,11 +1013,6 @@ status_t AudioBroadcastStreamALSA::openTunnelDevice(int devices)
     }
     mInputBufferSize    = TUNNEL_DECODER_BUFFER_SIZE_BROADCAST;
     mInputBufferCount   = TUNNEL_DECODER_BUFFER_COUNT_BROADCAST;
-    status = setPlaybackFormat();
-    if(status != NO_ERROR) {
-        ALOGE("setPlaybackFormat Failed");
-        return BAD_VALUE;
-    }
     if (devices & ~mTranscodeDevices) {
         hw_ptr = 0;
         snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
@@ -1094,29 +1084,6 @@ status_t AudioBroadcastStreamALSA::openTunnelDevice(int devices)
     }
 
     return NO_ERROR;
-}
-
-status_t AudioBroadcastStreamALSA::setPlaybackFormat()
-{
-    status_t status = NO_ERROR;
-
-    if((mSpdifFormat == PCM_FORMAT) ||
-              (mSpdifFormat == COMPRESSED_FORCED_PCM_FORMAT)) {
-        status = mALSADevice->setPlaybackFormat("LPCM",
-                           AudioSystem::DEVICE_OUT_SPDIF, mDtsTranscode);
-    } else if(mSpdifFormat == COMPRESSED_FORMAT) {
-        status = mALSADevice->setPlaybackFormat("Compr",
-                           AudioSystem::DEVICE_OUT_SPDIF, mDtsTranscode);
-    }
-    if((mHdmiFormat == PCM_FORMAT) ||
-               (mHdmiFormat == COMPRESSED_FORCED_PCM_FORMAT)) {
-        status = mALSADevice->setPlaybackFormat("LPCM",
-                           AudioSystem::DEVICE_OUT_AUX_DIGITAL, mDtsTranscode);
-    } else if (mHdmiFormat == COMPRESSED_FORMAT) {
-        status = mALSADevice->setPlaybackFormat("Compr",
-                           AudioSystem::DEVICE_OUT_AUX_DIGITAL, mDtsTranscode);
-    }
-    return status;
 }
 
 status_t AudioBroadcastStreamALSA::openRoutingDevice(char *useCase,
@@ -2045,9 +2012,6 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
 
     if(mUseTunnelDecoder) {
         if(mCompreRxHandle) {
-            status = setPlaybackFormat();
-            if(status != NO_ERROR)
-               return BAD_VALUE;
             if(mFormat == AUDIO_FORMAT_DTS || mFormat == AUDIO_FORMAT_DTS_LBR) {
                 if((prevSpdifFormat == COMPRESSED_FORMAT && mHdmiFormat == COMPRESSED_FORMAT)
                     || (mSpdifFormat == COMPRESSED_FORMAT && prevHdmiFormat == COMPRESSED_FORMAT)) {
@@ -2136,10 +2100,6 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
 
         bool closePcmDevice = false;
 
-        status = setPlaybackFormat();
-        if(status != NO_ERROR)
-            return BAD_VALUE;
-
         if(pcmDevices != 0) {
             if(mPcmRxHandle == NULL) {
                 Mutex::Autolock autoLock(mLock);
@@ -2167,9 +2127,6 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
             if((prevSpdifFormat == COMPRESSED_FORMAT && mHdmiFormat == COMPRESSED_FORMAT)
                 || (mSpdifFormat == COMPRESSED_FORMAT && prevHdmiFormat == COMPRESSED_FORMAT)) {
                 ALOGD("Rerouting the AC3 compressed to compressed stream");
-                status = setPlaybackFormat();
-                if(status != NO_ERROR)
-                    return BAD_VALUE;
                 struct snd_compr_routing params;
                 params.session_type = PASSTHROUGH_SESSION;
                 params.operation = DISCONNECT_STREAM;
