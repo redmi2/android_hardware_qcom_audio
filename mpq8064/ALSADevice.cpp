@@ -284,7 +284,8 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
                 free(params);
             return err;
         }
-        handle->handle->flags &= ~(PCM_STEREO | PCM_MONO | PCM_QUAD | PCM_5POINT1);
+        handle->handle->flags &= ~(PCM_STEREO | PCM_MONO | PCM_QUAD | PCM_5POINT1 |
+                                      PCM_TRIPLE | PCM_PENTA | PCM_7POINT);
         handle->handle->flags |= PCM_7POINT1;
         handle->channels = 8;
         handle->handle->flags |= PCM_TUNNEL;
@@ -369,10 +370,16 @@ status_t ALSADevice::setSoftwareParams(alsa_handle_t *handle)
 
     if(pcm->flags & PCM_MONO)
         channels = 1;
+    else if(pcm->flags & PCM_TRIPLE)
+        channels = 3;
     else if(pcm->flags & PCM_QUAD)
         channels = 4;
+    else if(pcm->flags & PCM_PENTA)
+        channels = 5;
     else if(pcm->flags & PCM_5POINT1)
         channels = 6;
+    else if(pcm->flags & PCM_7POINT)
+        channels = 7;
     else if(pcm->flags & PCM_7POINT1)
         channels = 8;
     else
@@ -525,10 +532,16 @@ status_t ALSADevice::open(alsa_handle_t *handle)
 
     if (handle->channels == 1) {
         flags |= PCM_MONO;
+    } else if (handle->channels == 3) {
+        flags |= PCM_TRIPLE;
     } else if (handle->channels == 4) {
         flags |= PCM_QUAD;
+    } else if (handle->channels == 5) {
+        flags |= PCM_PENTA;
     } else if (handle->channels == 6) {
         flags |= PCM_5POINT1;
+    } else if (handle->channels == 7) {
+        flags |= PCM_7POINT;
     } else if (handle->channels == 8) {
         flags |= PCM_7POINT1;
     } else {
@@ -2286,16 +2299,23 @@ status_t ALSADevice::openCapture(alsa_handle_t *handle,
 
     ALOGD("openCapture: handle %p", handle);
 
-    if (handle->channels == 1)
+    if (handle->channels == 1) {
         flags |= PCM_MONO;
-    else if (handle->channels == 4)
+    } else if (handle->channels == 3) {
+        flags |= PCM_TRIPLE;
+    } else if (handle->channels == 4) {
         flags |= PCM_QUAD;
-    else if (handle->channels == 6)
+    } else if (handle->channels == 5) {
+        flags |= PCM_PENTA;
+    } else if (handle->channels == 6) {
         flags |= PCM_5POINT1;
-    else if (handle->channels == 8)
+    } else if (handle->channels == 7) {
+        flags |= PCM_7POINT;
+    } else if (handle->channels == 8) {
         flags |= PCM_7POINT1;
-    else
+    } else {
         flags |= PCM_STEREO;
+    }
 
     if(isMmapMode)
         flags |= PCM_MMAP;
@@ -2526,16 +2546,23 @@ status_t ALSADevice::openPlayback(alsa_handle_t *handle, bool isMmapMode)
 
     ALOGD("%s handle %p", __func__, handle);
 
-    if (handle->channels == 1)
+    if (handle->channels == 1) {
         flags |= PCM_MONO;
-    else if (handle->channels == 4)
+    } else if (handle->channels == 3) {
+        flags |= PCM_TRIPLE;
+    } else if (handle->channels == 4) {
         flags |= PCM_QUAD;
-    else if (handle->channels == 6)
+    } else if (handle->channels == 5) {
+        flags |= PCM_PENTA;
+    } else if (handle->channels == 6) {
         flags |= PCM_5POINT1;
-    else if (handle->channels == 8)
+    } else if (handle->channels == 7) {
+        flags |= PCM_7POINT;
+    } else if (handle->channels == 8) {
         flags |= PCM_7POINT1;
-    else
+    } else {
         flags |= PCM_STEREO;
+    }
 
     if(isMmapMode)
         flags |= PCM_MMAP;
@@ -2651,6 +2678,7 @@ status_t ALSADevice::setPlaybackHardwareParams(alsa_handle_t *handle)
     //      the tunnel flag is removed for the PCM clips to be back ward compatible
     //      with 24-bit change. TODO: handle this accordingly
     handle->handle->flags |= PCM_TUNNEL;
+
     switch(format) {
     case AUDIO_FORMAT_WMA:
     case AUDIO_FORMAT_WMA_PRO:

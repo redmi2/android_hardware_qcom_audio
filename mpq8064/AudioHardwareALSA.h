@@ -232,10 +232,12 @@ So, a (AC3/EAC3) pass through + trancode require - 1 for pas through, 1 - pcm an
 #define DECODER_TYPE_IDX               0
 #define ROUTE_FORMAT_IDX               1
 
-#define MIN_SIZE_FOR_METADATA    96//metadata is 64, but we need LCM of 1 to 8
+#define MIN_SIZE_FOR_METADATA    64
 #define NUM_OF_PERIODS_COMPR     4
 #define NUM_OF_PERIODS_PCM       8
-#define PERIOD_SIZE_COMPR        2400+MIN_SIZE_FOR_METADATA
+/*Period size to be a multiple of chanels * bitwidth,
+So min period size = LCM (1,2...8) * 4*/
+#define PERIOD_SIZE_COMPR        3360
 #define PERIOD_SIZE_PCM_16BIT    1920*2*6/*16 bit*/+MIN_SIZE_FOR_METADATA
 #define PERIOD_SIZE_PCM_24BIT    1920*3*6/*24 bit*/+MIN_SIZE_FOR_METADATA
 
