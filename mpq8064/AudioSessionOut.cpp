@@ -1899,6 +1899,8 @@ bool AudioSessionOutALSA::swDecode(char *buffer, size_t bytes)
     size_t  copyOutputBytesSize = 0;
     uint32_t outSampleRate = mSampleRate;
     uint32_t outChannels = mChannels;
+    alsa_handle_t *    pTempRxHandle;
+
     ALOGVV("sw Decode");
     // eos handling
     if(bytes == 0) {
@@ -1945,7 +1947,9 @@ bool AudioSessionOutALSA::swDecode(char *buffer, size_t bytes)
         mChannels = outChannels;
         int index = getIndexHandleBasedOnHandleFormat(ROUTE_UNCOMPRESSED);
         if(mRxHandle[index]) {
-            status_t status = closeDevice(mRxHandle[index]);
+            pTempRxHandle = mRxHandle[index];
+            mRxHandle[index] = NULL;
+            status_t status = closeDevice(pTempRxHandle);
             if(status != NO_ERROR)
                 ALOGE("change in sample rate - close pcm device fail");
             status = openPlaybackDevice(index, mRxHandleDevices[index],
