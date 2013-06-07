@@ -26,6 +26,7 @@ SectionVerb
 	EndSequence
 
 	DisableSequence
+	    'SLIMBUS_0_RX Audio Mixer MultiMedia1':1:0
 	EndSequence
 
 	# ALSA PCMs
@@ -513,6 +514,7 @@ SectionVerb
 	EndSequence
 
 	DisableSequence
+	    'SLIMBUS_0_RX Audio Mixer MultiMedia2':1:0
 	EndSequence
 
 	# ALSA PCMs
@@ -970,6 +972,7 @@ SectionVerb
 	EndSequence
 
 	DisableSequence
+	    'SLIMBUS_0_RX Audio Mixer MultiMedia5':1:0
 	EndSequence
 
 	# ALSA PCMs
@@ -2565,6 +2568,7 @@ SectionVerb
 	EndSequence
 
 	DisableSequence
+	    'SLIMBUS_0_RX Audio Mixer MultiMedia4':1:0
 	EndSequence
 
 	# ALSA PCMs
@@ -3000,6 +3004,7 @@ SectionVerb
 	EndSequence
 
 	DisableSequence
+	    'SLIMBUS_0_RX Audio Mixer MultiMedia7':1:0
 	EndSequence
 
 	# ALSA PCMs
@@ -5157,6 +5162,7 @@ SectionModifier
 	EndSequence
 
 	DisableSequence
+	    'SLIMBUS_0_RX Audio Mixer MultiMedia1':1:0
 	EndSequence
 
 	# ALSA PCMs
@@ -5367,6 +5373,7 @@ SectionModifier
 	EndSequence
 
 	DisableSequence
+	    'SLIMBUS_0_RX Audio Mixer MultiMedia2':1:0
 	EndSequence
 
 	# ALSA PCMs
@@ -6008,6 +6015,22 @@ SectionModifier
 EndSection
 
 SectionModifier
+        Name "Play VOIPSLIMBUS_VIRTUAL_PORT"
+
+        EnableSequence
+        EndSequence
+
+        DisableSequence
+                'SLIM_0_RX_Voice Mixer Voip':1:0
+        EndSequence
+
+       # ALSA PCMs
+        PlaybackPCM 3
+        CapturePCM 3
+
+EndSection
+
+SectionModifier
 	Name "Play VOIPBT SCO Rx"
 
 	EnableSequence
@@ -6173,6 +6196,7 @@ SectionModifier
 	EndSequence
 
 	DisableSequence
+	    'SLIMBUS_0_RX Audio Mixer MultiMedia4':1:0
 	EndSequence
 
 	# ALSA PCMs
@@ -7001,6 +7025,7 @@ SectionModifier
 	EndSequence
 
 	DisableSequence
+	    'SLIMBUS_0_RX Audio Mixer MultiMedia5':1:0
 	EndSequence
 
 	# ALSA PCMs
@@ -7458,6 +7483,7 @@ SectionModifier
 	EndSequence
 
 	DisableSequence
+	    'SLIMBUS_0_RX Audio Mixer MultiMedia7':1:0
 	EndSequence
 
 	# ALSA PCMs
@@ -7727,6 +7753,7 @@ SectionModifier
 	EndSequence
 
 	DisableSequence
+            'SLIMBUS_0_RX Audio Mixer MultiMedia8':1:0
 	EndSequence
 
 	# ALSA PCMs
