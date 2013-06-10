@@ -150,7 +150,10 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     Ignoring pcm on hdmi or spdif if the required playback on the devices is
     compressed pass through
     -------------------------------------------------------------------------*/
+    {
+    Mutex::Autolock autoLock(mControlLock);
     updateSessionDevices(mDevices);
+    }
     /* ------------------------------------------------------------------------
     setup routing
     -------------------------------------------------------------------------*/
@@ -203,9 +206,10 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
         mA2dpUseCase == AudioHardwareALSA::USECASE_NONE) {
         a2dpRenderingControl(A2DP_RENDER_SETUP);
     }
-    if(!mDecoderConfigSet && isDecoderConfigRequired() &&
-       setDecodeConfig((char *)buffer, bytes)) {
-        ALOGD("decoder configuration set");
+    if(!mDecoderConfigSet && isDecoderConfigRequired()) {
+       Mutex::Autolock autoLock(mControlLock);
+        if (setDecodeConfig((char *)buffer, bytes))
+            ALOGD("decoder configuration set");
         return bytes;
     }
     copyBitstreamInternalBuffer((char *)buffer, bytes);
@@ -218,9 +222,7 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
     } while(continueDecode == true);
 
     if(bytes == 0) {
-        mLock.unlock();
         eosHandling();
-        mLock.lock();
     }
     return bytes;
 }
@@ -231,7 +233,7 @@ Description: start
 status_t AudioSessionOutALSA::start()
 {
     ALOGD("start");
-    Mutex::Autolock autoLock(mLock);
+    Mutex::Autolock autoLock(mControlLock);
 
     status_t status = NO_ERROR;
     if(mPaused) {
@@ -242,12 +244,13 @@ status_t AudioSessionOutALSA::start()
                mRxHandle[i]->handle &&
                mRxHandleRouteFormat[i] != ROUTE_DSP_TRANSCODED_COMPRESSED) {
                 if (ioctl(mRxHandle[i]->handle->fd, SNDRV_PCM_IOCTL_PAUSE,0) < 0) {
-                    ALOGE("PAUSE failed for use case %s", mRxHandle[i]->useCase);
+                    ALOGE("Resume failed for use case %s", mRxHandle[i]->useCase);
                 }
             }
         }
     }
     mPaused = false;
+    mEOSCv.signal();
 #ifdef DEBUG
     updateDumpWithPlaybackControls(RESUME);
 #endif
@@ -260,7 +263,7 @@ Description: pause
 status_t AudioSessionOutALSA::pause()
 {
     ALOGD("pause");
-    Mutex::Autolock autoLock(mLock);
+    Mutex::Autolock autoLock(mControlLock);
 
     status_t status = NO_ERROR;
     mPaused = true;
@@ -288,7 +291,7 @@ status_t AudioSessionOutALSA::flush()
 {
     ALOGD("Flush");
     status_t status = NO_ERROR;
-    Mutex::Autolock autoLock(mLock);
+    Mutex::Autolock autoLock(mControlLock);
     return flush_l();
 }
 
@@ -299,22 +302,22 @@ status_t AudioSessionOutALSA::flush_l()
 {
     ALOGD("flush_l");
     status_t status = NO_ERROR;
+    Mutex::Autolock autoLock(mFlushLock);
     for(int i=0; i<mNumRxHandlesActive; i++) {
         if(mRxHandle[i] &&
            mRxHandle[i]->handle &&
            mRxHandleRouteFormat[i] != ROUTE_DSP_TRANSCODED_COMPRESSED) {
-            if(!mPaused) {
-                if (ioctl(mRxHandle[i]->handle->fd, SNDRV_PCM_IOCTL_PAUSE,1) < 0) {
-                    ALOGE("PAUSE failed for use case %s", mRxHandle[i]->useCase);
-                }
+            if (ioctl(mRxHandle[i]->handle->fd, SNDRV_PCM_IOCTL_DROP) < 0) {
+                ALOGE("drop failed");
             }
-            pcm_prepare(mRxHandle[i]->handle);
-            ALOGV("flush(): prepare completed");
+            int n = pcm_prepare(mRxHandle[i]->handle);
+            ALOGV("flush(): prepare completed %d", n);
         }
     }
     mFrameCountMutex.lock();
     mFrameCount = 0;
     mFrameCountMutex.unlock();
+    mBitStreamMutex.lock();
     if(mBitstreamSM)
         mBitstreamSM->resetBitstreamPtr();
     if(mUseMS11Decoder && mMS11Decoder) {
@@ -325,6 +328,7 @@ status_t AudioSessionOutALSA::flush_l()
             return BAD_VALUE;
         }
     }
+    mBitStreamMutex.unlock();
 #ifdef DEBUG
     updateDumpWithPlaybackControls(SEEK);
 #endif
@@ -364,7 +368,7 @@ Description: setVolume
 status_t AudioSessionOutALSA::setVolume(float left, float right)
 {
     ALOGD("setVolume");
-    Mutex::Autolock autoLock(mLock);
+    Mutex::Autolock autoLock(mControlLock);
 
     status_t status = NO_ERROR;
     float volume;
@@ -455,6 +459,7 @@ status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
     } else {
         mControlLock.unlock();
         mParent->setParameters(keyValuePairs);
+        mControlLock.lock();
     }
     return NO_ERROR;
 }
@@ -518,6 +523,7 @@ Description: getNextWriteTimestamp
 status_t AudioSessionOutALSA::getNextWriteTimestamp(int64_t *timeStamp)
 {
     ALOGV("getNextWriteTimestamp");
+    Mutex::Autolock autoLock(mControlLock);
 
     struct snd_compr_tstamp tstamp;
     if (!timeStamp) {
@@ -867,6 +873,7 @@ Description: reset
 void AudioSessionOutALSA::reset()
 {
     ALOGV("reset");
+    Mutex::Autolock autoLock(mControlLock);
     for(int index=0; index < mNumRxHandlesActive; index++) {
         if(mRxHandle[index]) {
             closeDevice(mRxHandle[index]);
@@ -877,14 +884,17 @@ void AudioSessionOutALSA::reset()
         delete mMS11Decoder;
         mMS11Decoder = NULL;
     }
+    mBitStreamMutex.lock();
     if(mBitstreamSM) {
         delete mBitstreamSM;
         mBitstreamSM = NULL;
     }
+    mBitStreamMutex.unlock();
     if(mWriteTempBuffer)
         free(mWriteTempBuffer);
 
     reinitialize();
+    mEOSCv.signal();
 }
 
 /*******************************************************************************
@@ -1227,7 +1237,7 @@ int AudioSessionOutALSA::getBufferingFactor()
        (mFormat == AUDIO_FORMAT_PCM_24_BIT))
         return 1;
     else
-        return NUM_OF_PERIODS_COMPR;
+        return NUM_OF_PERIODS;
 }
 
 /*******************************************************************************
@@ -1236,6 +1246,7 @@ Description: setup input path
 status_t AudioSessionOutALSA::routingSetup()
 {
     ALOGV("routingSetup");
+    Mutex::Autolock autoLock(mControlLock);
     status_t status;
     int bufferCount;
     /*
@@ -1529,17 +1540,17 @@ void AudioSessionOutALSA::getPeriodSizeCountAndFormat(int routeFormat, int *peri
                                        int *periodCount, int *format)
 {
     ALOGV("getPeriodSizeCountAndFormat");
+    int frameSize = 0;
     *format = mFormat;
-    *periodSize = PERIOD_SIZE_COMPR;
-    *periodCount = NUM_OF_PERIODS_COMPR;
+    *periodCount = NUM_OF_PERIODS;
     switch(mFormat) {
     case AUDIO_FORMAT_PCM_16_BIT:
-        *periodSize = PERIOD_SIZE_PCM_16BIT*mChannels;
-        *periodCount = NUM_OF_PERIODS_PCM;
+        frameSize = PCM_16_BITS_PER_SAMPLE * mChannels;
+        *periodSize = nextMultiple(((frameSize * mSampleRate * TIME_PER_BUFFER)/1000) + MIN_SIZE_FOR_METADATA , frameSize * 32);
         break;
     case AUDIO_FORMAT_PCM_24_BIT:
-        *periodSize = PERIOD_SIZE_PCM_24BIT*mChannels;
-        *periodCount = NUM_OF_PERIODS_PCM;
+        frameSize = PCM_24_BITS_PER_SAMPLE * mChannels;
+        *periodSize = nextMultiple(((frameSize * mSampleRate * TIME_PER_BUFFER)/1000) + MIN_SIZE_FOR_METADATA, frameSize * 32);
         break;
     case AUDIO_FORMAT_AAC:
     case AUDIO_FORMAT_HE_AAC_V1:
@@ -1548,12 +1559,11 @@ void AudioSessionOutALSA::getPeriodSizeCountAndFormat(int routeFormat, int *peri
     case AUDIO_FORMAT_AC3:
     case AUDIO_FORMAT_EAC3:
         if(routeFormat == ROUTE_UNCOMPRESSED) {
-            *periodSize = PERIOD_SIZE_PCM_16BIT*mChannels;
-            *periodCount = NUM_OF_PERIODS_PCM;
+            frameSize = PCM_16_BITS_PER_SAMPLE * mChannels;
+            *periodSize = nextMultiple(AC3_PERIOD_SIZE * mChannels + MIN_SIZE_FOR_METADATA, frameSize * 32);
             *format = AUDIO_FORMAT_PCM_16_BIT;
         } else {
             *periodSize = PERIOD_SIZE_COMPR;
-            *periodCount = NUM_OF_PERIODS_COMPR;
         }
         break;
     case AUDIO_FORMAT_DTS:
@@ -1563,7 +1573,6 @@ void AudioSessionOutALSA::getPeriodSizeCountAndFormat(int routeFormat, int *peri
     case AUDIO_FORMAT_WMA_PRO:
     case AUDIO_FORMAT_MP2:
         *periodSize = PERIOD_SIZE_COMPR;
-        *periodCount = NUM_OF_PERIODS_COMPR;
         break;
     }
     ALOGV("periodSize: %d, periodCnt: %d", *periodSize, *periodCount);
@@ -1579,10 +1588,10 @@ int AudioSessionOutALSA::getBufferLength()
     int bufferSize = PERIOD_SIZE_COMPR;
     switch(mFormat) {
     case AUDIO_FORMAT_PCM_16_BIT:
-        bufferSize = (int)((PCM_16_INPUT_BUFFER_SIZE*mSampleRate*mChannels)/48000);
+        bufferSize = ((PCM_16_BITS_PER_SAMPLE * mChannels * mSampleRate * TIME_PER_BUFFER)/1000);
         break;
     case AUDIO_FORMAT_PCM_24_BIT:
-        bufferSize = (int)((PCM_24_INPUT_BUFFER_SIZE*mSampleRate*mChannels)/48000);
+        bufferSize = ((PCM_24_BITS_PER_SAMPLE * mChannels * mSampleRate * TIME_PER_BUFFER)/1000);
         break;
     case AUDIO_FORMAT_AAC:
     case AUDIO_FORMAT_HE_AAC_V1:
@@ -1596,17 +1605,11 @@ int AudioSessionOutALSA::getBufferLength()
         break;
     case AUDIO_FORMAT_DTS:
     case AUDIO_FORMAT_DTS_LBR:
-        bufferSize = DTS_INPUT_BUFFER_SIZE;
-        break;
     case AUDIO_FORMAT_MP3:
-        bufferSize = MP3_INPUT_BUFFER_SIZE;
-        break;
     case AUDIO_FORMAT_WMA:
     case AUDIO_FORMAT_WMA_PRO:
-        bufferSize = WMA_INPUT_BUFFER_SIZE;
-        break;
     case AUDIO_FORMAT_MP2:
-        bufferSize = MP2_INPUT_BUFFER_SIZE;
+        bufferSize = COMPR_INPUT_BUFFER_SIZE;
         break;
     }
     return bufferSize;
@@ -1866,6 +1869,7 @@ Description: decode
 bool AudioSessionOutALSA::decode(char *buffer, size_t bytes)
 {
     ALOGV("decode");
+    Mutex::Autolock autoLock(mBitStreamMutex);
     bool    continueDecode = false;
 
     if (mMS11Decoder != NULL) {
@@ -1943,6 +1947,7 @@ bool AudioSessionOutALSA::swDecode(char *buffer, size_t bytes)
     //handle change in sample rate
     if((mSampleRate != outSampleRate) || (mChannels != outChannels)) {
         ALOGD("Change in sample rate. New sample rate: %d", outSampleRate);
+        Mutex::Autolock autoLock(mControlLock);
         mSampleRate = outSampleRate;
         mChannels = outChannels;
         int index = getIndexHandleBasedOnHandleFormat(ROUTE_UNCOMPRESSED);
@@ -2066,8 +2071,8 @@ uint32_t AudioSessionOutALSA::render(bool continueDecode/* used for time stamp m
     uint32_t availableSize;
     int renderType;
     int metadataLength = sizeof(mOutputMetadata);
-
     ALOGV("render");
+    Mutex::Autolock autoLock(mBitStreamMutex);
     for(int index=0; index < mNumRxHandlesActive; index++) {
         switch(mRxHandleRouteFormat[index]) {
         case ROUTE_UNCOMPRESSED:
@@ -2103,15 +2108,18 @@ uint32_t AudioSessionOutALSA::render(bool continueDecode/* used for time stamp m
             memcpy(mWriteTempBuffer+metadataLength,
                    mBitstreamSM->getOutputBufferPtr(renderType),
                    mOutputMetadata.bufferLength);
+            mBitStreamMutex.unlock();
             n = mParent->hw_pcm_write(mRxHandle[index]->handle,
-                                      mWriteTempBuffer,
-                                      periodSize);
+                    mWriteTempBuffer,
+                    periodSize);
             ALOGD("pcm_write returned with %d", n);
             if(n < 0) {
                 // Recovery is part of pcm_write. TODO split is later.
+                Mutex::Autolock autoLock(mFlushLock);
                 ALOGE("pcm_write returned n < 0");
                 return static_cast<ssize_t>(n);
             } else {
+                mBitStreamMutex.lock();
                 if(renderType == ROUTE_UNCOMPRESSED) {
                     mFrameCount++;
 #ifdef DEBUG
@@ -2148,6 +2156,14 @@ void AudioSessionOutALSA::eosHandling()
                  continue;
         }
     }
+    mLock.unlock();
+    mControlLock.lock();
+    if (mPaused) {
+        ALOGD("postEOS waiting for the resume command");
+        mEOSCv.wait(mControlLock);
+    }
+    mControlLock.unlock();
+    mLock.lock();
     if(mObserver)
         mObserver->postEOS(0);
     ALOGD("eosHandling X");
@@ -2344,8 +2360,11 @@ void AudioSessionOutALSA::updateDevicesInSessionList(int devices, int state)
     if(devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
         device |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
 
-    if (device)
+    if (device) {
+        mControlLock.unlock();
         mParent->updateDevicesOfOtherSessions(device, state);
+        mControlLock.lock();
+    }
 }
 
 #if DEBUG

@@ -236,21 +236,17 @@ So, a (AC3/EAC3) pass through + trancode require - 1 for pas through, 1 - pcm an
 #define ROUTE_FORMAT_IDX               1
 
 #define MIN_SIZE_FOR_METADATA    64
-#define NUM_OF_PERIODS_COMPR     4
-#define NUM_OF_PERIODS_PCM       8
+#define NUM_OF_PERIODS           8
 /*Period size to be a multiple of chanels * bitwidth,
 So min period size = LCM (1,2...8) * 4*/
 #define PERIOD_SIZE_COMPR        3360
-#define PERIOD_SIZE_PCM_16BIT    1920*2*6/*16 bit*/+MIN_SIZE_FOR_METADATA
-#define PERIOD_SIZE_PCM_24BIT    1920*3*6/*24 bit*/+MIN_SIZE_FOR_METADATA
-
 #define MS11_INPUT_BUFFER_SIZE   1536
-#define MP3_INPUT_BUFFER_SIZE    576
-#define WMA_INPUT_BUFFER_SIZE    128
-#define MP2_INPUT_BUFFER_SIZE    128
-#define DTS_INPUT_BUFFER_SIZE    128
-#define PCM_16_INPUT_BUFFER_SIZE 4*480
-#define PCM_24_INPUT_BUFFER_SIZE 4*720
+
+#define COMPR_INPUT_BUFFER_SIZE  (PERIOD_SIZE_COMPR - MIN_SIZE_FOR_METADATA)
+#define PCM_16_BITS_PER_SAMPLE   2
+#define PCM_24_BITS_PER_SAMPLE   3
+#define AC3_PERIOD_SIZE          1536 * PCM_16_BITS_PER_SAMPLE
+#define TIME_PER_BUFFER          20 //Time duration in ms
 /*
 List of indexes of the supported formats
 Redundant formats such as (AAC-LC, HEAAC) are removed from the indexes as they
@@ -626,10 +622,19 @@ struct use_case_t {
     char                useCase[MAX_STR_LEN];
 };
 typedef List<use_case_t> ALSAUseCaseList;
+
+
+//returns the smallest number such that it is
+//greater than n and is a multiple of m
+inline int nextMultiple(int n, int m) {
+    return ((n/m) + 1) * m;
+}
+
 /******************************************************************************
 CLASS
 *******************************************************************************/
 // ----------------------------------------------------------------------------
+
 class ALSADevice
 {
 public:
@@ -936,6 +941,9 @@ private:
     Mutex               mControlLock;
     Mutex               mRoutingLock;
     Mutex               mFrameCountMutex;
+    Mutex               mBitStreamMutex;
+    Mutex               mFlushLock;
+    Condition           mEOSCv;
 
     AudioHardwareALSA  *mParent;
     ALSADevice         *mALSADevice;

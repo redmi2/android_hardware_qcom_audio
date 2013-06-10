@@ -2851,7 +2851,7 @@ Compressed driver to handle both meta and no meta data mode.
     }
     param_dump(params);
 
-    handle->handle->buffer_size = handle->handle->period_size * handle->handle->period_cnt;;
+    handle->handle->buffer_size = pcm_buffer_size(params);
     handle->handle->period_size = pcm_period_size(params);
     handle->handle->period_cnt = handle->handle->buffer_size/handle->handle->period_size;
     ALOGD("setHardwareParams: buffer_size %d, period_size %d, period_cnt %d, format %d",
