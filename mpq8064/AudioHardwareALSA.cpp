@@ -871,6 +871,10 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
 
     ALOGD("openOutputStream: devices 0x%x channels %d sampleRate %d flags 0x%x",
          devices, *channels, *sampleRate, flags);
+    if(devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+        ALOGD("Update EDID info");
+        mALSADevice->updateHDMIEDIDInfo();
+    }
 
     status_t err = BAD_VALUE;
     if (flags & AUDIO_OUTPUT_FLAG_TUNNEL) {

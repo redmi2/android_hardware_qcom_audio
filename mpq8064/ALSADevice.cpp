@@ -2831,12 +2831,15 @@ void ALSADevice::setHdmiOutputProperties(alsa_handle_t *handle, int type)
                                              0, 0, 0, 0, 0 , 0};
     int channelAllocation = 0;
     if(type == ROUTE_UNCOMPRESSED) {
-        int index = getFormatHDMIIndexEDIDInfo(LPCM);
-        if(index >=0) {
-            hdmiChannels = mEDIDInfo.AudioBlocksArray[index].nChannels;
-            ALOGV("hdmiChannels form edid: %d", hdmiChannels);
-            memcpy(channelMap, mEDIDInfo.channelMap, MAX_HDMI_CHANNEL_CNT);
-            channelAllocation = mEDIDInfo.channelAllocation;
+        for (int i = 0; i < mEDIDInfo.nAudioBlocks && i < MAX_EDID_BLOCKS; i++) {
+            if (mEDIDInfo.AudioBlocksArray[i].nFormatId == LPCM &&
+                mEDIDInfo.AudioBlocksArray[i].nChannels > hdmiChannels &&
+                mEDIDInfo.AudioBlocksArray[i].nChannels <= MAX_HDMI_CHANNEL_CNT) {
+                hdmiChannels = mEDIDInfo.AudioBlocksArray[i].nChannels;
+                ALOGV("hdmiChannels form edid: %d", hdmiChannels);
+                memcpy(channelMap, mEDIDInfo.channelMap, MAX_HDMI_CHANNEL_CNT);
+                channelAllocation = mEDIDInfo.channelAllocation;
+            }
         }
     }
     setHDMIChannelCount(hdmiChannels);
