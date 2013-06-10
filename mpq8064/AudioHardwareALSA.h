@@ -203,7 +203,12 @@ static int USBRECBIT_FM = (1 << 3);
 //Required for ADTS Header Parsing
 #define ADTS_HEADER_SYNC_RESULT 0xfff0
 #define ADTS_HEADER_SYNC_MASK 0xfff6
+
 #define MAX_HDMI_CHANNEL_CNT 8
+#define TIME_DURATION_OF_ONE_PERIOD 8 // In msec
+#define FRAME_WIDTH                   2  // Audio bytes per frame.
+#define PLAYBACK_MAX_PERIOD_SIZE    12288 // Refered it from Multi Channel Driver
+#define BYTE_ALIGNMENT_32BYTES     0xFFFFFF10
 
 #define DECODEQUEUEINDEX     0
 #define PASSTHRUQUEUEINDEX   1
@@ -652,18 +657,22 @@ private:
     alsa_handle_t *     mMultiChPcmRxHandle;
     int                 mFrameCountMultiCh;
     int                 mFrameCount2Ch;
+    int                 mPeriodsBuffered;
 
     status_t            openPcmDevice(int devices);
     status_t            openDevice(char *pUseCase, bool bIsUseCase, int devices);
     status_t            openDevice(char *pUseCase, bool bIsUseCase, int devices,int channels);
     status_t            closeDevice(alsa_handle_t *pDevice);
     status_t            doRouting(int devices);
-    void                getSinkCapability(int devices, int *stereoDevices, int *multiChDevices);
+    void                getPcmDevices(int devices, int *stereoDevices, int *multiChDevices);
     void                createThreadsForTunnelDecode();
     void                bufferAlloc(alsa_handle_t *handle, int bufIndex);
     void                bufferDeAlloc(int bufIndex);
+    status_t            allocInternalBuffer(int dataToBuffer);
+    uint32_t            bufferedDataInDriver(alsa_handle_t *handle);
     bool                isReadyToPostEOS(int errPoll, void *fd);
     status_t            resetBufferQueue();
+    void                resetInternalBuffer();
     status_t            drainTunnel();
     status_t            openTunnelDevice(int devices);
     void                copyBuffers(alsa_handle_t *destHandle, List<BuffersAllocated> filledQueue);
@@ -686,10 +695,14 @@ private:
     uint32_t            channelMapToChannels(uint32_t channelMap);
     bool                mPostedEOS;
     void*               mFirstAACBuffer;
+    void*               mAllocatedBuffer;
     int32_t             mFirstAACBufferLength;
     List<BuffersAllocated> mInputMemEmptyQueue[2];
     List<BuffersAllocated> mInputMemFilledQueue[2];
     List<BuffersAllocated> mInputBufPool[2];
+    List<BuffersAllocated> mPcmEmptyBufferQueue;
+    List<BuffersAllocated> mPcmFilledBufferQueue;
+    List<BuffersAllocated> mPcmInputBufPool;
 
     //Declare all the threads
     pthread_t mEventThread;
