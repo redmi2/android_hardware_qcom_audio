@@ -62,16 +62,26 @@ Free the allocated memory
 */
 AudioBitstreamSM::~AudioBitstreamSM()
 {
-    if(mInputBuffer != NULL)
+    if(mInputBuffer != NULL) {
        free(mInputBuffer);
-    if(mEncOutputBuffer != NULL)
+       mInputBuffer = NULL;
+    }
+    if(mEncOutputBuffer != NULL) {
        free(mEncOutputBuffer);
-    if(mPCM2ChOutputBuffer != NULL)
+       mEncOutputBuffer = NULL;
+    }
+    if(mPCM2ChOutputBuffer != NULL) {
        free(mPCM2ChOutputBuffer);
-    if(mPCMMChOutputBuffer != NULL)
-       free(mPCMMChOutputBuffer);
-    if(mPassthroughOutputBuffer != NULL)
+       mPCM2ChOutputBuffer = NULL;
+    }
+    if(mPCMMChOutputBuffer != NULL) {
+        free(mPCMMChOutputBuffer);
+        mPCMMChOutputBuffer = NULL;
+    }
+    if(mPassthroughOutputBuffer != NULL) {
        free(mPassthroughOutputBuffer);
+       mPassthroughOutputBuffer = NULL;
+    }
     mBufferingFactor = 1;
     mBufferingFactorCnt = 0;
 }

@@ -113,6 +113,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     mChannels       = channelMapToChannels(channels);
     mSampleRate     = samplingRate;
     mSessionId      = sessionId;
+    mSessionState   = INIT;
     /* ------------------------------------------------------------------------
     Initialize
     -------------------------------------------------------------------------*/
@@ -150,10 +151,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     Ignoring pcm on hdmi or spdif if the required playback on the devices is
     compressed pass through
     -------------------------------------------------------------------------*/
-    {
-    Mutex::Autolock autoLock(mControlLock);
     updateSessionDevices(mDevices);
-    }
     /* ------------------------------------------------------------------------
     setup routing
     -------------------------------------------------------------------------*/
@@ -169,6 +167,7 @@ AudioSessionOutALSA::~AudioSessionOutALSA()
 {
     ALOGV("~AudioSessionOutALSA");
 
+    Mutex::Autolock autoLock(mLock);
     reset();
     if (mRouteAudioToA2dp)
         a2dpRenderingControl(A2DP_RENDER_STOP);
@@ -197,23 +196,24 @@ Description: write
 ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
 {
     ALOGD("write: bytes: %d", bytes);
-    Mutex::Autolock autoLock(mLock);
 
     bool continueDecode;
     ssize_t sent = 0;
-
-    if (mRouteAudioToA2dp &&
-        mA2dpUseCase == AudioHardwareALSA::USECASE_NONE) {
-        a2dpRenderingControl(A2DP_RENDER_SETUP);
+    {
+        Mutex::Autolock autoLock(mLock);
+        if(mSessionState & STANDBY)
+            return 0;
+        if (mRouteAudioToA2dp &&
+                mA2dpUseCase == AudioHardwareALSA::USECASE_NONE) {
+            a2dpRenderingControl(A2DP_RENDER_SETUP);
+        }
+        if(!mDecoderConfigSet && isDecoderConfigRequired()) {
+            if (setDecodeConfig((char *)buffer, bytes))
+                ALOGD("decoder configuration set");
+            return bytes;
+        }
+        copyBitstreamInternalBuffer((char *)buffer, bytes);
     }
-    if(!mDecoderConfigSet && isDecoderConfigRequired()) {
-       Mutex::Autolock autoLock(mControlLock);
-        if (setDecodeConfig((char *)buffer, bytes))
-            ALOGD("decoder configuration set");
-        return bytes;
-    }
-    copyBitstreamInternalBuffer((char *)buffer, bytes);
-
     do {
         continueDecode = decode((char *)buffer, bytes);
 
@@ -233,23 +233,25 @@ Description: start
 status_t AudioSessionOutALSA::start()
 {
     ALOGD("start");
-    Mutex::Autolock autoLock(mControlLock);
-
+    Mutex::Autolock autoLock(mLock);
+    int ret = 0;
     status_t status = NO_ERROR;
-    if(mPaused) {
+    ALOGD("start: mSessionState %d", mSessionState);
+    if(mSessionState & PAUSE) {
         if (mRouteAudioToA2dp)
             status = a2dpRenderingControl(A2DP_RENDER_START);
         for(int i=0; i<mNumRxHandlesActive; i++) {
             if(mRxHandle[i] &&
-               mRxHandle[i]->handle &&
-               mRxHandleRouteFormat[i] != ROUTE_DSP_TRANSCODED_COMPRESSED) {
-                if (ioctl(mRxHandle[i]->handle->fd, SNDRV_PCM_IOCTL_PAUSE,0) < 0) {
-                    ALOGE("Resume failed for use case %s", mRxHandle[i]->useCase);
+                    mRxHandle[i]->handle &&
+                    mRxHandleRouteFormat[i] != ROUTE_DSP_TRANSCODED_COMPRESSED) {
+                if ((ret = ioctl(mRxHandle[i]->handle->fd, SNDRV_PCM_IOCTL_PAUSE,0)) < 0) {
+                    ALOGE("Resume failed for use case %s ret = %d", mRxHandle[i]->useCase, ret);
                 }
             }
         }
     }
-    mPaused = false;
+    mSessionState |= PLAY;
+    mSessionState &= ~PAUSE;
     mEOSCv.signal();
 #ifdef DEBUG
     updateDumpWithPlaybackControls(RESUME);
@@ -263,10 +265,10 @@ Description: pause
 status_t AudioSessionOutALSA::pause()
 {
     ALOGD("pause");
-    Mutex::Autolock autoLock(mControlLock);
+    Mutex::Autolock autoLock(mLock);
 
     status_t status = NO_ERROR;
-    mPaused = true;
+    mSessionState |= PAUSE;
     for(int i=0; i<mNumRxHandlesActive; i++) {
         if(mRxHandle[i] &&
            mRxHandle[i]->handle &&
@@ -290,8 +292,7 @@ Description: flush
 status_t AudioSessionOutALSA::flush()
 {
     ALOGD("Flush");
-    status_t status = NO_ERROR;
-    Mutex::Autolock autoLock(mControlLock);
+    Mutex::Autolock autoLock(mLock);
     return flush_l();
 }
 
@@ -302,13 +303,15 @@ status_t AudioSessionOutALSA::flush_l()
 {
     ALOGD("flush_l");
     status_t status = NO_ERROR;
-    Mutex::Autolock autoLock(mFlushLock);
     for(int i=0; i<mNumRxHandlesActive; i++) {
         if(mRxHandle[i] &&
            mRxHandle[i]->handle &&
            mRxHandleRouteFormat[i] != ROUTE_DSP_TRANSCODED_COMPRESSED) {
+            if ((status = ioctl(mRxHandle[i]->handle->fd, SNDRV_PCM_IOCTL_RESET)) < 0) {
+                ALOGE("IOCTL Reset failed, status = %d", status);
+            }
             if (ioctl(mRxHandle[i]->handle->fd, SNDRV_PCM_IOCTL_DROP) < 0) {
-                ALOGE("drop failed");
+                ALOGE("Ioctl drop failed");
             }
             int n = pcm_prepare(mRxHandle[i]->handle);
             ALOGV("flush(): prepare completed %d", n);
@@ -317,7 +320,6 @@ status_t AudioSessionOutALSA::flush_l()
     mFrameCountMutex.lock();
     mFrameCount = 0;
     mFrameCountMutex.unlock();
-    mBitStreamMutex.lock();
     if(mBitstreamSM)
         mBitstreamSM->resetBitstreamPtr();
     if(mUseMS11Decoder && mMS11Decoder) {
@@ -328,7 +330,14 @@ status_t AudioSessionOutALSA::flush_l()
             return BAD_VALUE;
         }
     }
-    mBitStreamMutex.unlock();
+    if (mSessionState & EOS) {
+        mSessionState &= ~EOS;
+        mEOSCv.signal();
+    }
+
+    //This is to ensure that the no buffer is written back to the
+    //BitstreamSM for any pending writes
+    mOutputMetadata.bufferLength = 0;
 #ifdef DEBUG
     updateDumpWithPlaybackControls(SEEK);
 #endif
@@ -342,9 +351,9 @@ Description: stop
 status_t AudioSessionOutALSA::stop()
 {
     ALOGD("stop");
-    Mutex::Autolock autoLock(mLock);
 
     status_t status = NO_ERROR;
+    Mutex::Autolock autoLock(mLock);
     reset();
     if (mRouteAudioToA2dp) {
         status = a2dpRenderingControl(A2DP_RENDER_SUSPEND);
@@ -368,7 +377,7 @@ Description: setVolume
 status_t AudioSessionOutALSA::setVolume(float left, float right)
 {
     ALOGD("setVolume");
-    Mutex::Autolock autoLock(mControlLock);
+    Mutex::Autolock autoLock(mLock);
 
     status_t status = NO_ERROR;
     float volume;
@@ -397,9 +406,9 @@ Description: standby
 status_t AudioSessionOutALSA::standby()
 {
     ALOGD("standby");
-    Mutex::Autolock autoLock(mLock);
 
     status_t status = NO_ERROR;
+    Mutex::Autolock autoLock(mLock);
     reset();
     if (mRouteAudioToA2dp)
         status = a2dpRenderingControl(A2DP_RENDER_STOP);
@@ -416,7 +425,6 @@ Description: setParameters
 status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
 {
     ALOGV("setParameters keyvalue = %s", keyValuePairs.string());
-    Mutex::Autolock autoLock(mControlLock);
     AudioParameter param = AudioParameter(keyValuePairs);
     String8 key = String8(AudioParameter::keyRouting);
     String8 keyStandby = String8(STANDBY_DEVICES_KEY);
@@ -425,6 +433,7 @@ status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
     if (param.getInt(key, device) == NO_ERROR) {
         // Ignore routing if device is 0.
         if(device) {
+            Mutex::Autolock autoLock(mControlLock);
             device |= AudioSystem::DEVICE_OUT_SPDIF;
             ALOGD("setParameters(): keyRouting with device %d", device);
             if(!(device & AudioSystem::DEVICE_OUT_SPDIF)) {
@@ -443,23 +452,23 @@ status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
     } else if(param.getInt(keyStandby, device) == NO_ERROR) {
         if((device & mStandByDevices) == device || mConfiguringSessions)
             return NO_ERROR;
+        Mutex::Autolock autoLock(mControlLock);
         updateStandByDevices(device, true);
         mConfiguringSessions = true;
         doRouting(mDevices & ~mStandByDevices);
         mConfiguringSessions = false;
         ALOGD("set mStandByFormats = %d", mStandByFormats);
     } else if (param.getInt(keyResume, device) == NO_ERROR) {
-        if(!isDeviceinStandByFormats(device) || mConfiguringSessions)
+        if (!isDeviceinStandByFormats(device) || mConfiguringSessions)
             return NO_ERROR;
+        Mutex::Autolock autoLock(mControlLock);
         device = device & mStandByDevices;
         updateStandByDevices(device, false);
         mConfiguringSessions = true;
         doRouting(mDevices | device);
         mConfiguringSessions = false;
     } else {
-        mControlLock.unlock();
         mParent->setParameters(keyValuePairs);
-        mControlLock.lock();
     }
     return NO_ERROR;
 }
@@ -477,13 +486,13 @@ Description: getParameters
 String8 AudioSessionOutALSA::getParameters(const String8& keys)
 {
     ALOGV("getParameters %s mDevices %d mRouteAudioToA2dp %d", keys.string(), mDevices, mRouteAudioToA2dp);
-    Mutex::Autolock autoLock(mControlLock);
     AudioParameter param = AudioParameter(keys);
     String8 value;
     String8 key = String8(AudioParameter::keyRouting);
     String8 keyComprStandby = String8(COMPR_STANDBY_DEVICES_KEY);
     int devices;
     if (param.get(key, value) == NO_ERROR) {
+        Mutex::Autolock autoLock(mControlLock);
         devices = mDevices;
         if((mDevices & AudioSystem::DEVICE_OUT_PROXY) && mRouteAudioToA2dp) {
             devices |= AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP;
@@ -492,7 +501,8 @@ String8 AudioSessionOutALSA::getParameters(const String8& keys)
         param.addInt(key, (int)devices);
     } else if(param.get(keyComprStandby, value) == NO_ERROR) {
         devices = 0;
-        if (!mPaused) {
+        if (!(mSessionState & PAUSE) && mConfiguringSessions == false) {
+             Mutex::Autolock autoLock(mControlLock);
              if(mStandByFormats & STANDBY_COMPR_HDMI)
                  devices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
              if(mStandByFormats & STANDBY_COMPR_SPDIF)
@@ -523,7 +533,7 @@ Description: getNextWriteTimestamp
 status_t AudioSessionOutALSA::getNextWriteTimestamp(int64_t *timeStamp)
 {
     ALOGV("getNextWriteTimestamp");
-    Mutex::Autolock autoLock(mControlLock);
+    Mutex::Autolock autoLock(mLock);
 
     struct snd_compr_tstamp tstamp;
     if (!timeStamp) {
@@ -873,7 +883,9 @@ Description: reset
 void AudioSessionOutALSA::reset()
 {
     ALOGV("reset");
-    Mutex::Autolock autoLock(mControlLock);
+    int ret;
+
+    mSessionState = STANDBY;
     for(int index=0; index < mNumRxHandlesActive; index++) {
         if(mRxHandle[index]) {
             closeDevice(mRxHandle[index]);
@@ -884,14 +896,14 @@ void AudioSessionOutALSA::reset()
         delete mMS11Decoder;
         mMS11Decoder = NULL;
     }
-    mBitStreamMutex.lock();
-    if(mBitstreamSM) {
+    if(mBitstreamSM != NULL) {
         delete mBitstreamSM;
         mBitstreamSM = NULL;
     }
-    mBitStreamMutex.unlock();
-    if(mWriteTempBuffer)
+    if(mWriteTempBuffer) {
         free(mWriteTempBuffer);
+        mWriteTempBuffer = NULL;
+    }
 
     reinitialize();
     mEOSCv.signal();
@@ -902,7 +914,6 @@ Description: reinitialize
 *******************************************************************************/
 void AudioSessionOutALSA::reinitialize()
 {
-    ALOGVV("reinitialize");
     mBufferSize                = 0;
     // device states
     mSpdifFormat               = UNCOMPRESSED;
@@ -914,7 +925,6 @@ void AudioSessionOutALSA::reinitialize()
     mMS11Decoder               = NULL;
     mBitstreamSM               = NULL;
     mMinBytesReqToDecode       = 0;
-    mPaused                    = false;
     mStreamVol                 = 0;
     mIsMS11FilePlaybackMode    = true;
     mDecoderConfigBuffer       = NULL;
@@ -1117,7 +1127,6 @@ void AudioSessionOutALSA::updateStandByDevices(int device, int enable) {
 void AudioSessionOutALSA::updateSessionDevices(int devices) {
     ALOGD("updateSessiondevices");
     Mutex::Autolock autolock(mParent->mDeviceStateLock);
-    mConfiguringSessions = true;
     if(devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
         if (mParent->mHdmiRenderFormat == UNCOMPRESSED) {
             if(mHdmiFormat != UNCOMPRESSED) {
@@ -1145,7 +1154,6 @@ void AudioSessionOutALSA::updateSessionDevices(int devices) {
             updateDevicesInSessionList(AudioSystem::DEVICE_OUT_SPDIF, STANDBY);
         }
     }
-    mConfiguringSessions = false;
 }
 /*******************************************************************************
 Description: update handle states
@@ -1247,7 +1255,6 @@ Description: setup input path
 status_t AudioSessionOutALSA::routingSetup()
 {
     ALOGV("routingSetup");
-    Mutex::Autolock autoLock(mControlLock);
     status_t status;
     int bufferCount;
     int numOfActiveRxHandles;
@@ -1260,6 +1267,7 @@ status_t AudioSessionOutALSA::routingSetup()
     if(false == mBitstreamSM->initBitstreamPtr(getBufferingFactor())) {
         ALOGE("Unable to allocate Memory for i/p and o/p buffering for MS11");
         delete mBitstreamSM;
+        mBitstreamSM = NULL;
         return BAD_VALUE;
     }
     if(isInputBufferingModeReqd())
@@ -1273,6 +1281,7 @@ status_t AudioSessionOutALSA::routingSetup()
             ALOGE("Unable to open MS11 instance succesfully- exiting");
             mUseMS11Decoder = false;
             delete mBitstreamSM;
+            mBitstreamSM = NULL;
             return status;
         }
     }
@@ -1458,16 +1467,6 @@ status_t AudioSessionOutALSA::openPlaybackDevice(int index, int devices,
         }
         ALSAHandleList::iterator it = mParent->mDeviceList.end(); it--;
         mRxHandle[index] = &(*it);
-        if(deviceFormat == ROUTE_UNCOMPRESSED) {
-           if(mUseMS11Decoder &&
-              (mRxHandle[index]->channels > 2)) {
-               setMS11ChannelMap(mRxHandle[index]);
-           } else if((mFormat == AUDIO_FORMAT_PCM_16_BIT ||
-                      mFormat == AUDIO_FORMAT_PCM_24_BIT) &&
-                     (mRxHandle[index]->channels > 2)) {
-               setPCMChannelMap(mRxHandle[index]);
-           }
-        }
     } else if (deviceFormat == ROUTE_DSP_TRANSCODED_COMPRESSED) {
         int routeUnCompressedIndex;
         for(routeUnCompressedIndex = 0; routeUnCompressedIndex < mNumRxHandlesActive;
@@ -1550,7 +1549,16 @@ status_t AudioSessionOutALSA::openDevice(const char *useCase, bool bIsUseCase,
     if(status != NO_ERROR) {
         ALOGE("Could not open the ALSA device for use case %s", alsa_handle.useCase);
         mALSADevice->close(&alsa_handle);
-    } else{
+    } else {
+        if(deviceFormat == ROUTE_UNCOMPRESSED) {
+           if(mUseMS11Decoder && mChannels > 2) {
+               setMS11ChannelMap(&alsa_handle);
+           } else if((mFormat == AUDIO_FORMAT_PCM_16_BIT ||
+                      mFormat == AUDIO_FORMAT_PCM_24_BIT) &&
+                      mChannels > 2) {
+               setPCMChannelMap(&alsa_handle);
+           }
+        }
         status = pcm_prepare(alsa_handle.handle);
         if (status != NO_ERROR) {
             ALOGE("pcm_prepare failed for device = %d device handle = %p", devices, alsa_handle.handle);
@@ -1673,7 +1681,23 @@ Description: close the device
 status_t AudioSessionOutALSA::closeDevice(alsa_handle_t *pHandle)
 {
     status_t status = NO_ERROR;
+    int ret;
+
     ALOGV("closeDevice");
+    //Flush the buffers which are held up with the DSP
+    for(int i=0; i<mNumRxHandlesActive; i++) {
+        if ((ret = ioctl(pHandle->handle->fd, SNDRV_PCM_IOCTL_RESET)) < 0) {
+            ALOGE("IOCTL Reset failed ret = %d", ret);
+        }
+    }
+    //Flush the stream to unblock if the write is waiting
+    // on a data to be written or EOS
+    if (ioctl(pHandle->handle->fd, SNDRV_PCM_IOCTL_DROP) < 0) {
+        ALOGE("Ioctl drop failed");
+    }
+    pcm_prepare(pHandle->handle);
+
+
     if(pHandle) {
         ALOGV("useCase %s", pHandle->useCase);
         int devices = pHandle->activeDevice;
@@ -1690,9 +1714,7 @@ status_t AudioSessionOutALSA::closeDevice(alsa_handle_t *pHandle)
             ALOGD("updated mStandByFormats %d", mStandByFormats);
             {
                 Mutex::Autolock autolock(mParent->mDeviceStateLock);
-                mConfiguringSessions = true;
                 updateDevicesInSessionList(devices, PLAY);
-                mConfiguringSessions = false;
             }
         }
         for(ALSAHandleList::iterator it = mParent->mDeviceList.begin();
@@ -1900,9 +1922,11 @@ Description: decode
 bool AudioSessionOutALSA::decode(char *buffer, size_t bytes)
 {
     ALOGV("decode");
-    Mutex::Autolock autoLock(mBitStreamMutex);
     bool    continueDecode = false;
 
+    Mutex::Autolock autoLock(mLock);
+    if(mSessionState & STANDBY)
+        return 0;
     if (mMS11Decoder != NULL) {
         continueDecode = swDecode(buffer, bytes);
 
@@ -1978,7 +2002,6 @@ bool AudioSessionOutALSA::swDecode(char *buffer, size_t bytes)
     //handle change in sample rate
     if((mSampleRate != outSampleRate) || (mChannels != outChannels)) {
         ALOGD("Change in sample rate. New sample rate: %d", outSampleRate);
-        Mutex::Autolock autoLock(mControlLock);
         mSampleRate = outSampleRate;
         mChannels = outChannels;
         int index = getIndexHandleBasedOnHandleFormat(ROUTE_UNCOMPRESSED);
@@ -2102,8 +2125,12 @@ uint32_t AudioSessionOutALSA::render(bool continueDecode/* used for time stamp m
     uint32_t availableSize;
     int renderType;
     int metadataLength = sizeof(mOutputMetadata);
+    struct pcm pTempHandle;
+
     ALOGV("render");
-    Mutex::Autolock autoLock(mBitStreamMutex);
+    Mutex::Autolock autoLock(mLock);
+    if(mSessionState & STANDBY)
+        return 0;
     for(int index=0; index < mNumRxHandlesActive; index++) {
         switch(mRxHandleRouteFormat[index]) {
         case ROUTE_UNCOMPRESSED:
@@ -2139,18 +2166,22 @@ uint32_t AudioSessionOutALSA::render(bool continueDecode/* used for time stamp m
             memcpy(mWriteTempBuffer+metadataLength,
                    mBitstreamSM->getOutputBufferPtr(renderType),
                    mOutputMetadata.bufferLength);
-            mBitStreamMutex.unlock();
-            n = mParent->hw_pcm_write(mRxHandle[index]->handle,
+            memcpy(&pTempHandle, mRxHandle[index]->handle, sizeof(struct pcm));
+            mLock.unlock();
+            n = mParent->hw_pcm_write(&pTempHandle,
                     mWriteTempBuffer,
                     periodSize);
+            mLock.lock();
+            if(mSessionState & STANDBY)
+                return 0;
+            if (mRxHandle[index] != NULL && mRxHandle[index]->handle != NULL)
+                memcpy(mRxHandle[index]->handle, &pTempHandle, sizeof(struct pcm));
             ALOGD("pcm_write returned with %d", n);
             if(n < 0) {
                 // Recovery is part of pcm_write. TODO split is later.
-                Mutex::Autolock autoLock(mFlushLock);
                 ALOGE("pcm_write returned n < 0");
                 return static_cast<ssize_t>(n);
             } else {
-                mBitStreamMutex.lock();
                 if(renderType == ROUTE_UNCOMPRESSED) {
                     mFrameCount++;
 #ifdef DEBUG
@@ -2161,7 +2192,7 @@ uint32_t AudioSessionOutALSA::render(bool continueDecode/* used for time stamp m
                 }
                 renderedPcmBytes += mOutputMetadata.bufferLength;
                 mBitstreamSM->copyResidueOutputToStart(renderType,
-                                                       mOutputMetadata.bufferLength);
+                        mOutputMetadata.bufferLength);
             }
         }
     }
@@ -2174,29 +2205,40 @@ Description: EOS Handling
 void AudioSessionOutALSA::eosHandling()
 {
     ALOGD("eosHandling");
+    int pfd;
+
+    Mutex::Autolock autoLock(mLock);
+    mSessionState |= EOS;
     for(int index=0; index < mNumRxHandlesActive; index++) {
         switch(mRxHandleRouteFormat[index]) {
             case ROUTE_UNCOMPRESSED:
             case ROUTE_COMPRESSED:
             case ROUTE_SW_TRANSCODED_COMPRESSED:
-                if(ioctl(mRxHandle[index]->handle->fd, SNDRV_COMPRESS_DRAIN) < 0)
+                pfd = mRxHandle[index]->handle->fd;
+                mLock.unlock();
+                if(ioctl(pfd, SNDRV_COMPRESS_DRAIN) < 0) {
                     ALOGE("DRAIN Handling failed for index: %d", index);
-                break;
+                    mLock.lock();
+                    break;
+                }
+                mLock.lock();
+                if(!(mSessionState & EOS))
+                    break;
             case ROUTE_DSP_TRANSCODED_COMPRESSED:
             default:
                  continue;
         }
     }
-    mLock.unlock();
-    mControlLock.lock();
-    if (mPaused) {
-        ALOGD("postEOS waiting for the resume command");
-        mEOSCv.wait(mControlLock);
+    if(mSessionState & EOS) {
+        if (mSessionState & PAUSE) {
+            ALOGD("postEOS waiting for the resume command");
+            mEOSCv.wait(mLock);
+        }
+        //Flush invalidates the EOS being sent to player
+        if(mObserver)
+            mObserver->postEOS(0);
+        mSessionState &= ~EOS;
     }
-    mControlLock.unlock();
-    mLock.lock();
-    if(mObserver)
-        mObserver->postEOS(0);
     ALOGD("eosHandling X");
     return;
 }
@@ -2237,7 +2279,6 @@ status_t AudioSessionOutALSA::doRouting(int devices)
         return status;
     }
 
-    Mutex::Autolock autoLock1(mLock);
     if(devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
         mALSADevice->updateHDMIEDIDInfo();
 
@@ -2329,6 +2370,7 @@ void AudioSessionOutALSA::handleSwitchAndOpenForDeviceSwitch(int devices, int fo
 {
     ALOGV("handleSwitchAndOpenForDeviceSwitch device = %d format = %d", devices, format);
     int index;
+    Mutex::Autolock autoLock1(mLock);
     for(index = 0; index < mNumRxHandlesActive; index++) {
         ALOGD("index format = %d", mRxHandleRouteFormat[index]);
         if(mRxHandleRouteFormat[index] == format) {
@@ -2368,6 +2410,8 @@ Description: Handles device switch - close the device handle if not required
 void AudioSessionOutALSA::handleCloseForDeviceSwitch(int format)
 {
     ALOGV("handleCloseForDeviceSwitch");
+    int ret;
+    Mutex::Autolock autoLock1(mLock);
     for(int index = 0; index < mNumRxHandlesActive; index++) {
         if(mRxHandleRouteFormat[index] & format) {
             if(closeDevice(mRxHandle[index]) != NO_ERROR) {
@@ -2390,16 +2434,18 @@ Description: Ignoring pcm on hdmi or spdif if the required playback on the
 void AudioSessionOutALSA::updateDevicesInSessionList(int devices, int state)
 {
     int device = 0;
+    ALOGD("updateDevicesInSessionList: devices %d state %d", devices, state);
     if(devices & AudioSystem::DEVICE_OUT_SPDIF)
         device |= AudioSystem::DEVICE_OUT_SPDIF;
     if(devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
         device |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
 
     if (device) {
-        mControlLock.unlock();
+        mConfiguringSessions = true;
         mParent->updateDevicesOfOtherSessions(device, state);
-        mControlLock.lock();
+        mConfiguringSessions = false;
     }
+    ALOGD("updateDevicesInSessionList: X");
 }
 
 #if DEBUG

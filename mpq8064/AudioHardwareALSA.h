@@ -246,7 +246,7 @@ So min period size = LCM (1,2...8) * 4*/
 #define PCM_16_BITS_PER_SAMPLE   2
 #define PCM_24_BITS_PER_SAMPLE   3
 #define AC3_PERIOD_SIZE          1536 * PCM_16_BITS_PER_SAMPLE
-#define TIME_PER_BUFFER          20 //Time duration in ms
+#define TIME_PER_BUFFER          40 //Time duration in ms
 /*
 List of indexes of the supported formats
 Redundant formats such as (AAC-LC, HEAAC) are removed from the indexes as they
@@ -336,13 +336,13 @@ playback controls
 */
 enum {
     PLAY = 1,
-    PAUSE = 1<<1,
-    RESUME = 1<<2,
-    SEEK = 1<<3,
-    EOS = 1<<4,
-    STOP = 1<<5,
-    STANDBY = 1<<6,
-    DEROUTE = 1<<7
+    PAUSE = (1<<1),
+    RESUME = (1<<2),
+    SEEK = (1<<3),
+    EOS = (1<<4),
+    STOP = (1<<5),
+    STANDBY = (1<<6),
+    INIT = (1<<7),
 };
 /*
 Multiple instance of use case
@@ -972,7 +972,7 @@ private:
     SoftMS11            *mMS11Decoder;
     AudioBitstreamSM    *mBitstreamSM;
     uint32_t            mMinBytesReqToDecode;
-    bool                mPaused;
+    uint32_t            mSessionState;
     int                 mStreamVol;
     bool                mIsMS11FilePlaybackMode;
     void                *mDecoderConfigBuffer;

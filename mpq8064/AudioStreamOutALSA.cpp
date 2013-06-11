@@ -102,19 +102,20 @@ status_t AudioStreamOutALSA::setVolume(float left, float right)
 }
 
 status_t AudioStreamOutALSA::setParameters(const String8& keyValuePairs) {
-    ALOGV("AudioStreamOut: setParameters %s", keyValuePairs.string());
+    ALOGV("AudioStreamOut: setParameters %s device = %d activeDevice = %d",
+                keyValuePairs.string(), mHandle->device, mHandle->activeDevice);
     AudioParameter param = AudioParameter(keyValuePairs);
     String8 keyStandby = String8(STANDBY_DEVICES_KEY);
     String8 keyResume = String8(RESUME_DEVICES_KEY);
     int device;
     if(param.getInt(keyStandby, device) == NO_ERROR) {
         if(mHandle->handle == NULL) {
-           mHandle->playbackMode = STANDBY;
-           mHandle->activeDevice = 0;
+           mHandle->activeDevice &= ~device;
+           if(mHandle->activeDevice == 0)
+               mHandle->playbackMode = STANDBY;
         } else if((mHandle->activeDevice & device) == mHandle->activeDevice) {
             mHandle->playbackMode = STANDBY;
             standby();
-            mHandle->activeDevice = 0;
         } else if(mHandle->activeDevice & device) {
             mHandle->module->switchDeviceUseCase(mHandle,
                  mHandle->activeDevice & (~device),
@@ -123,9 +124,12 @@ status_t AudioStreamOutALSA::setParameters(const String8& keyValuePairs) {
     } else if (param.getInt(keyResume, device) == NO_ERROR) {
         if(mHandle->devices & device) {
             int devices = mHandle->devices;
-            mHandle->module->switchDeviceUseCase(mHandle,
-                 mHandle->activeDevice | (mHandle->devices & device),
-                 mHandle->mode);
+            if(mHandle->handle)
+                mHandle->module->switchDeviceUseCase(mHandle,
+                        mHandle->activeDevice | (mHandle->devices & device),
+                        mHandle->mode);
+            else
+                mHandle->activeDevice |= (mHandle->devices & device);
             mHandle->devices = devices;
             mHandle->playbackMode = PLAY;
         }

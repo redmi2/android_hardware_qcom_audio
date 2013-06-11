@@ -1942,21 +1942,17 @@ int snd_use_case_set_case(snd_use_case_mgr_t *uc_mgr,
             }
         } else {
             ret =
-            snd_ucm_del_ident_from_list(&uc_mgr->card_ctxt_ptr->dev_list_head,
-            value);
+                snd_ucm_del_ident_from_list(&uc_mgr->card_ctxt_ptr->dev_list_head,
+                        value);
             if (ret < 0) {
                 ALOGE("Invalid device: Device not part of enabled device list");
             } else {
-                ret = snd_ucm_del_ident_from_list(&uc_mgr->card_ctxt_ptr->mod_list_head,
+                snd_ucm_del_ident_from_list(&uc_mgr->card_ctxt_ptr->mod_list_head,
                         usecase);
-                if (ret < 0) {
-                    ALOGE("Modifier not enabled currently, invalid modifier");
-                } else {
-                    ALOGV("disdev: device value to be disabled: %s", value);
-                    /* Apply Mixer controls of usecase for this device*/
-                    ret = set_controls_of_device_for_usecase(uc_mgr, value,
-                            usecase, 0);
-                }
+                ALOGV("disdev: device value to be disabled: %s", value);
+                /* Apply Mixer controls of usecase for this device*/
+                ret = set_controls_of_device_for_usecase(uc_mgr, value,
+                        usecase, 0);
             }
         }
     } else if (!strncmp(identifier, "_enamod", 7)) {
