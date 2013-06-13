@@ -86,6 +86,7 @@ ALSADevice::ALSADevice() {
     mProxyParams.mCaptureBuffer = NULL;
     mProxyParams.mProxyState = proxy_params::EProxyClosed;
     mProxyParams.mProxyPcmHandle = NULL;
+    memset(&mEDIDInfo, 0, sizeof(struct EDID_AUDIO_INFO));
     ALOGD("ALSA Device opened");
 };
 
@@ -138,22 +139,20 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     int hdmiChannels = 8;
     char dtsPPparam[20];
     int dtsPPval = -1;
-    EDID_AUDIO_INFO info = { 0 };
 
     if (handle->devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
-        if (AudioUtil::getHDMIAudioSinkCaps(&info)) {
             int channel_count = 0;
-            for (int i = 0; i < info.nAudioBlocks && i < MAX_EDID_BLOCKS; i++) {
-                if (info.AudioBlocksArray[i].nFormatId == LPCM &&
-                    info.AudioBlocksArray[i].nChannels > channel_count &&
-                    info.AudioBlocksArray[i].nChannels <= MAX_HDMI_CHANNEL_CNT) {
-                    channel_count = info.AudioBlocksArray[i].nChannels;
+            updateHDMIEDIDInfo();
+            for (int i = 0; i < mEDIDInfo.nAudioBlocks && i < MAX_EDID_BLOCKS; i++) {
+                if (mEDIDInfo.AudioBlocksArray[i].nFormatId == LPCM &&
+                    mEDIDInfo.AudioBlocksArray[i].nChannels > channel_count &&
+                    mEDIDInfo.AudioBlocksArray[i].nChannels <= MAX_HDMI_CHANNEL_CNT) {
+                    channel_count = mEDIDInfo.AudioBlocksArray[i].nChannels;
                 }
             }
             hdmiChannels = channel_count;
-            pcm_set_channel_map(NULL, mMixer, MAX_HDMI_CHANNEL_CNT, info.channelMap);
-            setChannelAlloc(info.channelAllocation);
-        }
+            pcm_set_channel_map(NULL, mMixer, MAX_HDMI_CHANNEL_CNT, mEDIDInfo.channelMap);
+            setChannelAlloc(mEDIDInfo.channelAllocation);
     }
 
     params = (snd_pcm_hw_params*) calloc(1, sizeof(struct snd_pcm_hw_params));
@@ -209,10 +208,15 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
             ALOGV("AAC CODEC");
             compr_params.codec.id = compr_cap.codecs[2];
             hdmiChannels = 2;
-        } else if(format == AUDIO_FORMAT_AC3 ||
-                 (format == AUDIO_FORMAT_EAC3)) {
+        } else if(format == AUDIO_FORMAT_AC3) {
             ALOGV("AC3 CODEC");
             compr_params.codec.id = compr_cap.codecs[2];
+            hdmiChannels = 2;
+        } else if(format == AUDIO_FORMAT_EAC3) {
+            ALOGV("EAC3 CODEC");
+            compr_params.codec.id = compr_cap.codecs[14];
+            // EAC3 pass through needs to be confogured with 4 time the sample rate
+            handle->sampleRate = handle->sampleRate*4;
             hdmiChannels = 2;
         } else if(format == AUDIO_FORMAT_MP3) {
              ALOGV("MP3 CODEC");
@@ -340,9 +344,9 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
             return err;
         }
     }
-    if(handle->sampleRate > 48000) {
-        ALOGE("Sample rate >48000, opening the driver with 48000Hz");
-        handle->sampleRate = 48000;
+    if(handle->sampleRate > 192000) {
+        ALOGE("Sample rate >192000, opening the driver with 192000Hz");
+        handle->sampleRate = 192000;
     }
     if(handle->channels > 8)
         handle->channels = 8;
@@ -472,7 +476,7 @@ status_t ALSADevice::setSoftwareParams(alsa_handle_t *handle)
             params->start_threshold = periodSize/(4*(handle->channels));
             params->xfer_align = handle->handle->period_size/(4*channels);
         } else {
-            params->start_threshold = periodSize/(2*(handle->channels));
+            params->start_threshold = (periodSize/(handle->channels)) * 2;
             params->xfer_align = handle->handle->period_size/(2*channels);
         }
     }
@@ -578,6 +582,45 @@ void ALSADevice::switchDeviceUseCase(alsa_handle_t *handle,
         use_case = NULL;
     }
 }
+
+
+void ALSADevice::updateHDMIEDIDInfo(){
+    ALOGV("Update EDID info");
+    AudioUtil::getHDMIAudioSinkCaps(&mEDIDInfo);
+}
+
+int ALSADevice::getFormatHDMIIndexEDIDInfo(EDID_AUDIO_FORMAT_ID formatId){
+
+    int i;
+    for (i = 0; i < mEDIDInfo.nAudioBlocks && i < MAX_EDID_BLOCKS; i++) {
+        if(mEDIDInfo.AudioBlocksArray[i].nFormatId == formatId)
+            return i;
+    }
+    return -1;
+}
+
+void ALSADevice::getDevicesBasedOnOutputChannels(int devices, int* stereoDevices, int* multiChDevices){
+
+    int channels=0;
+    *stereoDevices=*multiChDevices=0;
+
+    if((devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)){
+                  for (int i = 0; i < mEDIDInfo.nAudioBlocks && i < MAX_EDID_BLOCKS; i++) {
+                         if (mEDIDInfo.AudioBlocksArray[i].nFormatId == LPCM &&
+                               mEDIDInfo.AudioBlocksArray[i].nChannels > channels &&
+                               mEDIDInfo.AudioBlocksArray[i].nChannels <= MAX_HDMI_CHANNEL_CNT) {
+                                      channels = mEDIDInfo.AudioBlocksArray[i].nChannels;
+                         }
+                  }
+
+            if (channels > 2){
+                  *multiChDevices = AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+            }
+    }
+    *stereoDevices = devices & ~(*multiChDevices);
+}
+
+
 // ----------------------------------------------------------------------------
 
 status_t ALSADevice::open(alsa_handle_t *handle)

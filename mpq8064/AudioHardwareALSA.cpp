@@ -394,7 +394,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
 
     key = String8(HDMI_FORMAT_KEY);
     if (param.get(key, value) == NO_ERROR) {
-        if(value == "lpcm" || value == "ac3" || value == "dts")
+        if(value == "lpcm" || value == "ac3" || value == "dts" || value == "auto")
             strlcpy(mHdmiOutputFormat,value,sizeof(mHdmiOutputFormat));
         else
             strlcpy(mHdmiOutputFormat,"lpcm",sizeof(mHdmiOutputFormat));
@@ -622,6 +622,10 @@ status_t AudioHardwareALSA::doRouting(int device)
     ALOGV("device = 0x%x,mCurDevice 0x%x", device, mCurDevice);
     if (device == 0)
         device = mCurDevice;
+
+    if(device & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
+        mALSADevice->updateHDMIEDIDInfo();
+
     if (device & AudioSystem::DEVICE_OUT_ALL_A2DP) {
         device &= ~AudioSystem::DEVICE_OUT_ALL_A2DP;
         device |=  AudioSystem::DEVICE_OUT_PROXY;
