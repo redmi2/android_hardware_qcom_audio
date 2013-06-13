@@ -26,6 +26,7 @@
 #include <unistd.h>
 #include <dlfcn.h>
 #include <math.h>
+#include "AudioUtil.h"
 
 #define LOG_TAG "AudioSessionOutALSA"
 #define LOG_NDEBUG 0
@@ -145,7 +146,12 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     mWriteThreadStarted  = false;
     mFirstAACBufferLength = 0;
     mA2dpUseCase = AudioHardwareALSA::USECASE_NONE;
-
+    mStereoDevices = 0;
+    mMultiChDevices = 0;
+    mStereoPcmRxHandle = NULL;
+    mMultiChPcmRxHandle = NULL;
+    mFrameCount2Ch = 0;
+    mFrameCountMultiCh = 0;
     if(devices == 0) {
         ALOGE("No output device specified");
         *status = BAD_VALUE;
@@ -394,7 +400,7 @@ status_t AudioSessionOutALSA::setVolume(float left, float right)
                                                mPcmRxHandle->useCase);
         return status;
     }
-    else if(mCompreRxHandle) {
+    if(mCompreRxHandle) {
         if (mSpdifFormat != COMPRESSED_FORMAT && mHdmiFormat != COMPRESSED_FORMAT) {
             ALOGD("set compressed Volume(%f) handle->type %d\n", volume, mCompreRxHandle->type);
             ALOGD("Setting Compressed volume to %d (available range is 0 to 0x2000)\n", mStreamVol);
@@ -403,6 +409,22 @@ status_t AudioSessionOutALSA::setVolume(float left, float right)
         }
         return status;
     }
+    if(mUseMS11Decoder) {
+        if(mStereoPcmRxHandle) {
+            ALOGD("setPCM  Volume(%f) for stereo session\n", volume);
+            ALOGD("Setting PCM volume to %d (available range is 0 to 0x2000)\n", mStreamVol);
+            status = mStereoPcmRxHandle->module->setPlaybackVolume(mStreamVol,
+                                       mStereoPcmRxHandle->useCase);
+        }
+        if(mMultiChPcmRxHandle) {
+            ALOGD("setPCM  Volume(%f) for Multi Channel session ", volume);
+            ALOGD("Setting PCM volume to %d (available range is 0 to 0x2000)\n", mStreamVol);
+            status = mMultiChPcmRxHandle->module->setPlaybackVolume(mStreamVol,
+                                       mMultiChPcmRxHandle->useCase);
+        }
+        return status;
+    }
+
     return INVALID_OPERATION;
 }
 
@@ -691,7 +713,7 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
             // get all the output held up with MS11. Examples, AAC can have an
             // output frame of 4096 bytes. While the output of MS11 is 1536, the
             // decoder has to be called more than twice to get the reside samples.
-            continueDecode=false;
+            continueDecode = false;
             if(mBitstreamSM->sufficientBitstreamToDecode(mMinBytesReqToDecode) == true)
             {
                 bufPtr = mBitstreamSM->getInputBufferPtr();
@@ -709,32 +731,61 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
                 uint32_t devices = mDevices;
                 mSampleRate = outSampleRate;
                 mChannels = outChannels;
-                if(mPcmRxHandle && mRoutePcmAudio) {
-                    status_t status = closeDevice(mPcmRxHandle);
-                    if(status != NO_ERROR)
-                        break;
-                    mPcmRxHandle = NULL;
-                    status = openPcmDevice(devices);
-
-                    if(mPcmRxHandle){
-                        status = mPcmRxHandle->module->setPlaybackVolume(mStreamVol,
-                                                mPcmRxHandle->useCase);
+                if(mRoutePcmAudio) {
+                    if(mStereoPcmRxHandle) {
+                        status_t status = closeDevice(mStereoPcmRxHandle);
+                        if(status != NO_ERROR)
+                            break;
+                        mStereoPcmRxHandle = NULL;
+                        status = openPcmDevice(mStereoDevices);
+                        if(status != NO_ERROR)
+                            break;
+                        if(mStereoPcmRxHandle) {
+                             ALOGD("Setting PCM volume to %d (available range is 0 to 0x2000) for stereo session\n", mStreamVol);
+                             status = mStereoPcmRxHandle->module->setPlaybackVolume(mStreamVol,
+                                       mStereoPcmRxHandle->useCase);
+                        }
                     }
-                    if(status != NO_ERROR)
-                        break;
+                    if(mMultiChPcmRxHandle) {
+                        status_t status = closeDevice(mMultiChPcmRxHandle);
+                        if(status != NO_ERROR)
+                            break;
+                        mMultiChPcmRxHandle = NULL;
+                        status = openPcmDevice(mMultiChDevices);
+                        if(status != NO_ERROR)
+                            break;
+                        if(mMultiChPcmRxHandle) {
+                             ALOGD("Setting PCM volume to %d (available range is 0 to 0x2000) for multiChannel session\n", mStreamVol);
+                             status = mMultiChPcmRxHandle->module->setPlaybackVolume(mStreamVol,
+                                                           mMultiChPcmRxHandle->useCase);
+                        }
+                    }
                 }
                 mChannelStatusSet = false;
             }
 
             // copy the output of MS11 to HAL internal buffers for PCM and SPDIF
             if(mRoutePcmAudio) {
-                bufPtr=mBitstreamSM->getOutputBufferWritePtr(PCM_MCH_OUT);
-                copyBytesMS11 = mMS11Decoder->copyOutputFromMS11Buf(PCM_MCH_OUT,bufPtr);
-                // Note: Set the output Buffer to start for for changein sample rate and channel
-                // This has to be done.
-                mBitstreamSM->setOutputBufferWritePtr(PCM_MCH_OUT,copyBytesMS11);
-                // If output samples size is zero, donot continue and wait for next
-                // write for decode
+                if(mMultiChPcmRxHandle) {
+                    bufPtr = mBitstreamSM->getOutputBufferWritePtr(PCM_MCH_OUT);
+                    copyBytesMS11 = mMS11Decoder->copyOutputFromMS11Buf(PCM_MCH_OUT,bufPtr);
+                    ALOGD("MultiChannel output from MS11 bytes %d",copyBytesMS11);
+                    // Note: Set the output Buffer to start for for changein sample rate and channel
+                    // This has to be done.
+                    mBitstreamSM->setOutputBufferWritePtr(PCM_MCH_OUT,copyBytesMS11);
+                    // If output samples size is zero, donot continue and wait for next
+                    // write for decode
+                }
+                if(mStereoPcmRxHandle) {
+                    bufPtr = mBitstreamSM->getOutputBufferWritePtr(PCM_2CH_OUT);
+                    copyBytesMS11 = mMS11Decoder->copyOutputFromMS11Buf(PCM_2CH_OUT,bufPtr);
+                    ALOGD("Stereo output from MS11 bytes %d",copyBytesMS11);
+                    // Note: Set the output Buffer to start for for changein sample rate and channel
+                    // This has to be done.
+                    mBitstreamSM->setOutputBufferWritePtr(PCM_2CH_OUT,copyBytesMS11);
+                    // If output samples size is zero, donot continue and wait for next
+                    // write for decode
+                }
             }
             if((mSpdifFormat == COMPRESSED_FORMAT) ||
                (mHdmiFormat == COMPRESSED_FORMAT)) {
@@ -778,35 +829,71 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
             }
 
             // Write the output of MS11 to appropriate drivers
-            if(mPcmRxHandle && mRoutePcmAudio) {
-                period_size = mPcmRxHandle->periodSize;
-                while(mBitstreamSM->sufficientSamplesToRender(PCM_MCH_OUT,period_size) == true) {
+            if(mRoutePcmAudio) {
+                if(mStereoPcmRxHandle) {
+                    period_size = mStereoPcmRxHandle->periodSize;
+                    ALOGD("Stereo handle period_size %d",mStereoPcmRxHandle->periodSize);
+                    while(mBitstreamSM->sufficientSamplesToRender(PCM_2CH_OUT,period_size) == true) {
 #ifdef DEBUG
-                    mFpDumpPCMOutput = fopen("/data/pcm_output.raw","a");
-                    if(mFpDumpPCMOutput != NULL) {
-                        fwrite(mBitstreamSM->getOutputBufferPtr(PCM_MCH_OUT), 1,
-                                   period_size, mFpDumpPCMOutput);
-                        fclose(mFpDumpPCMOutput);
-                    }
+                         mFpDumpPCMOutput = fopen("/data/pcm_output_2ch.raw","a");
+                         if(mFpDumpPCMOutput != NULL) {
+                             fwrite(mBitstreamSM->getOutputBufferPtr(PCM_2CH_OUT), 1,
+                                      period_size, mFpDumpPCMOutput);
+                             fclose(mFpDumpPCMOutput);
+                         }
 #endif
-                    n = mParent->hw_pcm_write(mPcmRxHandle->handle,
-                              mBitstreamSM->getOutputBufferPtr(PCM_MCH_OUT),
-                              period_size);
-                    ALOGD("mPcmRxHandle - pcm_write returned with %d", n);
-                    if (n == -EBADFD) {
-                        // Somehow the stream is in a bad state. The driver probably
-                        // has a bug and snd_pcm_recover() doesn't seem to handle this.
-                        mPcmRxHandle->module->open(mPcmRxHandle);
-                    } else if (n < 0) {
-                        // Recovery is part of pcm_write. TODO split is later.
-                        ALOGE("mPcmRxHandle - pcm_write returned n < 0");
-                        return static_cast<ssize_t>(n);
-                    } else {
-                        mFrameCountMutex.lock();
-                        mFrameCount++;
-                        mFrameCountMutex.unlock();
-                        sent += static_cast<ssize_t>((period_size));
-                        mBitstreamSM->copyResidueOutputToStart(PCM_MCH_OUT,period_size);
+                         n = pcm_write(mStereoPcmRxHandle->handle,
+                                   mBitstreamSM->getOutputBufferPtr(PCM_2CH_OUT),
+                                   period_size);
+                         ALOGD("mStereoPcmRxHandle - pcm_write returned with %d", n);
+                         if (n == -EBADFD) {
+                             // Somehow the stream is in a bad state. The driver probably
+                             // has a bug and snd_pcm_recover() doesn't seem to handle this.
+                             mStereoPcmRxHandle->module->open(mStereoPcmRxHandle);
+                         } else if (n < 0) {
+                             // Recovery is part of pcm_write. TODO split is later.
+                             ALOGE("mStereoPcmRxHandle - pcm_write returned n < 0");
+                             return static_cast<ssize_t>(n);
+                         } else {
+                             mFrameCountMutex.lock();
+                             mFrameCount2Ch++;
+                             mFrameCountMutex.unlock();
+                             sent += static_cast<ssize_t>((period_size));
+                             mBitstreamSM->copyResidueOutputToStart(PCM_2CH_OUT,period_size);
+                         }
+                    }
+                }
+                if(mMultiChPcmRxHandle) {
+                    period_size = mMultiChPcmRxHandle->periodSize;
+                    ALOGD("MultiCh handle period_size %d",mMultiChPcmRxHandle->periodSize);
+                    while(mBitstreamSM->sufficientSamplesToRender(PCM_MCH_OUT,period_size) == true) {
+#ifdef DEBUG
+                         mFpDumpPCMOutput = fopen("/data/pcm_output_multich.raw","a");
+                         if(mFpDumpPCMOutput != NULL) {
+                             fwrite(mBitstreamSM->getOutputBufferPtr(PCM_MCH_OUT), 1,
+                                      period_size, mFpDumpPCMOutput);
+                             fclose(mFpDumpPCMOutput);
+                         }
+#endif
+                         n = pcm_write(mMultiChPcmRxHandle->handle,
+                                   mBitstreamSM->getOutputBufferPtr(PCM_MCH_OUT),
+                                   period_size);
+                         ALOGD("mMultiChPcmRxHandle - pcm_write returned with %d", n);
+                         if (n == -EBADFD) {
+                             // Somehow the stream is in a bad state. The driver probably
+                             // has a bug and snd_pcm_recover() doesn't seem to handle this.
+                             mMultiChPcmRxHandle->module->open(mMultiChPcmRxHandle);
+                         } else if (n < 0) {
+                             // Recovery is part of pcm_write. TODO split is later.
+                             ALOGE("mMultiChPcmRxHandle - pcm_write returned n < 0");
+                             return static_cast<ssize_t>(n);
+                         } else {
+                             mFrameCountMutex.lock();
+                             mFrameCountMultiCh++;
+                             mFrameCountMutex.unlock();
+                             sent += static_cast<ssize_t>((period_size));
+                             mBitstreamSM->copyResidueOutputToStart(PCM_MCH_OUT,period_size);
+                         }
                     }
                 }
             }
@@ -1350,6 +1437,17 @@ status_t AudioSessionOutALSA::pause_l()
             ALOGE("PAUSE failed for use case %s", mPcmRxHandle->useCase);
         }
     }
+    if(mStereoPcmRxHandle) {
+        if (ioctl(mStereoPcmRxHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE,1) < 0) {
+            ALOGE("PAUSE failed for use case %s", mStereoPcmRxHandle->useCase);
+        }
+    }
+    if(mMultiChPcmRxHandle) {
+        if (ioctl(mMultiChPcmRxHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE,1) < 0) {
+            ALOGE("PAUSE failed for use case %s", mMultiChPcmRxHandle->useCase);
+        }
+    }
+
     if(mCompreRxHandle) {
         if (ioctl(mCompreRxHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE,1) < 0) {
             ALOGE("PAUSE failed on use case %s", mCompreRxHandle->useCase);
@@ -1502,8 +1600,30 @@ status_t AudioSessionOutALSA::flush()
         pcm_prepare(mPcmRxHandle->handle);
         ALOGV("flush(): prepare completed");
     }
+
+    if(mStereoPcmRxHandle) {
+        if(!mPaused) {
+            ALOGE("flush(): Move to pause state if flush without pause");
+            if (ioctl(mStereoPcmRxHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE,1) < 0)
+                ALOGE("flush(): Audio Pause failed");
+        }
+        pcm_prepare(mStereoPcmRxHandle->handle);
+        ALOGV("flush(): prepare completed for stereo");
+    }
+    if(mMultiChPcmRxHandle) {
+        if(!mPaused) {
+            ALOGE("flush(): Move to pause state if flush without pause");
+            if (ioctl(mMultiChPcmRxHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE,1) < 0)
+                ALOGE("flush(): Audio Pause failed");
+        }
+        pcm_prepare(mMultiChPcmRxHandle->handle);
+        ALOGV("flush(): prepare completed for Multi Channel");
+    }
+
     mFrameCountMutex.lock();
     mFrameCount = 0;
+    mFrameCountMultiCh = 0;
+    mFrameCount2Ch = 0;
     mFrameCountMutex.unlock();
     if(mBitstreamSM)
        mBitstreamSM->resetBitstreamPtr();
@@ -1569,6 +1689,17 @@ status_t AudioSessionOutALSA::resume_l()
             ALOGE("RESUME failed for use case %s", mPcmRxHandle->useCase);
         }
     }
+    if(mStereoPcmRxHandle) {
+        if (ioctl(mStereoPcmRxHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE,0) < 0) {
+            ALOGE("RESUME failed for use case %s", mStereoPcmRxHandle->useCase);
+        }
+    }
+    if(mMultiChPcmRxHandle) {
+        if (ioctl(mMultiChPcmRxHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE,0) < 0) {
+            ALOGE("RESUME failed for use case %s", mMultiChPcmRxHandle->useCase);
+        }
+    }
+
     if(mCompreRxHandle) {
         if (mTunnelSeeking) {
             drainTunnel();
@@ -1686,6 +1817,32 @@ uint32_t AudioSessionOutALSA::latency() const
          }
          else
               return 0;
+    }else if(mStereoPcmRxHandle && mStereoPcmRxHandle->handle){
+          mStereoPcmRxHandle->handle->sync_ptr->flags = SNDRV_PCM_SYNC_PTR_APPL|
+                                                 SNDRV_PCM_SYNC_PTR_AVAIL_MIN|
+                                                 SNDRV_PCM_SYNC_PTR_HWSYNC;
+
+          err = sync_ptr(mStereoPcmRxHandle->handle);
+
+          if(err == NO_ERROR){
+              return USEC_TO_MSEC(((((uint64_t)(mStereoPcmRxHandle->handle->sync_ptr->c.control.appl_ptr -
+                     mStereoPcmRxHandle->handle->sync_ptr->s.status.hw_ptr)) * 1000000 )/(uint64_t)mSampleRate));
+          }
+          else
+              return 0;
+    }else if(mMultiChPcmRxHandle && mMultiChPcmRxHandle->handle){
+          mMultiChPcmRxHandle->handle->sync_ptr->flags = SNDRV_PCM_SYNC_PTR_APPL|
+                                                 SNDRV_PCM_SYNC_PTR_AVAIL_MIN|
+                                                 SNDRV_PCM_SYNC_PTR_HWSYNC;
+
+          err = sync_ptr(mMultiChPcmRxHandle->handle);
+
+          if(err == NO_ERROR){
+              return USEC_TO_MSEC(((((uint64_t)(mMultiChPcmRxHandle->handle->sync_ptr->c.control.appl_ptr -
+                     mMultiChPcmRxHandle->handle->sync_ptr->s.status.hw_ptr)) * 1000000 )/(uint64_t)mSampleRate));
+          }
+          else
+              return 0;
     }
     else
         return 0;
@@ -1719,13 +1876,19 @@ status_t AudioSessionOutALSA::getNextWriteTimestamp(int64_t *timeStamp)
             return NO_ERROR;
         }
     } else if(mMS11Decoder) {
-        if(mPcmRxHandle) {
+        if(mStereoPcmRxHandle) {
             mFrameCountMutex.lock();
             *timeStamp = -(uint64_t)(latency()*1000) + (((uint64_t)(((int64_t)(
-                        (mFrameCount * mPcmRxHandle->periodSize)/ (2*mChannels)))
+                        (mFrameCount2Ch * mStereoPcmRxHandle->periodSize)/ (2*mStereoPcmRxHandle->channels)))
                      * 1000000)) / mSampleRate);
             mFrameCountMutex.unlock();
-        } else if(mCompreRxHandle){
+        } else if(mMultiChPcmRxHandle) {
+            mFrameCountMutex.lock();
+            *timeStamp = -(uint64_t)(latency()*1000) + (((uint64_t)(((int64_t)(
+                        (mFrameCountMultiCh * mMultiChPcmRxHandle->periodSize)/ (2*mMultiChPcmRxHandle->channels)))
+                     * 1000000)) / mSampleRate);
+            mFrameCountMutex.unlock();
+        }else if(mCompreRxHandle){
             Mutex::Autolock autoLock(mLock);
             if ( mCompreRxHandle==NULL ||  ioctl(mCompreRxHandle->handle->fd, SNDRV_COMPRESS_TSTAMP,
                       &tstamp)) {
@@ -1860,6 +2023,47 @@ status_t AudioSessionOutALSA::openDevice(char *useCase, bool bIsUseCase, int dev
     return status;
 }
 
+
+status_t AudioSessionOutALSA::openDevice(char *useCase, bool bIsUseCase, int devices,int channels)
+{
+    alsa_handle_t alsa_handle;
+    status_t status = NO_ERROR;
+    ALOGD("openDevice:%x channels %d",devices,channels);
+    alsa_handle.module      = mALSADevice;
+    alsa_handle.bufferSize  = mInputBufferSize * mInputBufferCount;
+    alsa_handle.periodSize  = mInputBufferSize;
+    alsa_handle.devices     = devices;
+    alsa_handle.activeDevice= devices;
+    alsa_handle.handle      = 0;
+    alsa_handle.format      = (mFormat == AUDIO_FORMAT_PCM_16_BIT ? SNDRV_PCM_FORMAT_S16_LE : mFormat);
+    alsa_handle.channels    = channels;
+    alsa_handle.sampleRate  = mSampleRate;
+    alsa_handle.mode        = mParent->mode();
+    alsa_handle.latency     = PLAYBACK_LATENCY;
+    alsa_handle.rxHandle    = 0;
+    alsa_handle.ucMgr       = mUcMgr;
+    alsa_handle.timeStampMode = SNDRV_PCM_TSTAMP_NONE;
+    alsa_handle.type = PCM_FORMAT;
+
+    strlcpy(alsa_handle.useCase, useCase, sizeof(alsa_handle.useCase));
+
+    if (mALSADevice->setUseCase(&alsa_handle, bIsUseCase))
+        return NO_INIT;
+
+    status = mALSADevice->open(&alsa_handle);
+
+    if(status != NO_ERROR) {
+        ALOGE("Could not open the ALSA device for use case %s", alsa_handle.useCase);
+        mALSADevice->close(&alsa_handle);
+    } else{
+        mParent->mDeviceList.push_back(alsa_handle);
+    }
+    ALOGD("openDevice for MS11 useCase: X");
+    return status;
+}
+
+
+
 status_t AudioSessionOutALSA::closeDevice(alsa_handle_t *pHandle)
 {
     status_t status = NO_ERROR;
@@ -1907,6 +2111,28 @@ void AudioSessionOutALSA::initFilledQueue(alsa_handle_t *handle, int queueIndex,
 
 }
 
+void AudioSessionOutALSA::getSinkCapability(int devices, int* stereoDevices, int* multiChDevices)
+{
+    int channels;
+    EDID_AUDIO_INFO info = { 0 };
+
+    if((devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)){
+            if (AudioUtil::getHDMIAudioSinkCaps(&info)) {
+                  for (int i = 0; i < info.nAudioBlocks && i < MAX_EDID_BLOCKS; i++) {
+                         if (info.AudioBlocksArray[i].nFormatId == LPCM &&
+                               info.AudioBlocksArray[i].nChannels > channels &&
+                               info.AudioBlocksArray[i].nChannels <= MAX_HDMI_CHANNEL_CNT) {
+                                      channels = info.AudioBlocksArray[i].nChannels;
+                         }
+                  }
+            }
+
+            if (channels > 2){
+                  *multiChDevices = AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+            }
+    }
+    *stereoDevices = devices & ~(*multiChDevices);
+}
 
 status_t AudioSessionOutALSA::doRouting(int devices)
 {
@@ -2031,6 +2257,106 @@ status_t AudioSessionOutALSA::doRouting(int devices)
             mALSADevice->switchDeviceUseCase(mCompreRxHandle,
                   devices & ~mSecDevices & ~mTranscodeDevices, mParent->mode());
         }
+    }else if(mUseMS11Decoder){
+        int comprDevices = 0;
+        int stereoDevices =0;
+        int multiChDevices =0;
+
+        getSinkCapability(devices,&stereoDevices,&multiChDevices);
+
+
+        if(mSpdifFormat == COMPRESSED_FORMAT)
+          comprDevices |= AudioSystem::DEVICE_OUT_SPDIF;
+        if(mHdmiFormat == COMPRESSED_FORMAT)
+            comprDevices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+
+        stereoDevices = stereoDevices & ~comprDevices;
+        multiChDevices = multiChDevices & ~comprDevices;
+
+        status = setPlaybackFormat();
+        if(status != NO_ERROR)
+            return BAD_VALUE;
+
+        if((mSpdifFormat == COMPRESSED_FORMAT) ||
+           (mHdmiFormat == COMPRESSED_FORMAT)) {
+           if (mCompreRxHandle == NULL) {
+                Mutex::Autolock autoLock(mLock);
+                status = openTunnelDevice(comprDevices);
+                if(status != NO_ERROR) {
+                   ALOGE("Tunnel device open failure in do routing");
+                    return BAD_VALUE;
+                }
+                createThreadsForTunnelDecode();
+            }
+        } else if(mCompreRxHandle){
+            ALOGE("Clear the compr handle");
+            requestAndWaitForEventThreadExit();
+            Mutex::Autolock autoLock(mLock);
+            status = closeDevice(mCompreRxHandle);
+            if(status != NO_ERROR) {
+                ALOGE("Error closing compr device in doRouting");
+                return BAD_VALUE;
+            }
+            mCompreRxHandle = NULL;
+            bufferDeAlloc(DECODEQUEUEINDEX);
+       }
+       if(stereoDevices){
+            if(mStereoPcmRxHandle){
+                 mALSADevice->switchDeviceUseCase(mStereoPcmRxHandle,
+                              stereoDevices, mParent->mode());
+                 mStereoDevices = stereoDevices;
+            }else{
+                 status = openPcmDevice(stereoDevices);
+                 if(status != NO_ERROR) {
+                       ALOGE("Error opening Transocde device in doRouting");
+                       return BAD_VALUE;
+                 }
+                 if(mStereoPcmRxHandle) {
+                      ALOGD("Setting PCM volume to %d (available range is 0 to 0x2000)\n", mStreamVol);
+                      status = mStereoPcmRxHandle->module->setPlaybackVolume(mStreamVol,
+                                                   mStereoPcmRxHandle->useCase);
+                 }
+            }
+       } else if (mStereoPcmRxHandle) {
+            ALOGD("Close the Stereo Session as all stereo devices are disconnected");
+            Mutex::Autolock autoLock(mLock);
+            status = closeDevice(mStereoPcmRxHandle);
+            if(status != NO_ERROR) {
+                ALOGE("Error closing compr device in doRouting");
+                return BAD_VALUE;
+            }
+            mStereoPcmRxHandle = NULL;
+       }
+
+       if(multiChDevices){
+            if(mMultiChPcmRxHandle){
+                 mALSADevice->switchDeviceUseCase(mMultiChPcmRxHandle,
+                              multiChDevices, mParent->mode());
+                 mMultiChDevices = multiChDevices;
+            }else{
+                 status = openPcmDevice(multiChDevices);
+                 if(status != NO_ERROR) {
+                       ALOGE("Error opening Transocde device in doRouting");
+                       return BAD_VALUE;
+                 }
+                 if(mMultiChPcmRxHandle) {
+                      ALOGD("Setting PCM volume to %d (available range is 0 to 0x2000)\n", mStreamVol);
+                      status = mMultiChPcmRxHandle->module->setPlaybackVolume(mStreamVol,
+                                       mMultiChPcmRxHandle->useCase);
+                      return status;
+                 }
+            }
+       } else if (mMultiChPcmRxHandle) {
+            ALOGD("Close the Multi Channel Session as all multi channel devices are disconnected");
+            Mutex::Autolock autoLock(mLock);
+            status = closeDevice(mMultiChPcmRxHandle);
+            if(status != NO_ERROR) {
+                ALOGE("Error closing compr device in doRouting");
+                return BAD_VALUE;
+            }
+            mMultiChPcmRxHandle = NULL;
+       }
+
     } else {
         /*
            Handles the following
@@ -2319,11 +2645,24 @@ void AudioSessionOutALSA::reset() {
     alsa_handle_t *compreRxHandle_dup = mCompreRxHandle;
     alsa_handle_t *pcmRxHandle_dup = mPcmRxHandle;
     alsa_handle_t *secCompreRxHandle_dup = mSecCompreRxHandle;
+    alsa_handle_t *mStereoPcmRxHandle_dup = mStereoPcmRxHandle;
+    alsa_handle_t *mMultiChPcmRxHandle_dup = mMultiChPcmRxHandle;
 
     if(mPcmRxHandle) {
         closeDevice(mPcmRxHandle);
         mPcmRxHandle = NULL;
     }
+
+    if(mStereoPcmRxHandle){
+        closeDevice(mStereoPcmRxHandle);
+        mStereoPcmRxHandle = NULL;
+    }
+
+    if(mMultiChPcmRxHandle){
+        closeDevice(mMultiChPcmRxHandle);
+        mMultiChPcmRxHandle = NULL;
+    }
+
 
     if ((mUseTunnelDecoder) ||
         (mHdmiFormat == COMPRESSED_FORMAT) ||
@@ -2359,7 +2698,8 @@ void AudioSessionOutALSA::reset() {
         it != mParent->mDeviceList.end(); ++it) {
         alsa_handle_t *it_dup = &(*it);
         if(compreRxHandle_dup == it_dup || pcmRxHandle_dup == it_dup ||
-            secCompreRxHandle_dup == it_dup) {
+            secCompreRxHandle_dup == it_dup || mMultiChPcmRxHandle_dup == it_dup ||
+             mStereoPcmRxHandle_dup == it_dup) {
             mParent->mDeviceList.erase(it);
         }
     }
@@ -2377,17 +2717,18 @@ void AudioSessionOutALSA::reset() {
     mWMAConfigDataSet = false;
     mUseDualTunnel    = false;
     mSecDevices = 0;
+    mStereoDevices = 0;
+    mMultiChDevices = 0;
     if(mFirstAACBuffer){
         free(mFirstAACBuffer);
         mFirstAACBuffer = NULL;
     }
-
-
 }
 
 status_t AudioSessionOutALSA::openPcmDevice(int devices)
 {
     char *use_case;
+    int channels =0;
     status_t status = NO_ERROR;
 
     if(mSpdifFormat == COMPRESSED_FORMAT) {
@@ -2404,7 +2745,59 @@ status_t AudioSessionOutALSA::openPcmDevice(int devices)
         ALOGE("setPlaybackFormat Failed");
         return BAD_VALUE;
     }
-    if(devices & ~mTranscodeDevices) {
+
+    if(mUseMS11Decoder){
+        int stereoDevices = 0;
+        int multiChDevices = 0;
+        getSinkCapability(devices, &stereoDevices, &multiChDevices);
+        ALOGD("stereoDevices %x multiChDevices %x",stereoDevices,multiChDevices);
+        if(stereoDevices){
+              snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
+              if ((use_case == NULL) ||
+                 (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
+                 strlen(SND_USE_CASE_VERB_INACTIVE)))) {
+                     status = openDevice(SND_USE_CASE_VERB_HIFI2, true,
+                                stereoDevices,STEREO_CHANNELS);
+              } else {
+                     status = openDevice(SND_USE_CASE_MOD_PLAY_MUSIC2, false,
+                                stereoDevices,STEREO_CHANNELS);
+              }
+              if(use_case) {
+                  free(use_case);
+                  use_case = NULL;
+              }
+              if(status != NO_ERROR) {
+                  return status;
+              }
+              ALSAHandleList::iterator it = mParent->mDeviceList.end(); it--;
+              mStereoPcmRxHandle = &(*it);
+              mBufferSize = mStereoPcmRxHandle->periodSize;
+              mStereoDevices = stereoDevices;
+         }
+        if(multiChDevices){
+              snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
+              if ((use_case == NULL) ||
+                 (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
+                 strlen(SND_USE_CASE_VERB_INACTIVE)))) {
+                     status = openDevice(SND_USE_CASE_VERB_HIFI2, true,
+                                multiChDevices,MAX_OUTPUT_CHANNELS_SUPPORTED);
+              } else {
+                     status = openDevice(SND_USE_CASE_MOD_PLAY_MUSIC2, false,
+                                multiChDevices,MAX_OUTPUT_CHANNELS_SUPPORTED);
+              }
+              if(use_case) {
+                  free(use_case);
+                  use_case = NULL;
+              }
+              if(status != NO_ERROR) {
+                  return status;
+              }
+              ALSAHandleList::iterator it = mParent->mDeviceList.end(); it--;
+              mMultiChPcmRxHandle = &(*it);
+              mBufferSize = mMultiChPcmRxHandle->periodSize;
+              mMultiChDevices = multiChDevices;
+         }
+    }else if(devices & ~mTranscodeDevices) {
         snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
         if ((use_case == NULL) ||
             (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
@@ -2444,8 +2837,8 @@ status_t AudioSessionOutALSA::openPcmDevice(int devices)
     }
 
     if(devices & ~mTranscodeDevices) {
-        if(mUseMS11Decoder && (mPcmRxHandle->channels > 2))
-            setChannelMap(mPcmRxHandle);
+        if(mUseMS11Decoder && (mMultiChPcmRxHandle->channels > 2))
+            setChannelMap(mMultiChPcmRxHandle);
         else if(mPcmRxHandle->channels > 2)
             setPCMChannelMap(mPcmRxHandle);
         pcm_prepare(mPcmRxHandle->handle);
