@@ -7434,6 +7434,981 @@ SectionModifier
 EndSection
 
 SectionModifier
+	Name "Play Music5"
+
+	EnableSequence
+		'SLIMBUS_0_RX Audio Mixer MultiMedia6':1:1
+	EndSequence
+
+	DisableSequence
+		'SLIMBUS_0_RX Audio Mixer MultiMedia6':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 15
+	PlaybackPCM 15
+
+EndSection
+
+SectionModifier
+	Name "Play Music5SLIMBUS_VIRTUAL_PORT"
+	Comment "Modifier for Music playback on Slimbus VIRTUAL PORT"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+                'SLIMBUS_0_RX Audio Mixer MultiMedia6':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 15
+	PlaybackPCM 15
+
+EndSection
+
+SectionModifier
+	Name "Play Music5HDMI"
+	Comment "Modifier for music playback on HDMI"
+
+	EnableSequence
+		'HDMI Mixer MultiMedia6':1:1
+	EndSequence
+
+	DisableSequence
+		'HDMI Mixer MultiMedia6':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 15
+	PlaybackPCM 15
+
+EndSection
+
+SectionModifier
+	Name "Play Music5HDMI Tx"
+	Comment "Modifier for music playback on HDMI"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 15
+	PlaybackPCM 15
+
+EndSection
+
+SectionModifier
+	Name "Play Music5SPDIF"
+
+	EnableSequence
+		'SEC_RX Audio Mixer MultiMedia6':1:1
+	EndSequence
+
+	DisableSequence
+		'SEC_RX Audio Mixer MultiMedia6':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 15
+	PlaybackPCM 15
+
+EndSection
+
+SectionModifier
+	Name "Play Music5HDMI SPDIF"
+	Comment "Modifier for music playback on HDMI SPDIF"
+
+	EnableSequence
+		'HDMI Mixer MultiMedia6':1:1
+		'SEC_RX Audio Mixer MultiMedia6':1:1
+	EndSequence
+
+	DisableSequence
+		'HDMI Mixer MultiMedia6':1:0
+		'SEC_RX Audio Mixer MultiMedia6':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 15
+	PlaybackPCM 15
+
+EndSection
+
+SectionModifier
+	Name "Play Music5HDMI SPDIF Speaker"
+	Comment "Modifier for music playback on HDMI SPDIF Speaker"
+
+	EnableSequence
+		'HDMI Mixer MultiMedia6':1:1
+		'SEC_RX Audio Mixer MultiMedia6':1:1
+		'SLIMBUS_0_RX Audio Mixer MultiMedia6':1:1
+	EndSequence
+
+	DisableSequence
+		'HDMI Mixer MultiMedia6':1:0
+		'SEC_RX Audio Mixer MultiMedia6':1:0
+		'SLIMBUS_0_RX Audio Mixer MultiMedia6':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 15
+	PlaybackPCM 15
+
+EndSection
+
+SectionModifier
+	Name "Play Music5BT SCO Rx"
+	Comment "Modifier for music playback"
+
+	EnableSequence
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia6':1:1
+	EndSequence
+
+	DisableSequence
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia6':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 15
+	PlaybackPCM 15
+
+EndSection
+
+SectionModifier
+	Name "Play Music5BT SCO Tx"
+	Comment "Modifier for music playback"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 15
+	PlaybackPCM 15
+
+EndSection
+
+SectionModifier
+	Name "Play Music5BT SCO WB Rx"
+	Comment "Modifier for music playback"
+
+	EnableSequence
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia6':1:1
+	EndSequence
+
+	DisableSequence
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia6':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 15
+	PlaybackPCM 15
+
+EndSection
+
+SectionModifier
+	Name "Play Music5PROXY Rx"
+
+	EnableSequence
+		'AFE_PCM_RX Audio Mixer MultiMedia6':1:1
+	EndSequence
+
+	DisableSequence
+		'AFE_PCM_RX Audio Mixer MultiMedia6':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 15
+	PlaybackPCM 15
+
+EndSection
+
+SectionModifier
+	Name "Play Music5PROXY Tx"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 15
+	PlaybackPCM 15
+
+EndSection
+
+SectionModifier
+        Name "Play Music5PROXY Rx Speaker"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia6':1:1
+                'SLIMBUS_0_RX Audio Mixer MultiMedia6':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia6':1:0
+                'SLIMBUS_0_RX Audio Mixer MultiMedia6':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 15
+        PlaybackPCM 15
+
+EndSection
+
+SectionModifier
+        Name "Play Music5PROXY Rx Earpiece"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia6':1:1
+                'SLIMBUS_0_RX Audio Mixer MultiMedia6':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia6':1:0
+                'SLIMBUS_0_RX Audio Mixer MultiMedia6':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 15
+        PlaybackPCM 15
+
+EndSection
+
+SectionModifier
+        Name "Play Music5PROXY Rx Headphones"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia6':1:1
+                'SLIMBUS_0_RX Audio Mixer MultiMedia6':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia6':1:0
+                'SLIMBUS_0_RX Audio Mixer MultiMedia6':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 15
+        PlaybackPCM 15
+
+EndSection
+
+SectionModifier
+        Name "Play Music5PROXY Rx ANC Headset"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia6':1:1
+                'SLIMBUS_0_RX Audio Mixer MultiMedia6':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia6':1:0
+                'SLIMBUS_0_RX Audio Mixer MultiMedia6':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 15
+        PlaybackPCM 15
+
+EndSection
+
+SectionModifier
+        Name "Play Music5PROXY Rx Speaker Headset"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia6':1:1
+                'SLIMBUS_0_RX Audio Mixer MultiMedia6':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia6':1:0
+                'SLIMBUS_0_RX Audio Mixer MultiMedia6':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 15
+        PlaybackPCM 15
+
+EndSection
+
+SectionModifier
+        Name "Play Music5PROXY Rx Speaker ANC Headset"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia6':1:1
+                'SLIMBUS_0_RX Audio Mixer MultiMedia6':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia6':1:0
+                'SLIMBUS_0_RX Audio Mixer MultiMedia6':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 15
+        PlaybackPCM 15
+
+EndSection
+
+SectionModifier
+	Name "Play Music6"
+
+	EnableSequence
+		'SLIMBUS_0_RX Audio Mixer MultiMedia9':1:1
+	EndSequence
+
+	DisableSequence
+		'SLIMBUS_0_RX Audio Mixer MultiMedia9':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 20
+	PlaybackPCM 20
+
+EndSection
+
+SectionModifier
+	Name "Play Music6SLIMBUS_VIRTUAL_PORT"
+	Comment "Modifier for Music playback on Slimbus VIRTUAL PORT"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+                'SLIMBUS_0_RX Audio Mixer MultiMedia9':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 20
+	PlaybackPCM 20
+
+EndSection
+
+SectionModifier
+	Name "Play Music6HDMI"
+	Comment "Modifier for music playback on HDMI"
+
+	EnableSequence
+		'HDMI Mixer MultiMedia9':1:1
+	EndSequence
+
+	DisableSequence
+		'HDMI Mixer MultiMedia9':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 20
+	PlaybackPCM 20
+
+EndSection
+
+SectionModifier
+	Name "Play Music6HDMI Tx"
+	Comment "Modifier for music playback on HDMI"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 20
+	PlaybackPCM 20
+
+EndSection
+
+SectionModifier
+	Name "Play Music6SPDIF"
+
+	EnableSequence
+		'SEC_RX Audio Mixer MultiMedia9':1:1
+	EndSequence
+
+	DisableSequence
+		'SEC_RX Audio Mixer MultiMedia9':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 20
+	PlaybackPCM 20
+
+EndSection
+
+SectionModifier
+	Name "Play Music6HDMI SPDIF"
+	Comment "Modifier for music playback on HDMI SPDIF"
+
+	EnableSequence
+		'HDMI Mixer MultiMedia9':1:1
+		'SEC_RX Audio Mixer MultiMedia9':1:1
+	EndSequence
+
+	DisableSequence
+		'HDMI Mixer MultiMedia9':1:0
+		'SEC_RX Audio Mixer MultiMedia9':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 20
+	PlaybackPCM 20
+
+EndSection
+
+SectionModifier
+	Name "Play Music6HDMI SPDIF Speaker"
+	Comment "Modifier for music playback on HDMI SPDIF Speaker"
+
+	EnableSequence
+		'HDMI Mixer MultiMedia9':1:1
+		'SEC_RX Audio Mixer MultiMedia9':1:1
+		'SLIMBUS_0_RX Audio Mixer MultiMedia9':1:1
+	EndSequence
+
+	DisableSequence
+		'HDMI Mixer MultiMedia9':1:0
+		'SEC_RX Audio Mixer MultiMedia9':1:0
+		'SLIMBUS_0_RX Audio Mixer MultiMedia9':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 20
+	PlaybackPCM 20
+
+EndSection
+
+SectionModifier
+	Name "Play Music6BT SCO Rx"
+	Comment "Modifier for music playback"
+
+	EnableSequence
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia9':1:1
+	EndSequence
+
+	DisableSequence
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia9':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 20
+	PlaybackPCM 20
+
+EndSection
+
+SectionModifier
+	Name "Play Music6BT SCO Tx"
+	Comment "Modifier for music playback"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 20
+	PlaybackPCM 20
+
+EndSection
+
+SectionModifier
+	Name "Play Music6BT SCO WB Rx"
+	Comment "Modifier for music playback"
+
+	EnableSequence
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia9':1:1
+	EndSequence
+
+	DisableSequence
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia9':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 20
+	PlaybackPCM 20
+
+EndSection
+
+SectionModifier
+	Name "Play Music6PROXY Rx"
+
+	EnableSequence
+		'AFE_PCM_RX Audio Mixer MultiMedia9':1:1
+	EndSequence
+
+	DisableSequence
+		'AFE_PCM_RX Audio Mixer MultiMedia9':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 20
+	PlaybackPCM 20
+
+EndSection
+
+SectionModifier
+	Name "Play Music6PROXY Tx"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 20
+	PlaybackPCM 20
+
+EndSection
+
+SectionModifier
+        Name "Play Music6PROXY Rx Speaker"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia9':1:1
+                'SLIMBUS_0_RX Audio Mixer MultiMedia9':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia9':1:0
+                'SLIMBUS_0_RX Audio Mixer MultiMedia9':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 20
+        PlaybackPCM 20
+
+EndSection
+
+SectionModifier
+        Name "Play Music6PROXY Rx Earpiece"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia9':1:1
+                'SLIMBUS_0_RX Audio Mixer MultiMedia9':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia9':1:0
+                'SLIMBUS_0_RX Audio Mixer MultiMedia9':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 20
+        PlaybackPCM 20
+
+EndSection
+
+SectionModifier
+        Name "Play Music6PROXY Rx Headphones"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia9':1:1
+                'SLIMBUS_0_RX Audio Mixer MultiMedia9':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia9':1:0
+                'SLIMBUS_0_RX Audio Mixer MultiMedia9':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 20
+        PlaybackPCM 20
+
+EndSection
+
+SectionModifier
+        Name "Play Music6PROXY Rx ANC Headset"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia9':1:1
+                'SLIMBUS_0_RX Audio Mixer MultiMedia9':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia9':1:0
+                'SLIMBUS_0_RX Audio Mixer MultiMedia9':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 20
+        PlaybackPCM 20
+
+EndSection
+
+SectionModifier
+        Name "Play Music6PROXY Rx Speaker Headset"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia9':1:1
+                'SLIMBUS_0_RX Audio Mixer MultiMedia9':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia9':1:0
+                'SLIMBUS_0_RX Audio Mixer MultiMedia9':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 20
+        PlaybackPCM 20
+
+EndSection
+
+SectionModifier
+        Name "Play Music6PROXY Rx Speaker ANC Headset"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia9':1:1
+                'SLIMBUS_0_RX Audio Mixer MultiMedia9':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia9':1:0
+                'SLIMBUS_0_RX Audio Mixer MultiMedia9':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 20
+        PlaybackPCM 20
+
+EndSection
+
+SectionModifier
+	Name "Play Music7"
+
+	EnableSequence
+		'SLIMBUS_0_RX Audio Mixer MultiMedia10':1:1
+	EndSequence
+
+	DisableSequence
+		'SLIMBUS_0_RX Audio Mixer MultiMedia10':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 21
+	PlaybackPCM 21
+
+EndSection
+
+SectionModifier
+	Name "Play Music7SLIMBUS_VIRTUAL_PORT"
+	Comment "Modifier for Music playback on Slimbus VIRTUAL PORT"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+               'SLIMBUS_0_RX Audio Mixer MultiMedia10':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 21
+	PlaybackPCM 21
+
+EndSection
+
+SectionModifier
+	Name "Play Music7HDMI"
+	Comment "Modifier for music playback on HDMI"
+
+	EnableSequence
+		'HDMI Mixer MultiMedia10':1:1
+	EndSequence
+
+	DisableSequence
+		'HDMI Mixer MultiMedia10':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 21
+	PlaybackPCM 21
+
+EndSection
+
+SectionModifier
+	Name "Play Music7HDMI Tx"
+	Comment "Modifier for music playback on HDMI"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 21
+	PlaybackPCM 21
+
+EndSection
+
+SectionModifier
+	Name "Play Music7SPDIF"
+
+	EnableSequence
+		'SEC_RX Audio Mixer MultiMedia10':1:1
+	EndSequence
+
+	DisableSequence
+		'SEC_RX Audio Mixer MultiMedia10':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 21
+	PlaybackPCM 21
+
+EndSection
+
+SectionModifier
+	Name "Play Music7HDMI SPDIF"
+	Comment "Modifier for music playback on HDMI SPDIF"
+
+	EnableSequence
+		'HDMI Mixer MultiMedia10':1:1
+		'SEC_RX Audio Mixer MultiMedia10':1:1
+	EndSequence
+
+	DisableSequence
+		'HDMI Mixer MultiMedia10':1:0
+		'SEC_RX Audio Mixer MultiMedia10':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 21
+	PlaybackPCM 21
+
+EndSection
+
+SectionModifier
+	Name "Play Music7HDMI SPDIF Speaker"
+	Comment "Modifier for music playback on HDMI SPDIF Speaker"
+
+	EnableSequence
+		'HDMI Mixer MultiMedia10':1:1
+		'SEC_RX Audio Mixer MultiMedia10':1:1
+		'SLIMBUS_0_RX Audio Mixer MultiMedia10':1:1
+	EndSequence
+
+	DisableSequence
+		'HDMI Mixer MultiMedia10':1:0
+		'SEC_RX Audio Mixer MultiMedia10':1:0
+		'SLIMBUS_0_RX Audio Mixer MultiMedia10':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 21
+	PlaybackPCM 21
+
+EndSection
+
+SectionModifier
+	Name "Play Music7BT SCO Rx"
+	Comment "Modifier for music playback"
+
+	EnableSequence
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia10':1:1
+	EndSequence
+
+	DisableSequence
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia10':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 21
+	PlaybackPCM 21
+
+EndSection
+
+SectionModifier
+	Name "Play Music7BT SCO Tx"
+	Comment "Modifier for music playback"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 21
+	PlaybackPCM 21
+
+EndSection
+
+SectionModifier
+	Name "Play Music7BT SCO WB Rx"
+	Comment "Modifier for music playback"
+
+	EnableSequence
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia10':1:1
+	EndSequence
+
+	DisableSequence
+		'INTERNAL_BT_SCO_RX Audio Mixer MultiMedia10':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 21
+	PlaybackPCM 21
+
+EndSection
+
+SectionModifier
+	Name "Play Music7PROXY Rx"
+
+	EnableSequence
+		'AFE_PCM_RX Audio Mixer MultiMedia10':1:1
+	EndSequence
+
+	DisableSequence
+		'AFE_PCM_RX Audio Mixer MultiMedia10':1:0
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 21
+	PlaybackPCM 21
+
+EndSection
+
+SectionModifier
+	Name "Play Music7PROXY Tx"
+
+	EnableSequence
+	EndSequence
+
+	DisableSequence
+	EndSequence
+
+	# ALSA PCMs
+	CapturePCM 21
+	PlaybackPCM 21
+
+EndSection
+
+SectionModifier
+        Name "Play Music7PROXY Rx Speaker"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia10':1:1
+                'SLIMBUS_0_RX Audio Mixer MultiMedia10':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia10':1:0
+                'SLIMBUS_0_RX Audio Mixer MultiMedia10':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 21
+        PlaybackPCM 21
+
+EndSection
+
+SectionModifier
+        Name "Play Music7PROXY Rx Earpiece"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia10':1:1
+                'SLIMBUS_0_RX Audio Mixer MultiMedia10':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia10':1:0
+                'SLIMBUS_0_RX Audio Mixer MultiMedia10':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 21
+        PlaybackPCM 21
+
+EndSection
+
+SectionModifier
+        Name "Play Music7PROXY Rx Headphones"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia10':1:1
+                'SLIMBUS_0_RX Audio Mixer MultiMedia10':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia10':1:0
+                'SLIMBUS_0_RX Audio Mixer MultiMedia10':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 21
+        PlaybackPCM 21
+
+EndSection
+
+SectionModifier
+        Name "Play Music7PROXY Rx ANC Headset"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia10':1:1
+                'SLIMBUS_0_RX Audio Mixer MultiMedia10':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia10':1:0
+                'SLIMBUS_0_RX Audio Mixer MultiMedia10':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 21
+        PlaybackPCM 21
+
+EndSection
+
+SectionModifier
+        Name "Play Music7PROXY Rx Speaker Headset"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia10':1:1
+                'SLIMBUS_0_RX Audio Mixer MultiMedia10':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia10':1:0
+                'SLIMBUS_0_RX Audio Mixer MultiMedia10':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 21
+        PlaybackPCM 21
+
+EndSection
+
+SectionModifier
+        Name "Play Music7PROXY Rx Speaker ANC Headset"
+
+        EnableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia10':1:1
+                'SLIMBUS_0_RX Audio Mixer MultiMedia10':1:1
+        EndSequence
+
+        DisableSequence
+                'AFE_PCM_RX Audio Mixer MultiMedia10':1:0
+                'SLIMBUS_0_RX Audio Mixer MultiMedia10':1:0
+        EndSequence
+
+        # ALSA PCMs
+        CapturePCM 21
+        PlaybackPCM 21
+
+EndSection
+
+SectionModifier
 	Name "Play Tunnel2"
 
 	EnableSequence
