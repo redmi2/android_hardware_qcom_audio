@@ -982,6 +982,7 @@ void AudioSessionOutALSA::updateDecodeTypeAndRoutingStates()
     mDecodeFormatDevices = mDevices;
     mPassthroughFormatDevices = AUDIO_DEVICE_NONE;
     mTranscodeFormatDevices = AUDIO_DEVICE_NONE;
+    mDecoderType = 0;
 
     if(isMS11SupportedFormats(mFormat))
         mUseMS11Decoder = true;
@@ -993,7 +994,7 @@ void AudioSessionOutALSA::updateDecodeTypeAndRoutingStates()
         ALOGVV("decoderType: %d", decodeType);
         mDecoderType = decodeType;
         for(int idx=0; idx<NUM_DECODE_PATH; idx++) {
-            if(routeToDriver[idx][DECODER_TYPE_IDX] & decodeType) {
+            if(routeToDriver[idx][DECODER_TYPE_IDX] == decodeType) {
                 switch(routeToDriver[idx][ROUTE_FORMAT_IDX]) {
                 case ROUTE_UNCOMPRESSED:
                     ALOGVV("ROUTE_UNCOMPRESSED");
@@ -1032,7 +1033,7 @@ void AudioSessionOutALSA::updateDecodeTypeAndRoutingStates()
         ALOGVV("decoderType: %d", decodeType);
         mDecoderType |= decodeType;
         for(int idx=0; idx<NUM_DECODE_PATH; idx++) {
-            if(routeToDriver[idx][DECODER_TYPE_IDX] & decodeType) {
+            if(routeToDriver[idx][DECODER_TYPE_IDX] == decodeType) {
                 switch(routeToDriver[idx][ROUTE_FORMAT_IDX]) {
                 case ROUTE_UNCOMPRESSED:
                     ALOGVV("ROUTE_UNCOMPRESSED");
@@ -1249,6 +1250,9 @@ status_t AudioSessionOutALSA::routingSetup()
     Mutex::Autolock autoLock(mControlLock);
     status_t status;
     int bufferCount;
+    int numOfActiveRxHandles;
+    int index;
+
     /*
     setup the bitstream state machine
     */
@@ -1282,14 +1286,22 @@ status_t AudioSessionOutALSA::routingSetup()
     else
         mMinBytesReqToDecode = 0;
 
-
     if((mFormat != AUDIO_FORMAT_WMA) &&
        (mFormat != AUDIO_FORMAT_WMA_PRO)) {
-        for(int index=0; index < mNumRxHandlesActive; index++) {
-            status = openPlaybackDevice(index, mRxHandleDevices[index],
+        numOfActiveRxHandles = mNumRxHandlesActive;
+        for(index=0; index < mNumRxHandlesActive; index++) {
+            status = openPlaybackDevice(index,
+                                        mRxHandleDevices[index],
                                         mRxHandleRouteFormat[index]);
             if(status) {
-                ALOGE("opening Playback device failed");
+                ALOGD("openPlaybackDevice failed for device = %d",mRxHandleDevices[index]);
+
+                /* updating mDevices for the device which open has failed */
+                mDevices &= ~mRxHandleDevices[index];
+
+              /*  Updating decoder type, routing flags and other vars for that device */
+                updateDecodeTypeAndRoutingStates();
+                numOfActiveRxHandles--;
             } else {
                 if(mRxHandleRouteFormat[index] == ROUTE_UNCOMPRESSED)
                     status = mALSADevice->setPlaybackVolume(mRxHandle[index],
@@ -1298,6 +1310,18 @@ status_t AudioSessionOutALSA::routingSetup()
                     ALOGE("setPlaybackVolume for WMA playback failed");
             }
         }
+
+        if(numOfActiveRxHandles != mNumRxHandlesActive) {
+             /* Updating Rx Handle states  */
+             updateRxHandleStates();
+             adjustRxHandleAndStates();
+        }
+
+        if(!numOfActiveRxHandles)
+           return status;
+        else
+          status = 0;
+
         if(!status)
             status = openTempBufForMetadataModeRendering();
 
@@ -1422,8 +1446,9 @@ status_t AudioSessionOutALSA::openPlaybackDevice(int index, int devices,
                 return NO_INIT;
             status = openDevice(use_case1, false/*bIsUseCase*/, devices, deviceFormat);
         }
-        if(status != NO_ERROR)
+        if(status != NO_ERROR) {
             mALSADevice->freePlaybackUseCase(use_case1);
+        }
         if(use_case) {
             free(use_case);
             use_case = NULL;
@@ -1526,10 +1551,16 @@ status_t AudioSessionOutALSA::openDevice(const char *useCase, bool bIsUseCase,
         ALOGE("Could not open the ALSA device for use case %s", alsa_handle.useCase);
         mALSADevice->close(&alsa_handle);
     } else{
-        mParent->mDeviceList.push_back(alsa_handle);
+        status = pcm_prepare(alsa_handle.handle);
+        if (status != NO_ERROR) {
+            ALOGE("pcm_prepare failed for device = %d device handle = %p", devices, alsa_handle.handle);
+            mALSADevice->close(&alsa_handle);
+        } else {
+            mParent->mDeviceList.push_back(alsa_handle);
+        }
     }
-    ALOGD("openDevice: X");
 
+    ALOGD("openDevice: X");
     return status;
 }
 
@@ -2264,11 +2295,15 @@ void AudioSessionOutALSA::adjustRxHandleAndStates()
 {
     ALOGV("adjustRxHandleAndStates");
     int index = 0;
-    if((index+1 < mNumRxHandlesActive) && mRxHandle[index+1] != NULL) {
-        mRxHandle[index] = mRxHandle[index+1];
-        mRxHandleRouteFormat[index] = mRxHandleRouteFormat[index+1];
-        mRxHandleDevices[index] = mRxHandleDevices[index+1];
-        mRxHandleRouteFormatType[index] = mRxHandleRouteFormatType[index+1];
+    for(index = 1; index < NUM_DEVICES_SUPPORT_COMPR_DATA; index++) {
+        if (mRxHandle[index-1] == NULL) {
+            mRxHandle[index-1] = mRxHandle[index];
+            mRxHandleRouteFormat[index-1] = mRxHandleRouteFormat[index];
+            mRxHandleDevices[index-1] = mRxHandleDevices[index];
+            mRxHandleRouteFormatType[index-1] = mRxHandleRouteFormatType[index];
+
+            resetRxHandleState(index);
+        }
     }
     return;
 }

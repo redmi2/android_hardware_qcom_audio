@@ -1630,20 +1630,44 @@ status_t ALSADevice::setPlaybackFormat(int device, bool isCompressed)
     if (device & AudioSystem::DEVICE_OUT_SPDIF) {
         if (isCompressed) {
             err = setMixerControl("SEC RX Format", "Compr");
+            if (NO_ERROR != err){
+              ALOGE("setMixerControl failed for SEC RX Format + Compr err = %d",err);
+            }
             err = setMixerControl("SEC RX Rate", "Variable");
+            if (NO_ERROR != err){
+              ALOGE("setMixerControl failed for SEC RX Rate + Variable err = %d",err);
+            }
         } else {
             err = setMixerControl("SEC RX Format", "LPCM");
+            if (NO_ERROR != err){
+              ALOGE("setMixerControl failed for SEC RX Format + LPCM err = %d",err);
+            }
             err = setMixerControl("SEC RX Rate", "Default");
+            if (NO_ERROR != err){
+              ALOGE("setMixerControl failed for SEC RX Rate + Default err = %d",err);
+            }
         }
     }
     else if(device & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
         if (isCompressed) {
             err = setMixerControl("HDMI RX Format", "Compr");
+            if (NO_ERROR != err){
+              ALOGE("setMixerControl failed for HDMI RX Format + Compr err = %d",err);
+            }
             err = setMixerControl("HDMI RX Rate", "Variable");
+            if (NO_ERROR != err){
+              ALOGE("setMixerControl failed for HDMI RX Rate + Variable err = %d",err);
+            }
             setHdmiOutputProperties(ROUTE_COMPRESSED);
         } else {
             err = setMixerControl("HDMI RX Format", "LPCM");
+            if (NO_ERROR != err){
+              ALOGE("setMixerControl failed for HDMI RX Format + LPCM err = %d",err);
+            }
             err = setMixerControl("HDMI RX Rate", "Default");
+            if (NO_ERROR != err){
+              ALOGE("setMixerControl failed for HDMI RX Rate + Default err = %d",err);
+            }
             setHdmiOutputProperties(ROUTE_UNCOMPRESSED);
         }
     }
