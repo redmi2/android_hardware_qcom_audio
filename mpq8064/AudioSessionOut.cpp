@@ -77,16 +77,6 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     mSampleRate     = samplingRate;
     ALOGV("channel map = %d", channels);
     mChannels = channels = channelMapToChannels(channels);
-    format = format & AUDIO_FORMAT_MAIN_MASK;
-    if(format == AUDIO_FORMAT_AAC || format == AUDIO_FORMAT_HE_AAC_V1 ||
-       format == AUDIO_FORMAT_HE_AAC_V2 || format == AUDIO_FORMAT_AAC_ADIF) {
-        if(samplingRate > 24000) {
-            mSampleRate     = 48000;
-        }
-        mChannels       = 6;
-    } else if (format == AUDIO_FORMAT_AC3 || format == AUDIO_FORMAT_EAC3) {
-        mChannels   = 6;
-    }
     // NOTE: This has to be changed when Multi channel PCM has to be
     // sent over HDMI
     mDevices        = devices;
@@ -160,12 +150,34 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
         *status = BAD_VALUE;
         return;
     }
+
+    int32_t format_ms11;
+    if(format == AUDIO_FORMAT_AAC || format == AUDIO_FORMAT_HE_AAC_V1 ||
+       format == AUDIO_FORMAT_HE_AAC_V2 || format == AUDIO_FORMAT_AAC_ADIF) {
+        if(samplingRate > 24000) {
+            mSampleRate     = 48000;
+        }
+        mChannels       = 6;
+    } else if ((format & AUDIO_FORMAT_AC3) || (format & AUDIO_FORMAT_EAC3)) {
+        format_ms11 = FORMAT_DOLBY_DIGITAL_PLUS_MAIN;
+        if (format & AUDIO_FORMAT_DOLBY_SUB_DM) {
+            mFormat = format = format & AUDIO_FORMAT_MAIN_MASK;
+        } else {
+            if (mSampleRate == 44100 && !strncmp(mSpdifOutputFormat,"ac3",sizeof(mSpdifOutputFormat))) {
+                samplingRate = mSampleRate = 48000;
+                format_ms11 = FORMAT_DOLBY_DIGITAL_PLUS_MAIN_ASSOC;
+            }
+        }
+        mChannels   = 6;
+    }
+
+    format = format & AUDIO_FORMAT_MAIN_MASK;
+
     if((format == AUDIO_FORMAT_PCM) && (channels <= 0 || channels > 8)) {
         ALOGE("Invalid number of channels %d", channels);
         *status = BAD_VALUE;
         return;
     }
-
 
     if(mDevices & AudioSystem::DEVICE_OUT_ALL_A2DP) {
         ALOGE("Set Capture from proxy true");
@@ -185,7 +197,6 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
             return;
         }
         // Instantiate MS11 decoder for single decode use case
-        int32_t format_ms11;
         mMS11Decoder = new SoftMS11;
         if(mMS11Decoder->initializeMS11FunctionPointers() == false) {
             ALOGE("Could not resolve all symbols Required for MS11");
@@ -208,10 +219,9 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
                 mMinBytesReqToDecode = 0;
             format_ms11 = FORMAT_DOLBY_PULSE_MAIN;
         } else {
-            format_ms11 = FORMAT_DOLBY_DIGITAL_PLUS_MAIN;
             mMinBytesReqToDecode = 0;
         }
-        if(mMS11Decoder->setUseCaseAndOpenStream(format_ms11,mChannels,samplingRate)) {
+        if(mMS11Decoder->setUseCaseAndOpenStream(format_ms11, mChannels, samplingRate)) {
             ALOGE("SetUseCaseAndOpen MS11 failed");
             delete mMS11Decoder;
             delete mBitstreamSM;
@@ -772,6 +782,7 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
 
                 mMS11Decoder->copyBitstreamToMS11InpBuf(bufPtr,copyBytesMS11);
                 bytesConsumedInDecode = mMS11Decoder->streamDecode(&outSampleRate,&outChannels);
+                ALOGV("copyBytesMS11 = %d bytesConsumedInDecode = %d", copyBytesMS11, bytesConsumedInDecode);
                 mBitstreamSM->copyResidueBitstreamToStart(bytesConsumedInDecode);
             }
             // Close and open the driver again if the output sample rate change is observed
