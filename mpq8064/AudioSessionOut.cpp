@@ -2369,7 +2369,7 @@ void AudioSessionOutALSA::handleCloseForDeviceSwitch(int format)
 {
     ALOGV("handleCloseForDeviceSwitch");
     for(int index = 0; index < mNumRxHandlesActive; index++) {
-        if(mRxHandleRouteFormat[index] == format) {
+        if(mRxHandleRouteFormat[index] & format) {
             if(closeDevice(mRxHandle[index]) != NO_ERROR) {
                 ALOGE("Error closing pcm route device in doRouting");
                 return;
