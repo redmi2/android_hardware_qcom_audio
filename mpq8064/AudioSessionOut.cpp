@@ -1068,7 +1068,8 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
                     }
                 }
             }
-	} while( (continueDecode == true) && (mBitstreamSM->sufficientBitstreamToDecode(mMinBytesReqToDecode) == true));
+        } while( (continueDecode == true || bytesConsumedInDecode > 0 ) &&
+                 (mBitstreamSM->sufficientBitstreamToDecode(mMinBytesReqToDecode) == true));
     } else {
         // 2. Get the output data from Software decoder and write to PCM driver
         if(bytes == 0)
