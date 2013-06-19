@@ -28,7 +28,7 @@
 #include <math.h>
 
 #define LOG_TAG "AudioBroadcastStreamALSA"
-#define LOG_NDEBUG 0
+//#define LOG_NDEBUG 0
 #define LOG_NDDEBUG 0
 #include <utils/Log.h>
 #include <utils/String8.h>
@@ -45,6 +45,13 @@
 #include <pthread.h>
 #include <linux/unistd.h>
 
+// 1 sample time is the minimum correction that can be
+// corrected by the DSP.
+// As device output for pcm is always 48Khz, the minumum
+// time comes as approx 21us.
+#define MIN_DRIFT_CORRECTION 21 // In Micorseconds
+#define BUFFERS_SAMPLED_FOR_DRIFT_MEASUREMENT 1000
+#define MAX_SUPPORTED_DRIFT_CORRECTION_PPM 105
 #define COMPRE_CAPTURE_HEADER_SIZE (sizeof(struct snd_compr_audio_info))
 #define PCM_CAPTURE_PATH_DELAY_US 15000 //In usec
 #define COMPRESS_CAPTURE_PATH_DELAY_US 30000 //In usec
@@ -169,6 +176,7 @@ AudioBroadcastStreamALSA::~AudioBroadcastStreamALSA()
     mWriteCv.signal();
 
     exitFromCaptureThread();
+    exitFromAdjustClockThread();
 
     alsa_handle_t *compreRxHandle_dup = mCompreRxHandle;
     alsa_handle_t *pcmRxHandle_dup = mPcmRxHandle;
@@ -595,6 +603,13 @@ void AudioBroadcastStreamALSA::initialization()
     mTimerThreadAlive        = false;
     mKillTimerThread         = false;
     mTimerfd                 = -1;
+    mAdjustClockThread       = NULL;
+    mAdjustClockThreadAlive  = false;
+    mKillAdjustClockThread   = false;
+    mBufferCount             = 0;
+    mStartTimeStamp          = 0;
+    mEndTimeStamp            = 0;
+    mAdjustClockfd           = -1;
 
     // playback controls
     mSkipWrite               = false;
@@ -1500,6 +1515,27 @@ status_t AudioBroadcastStreamALSA::createTimerThread()
     }
     return status;
 }
+status_t AudioBroadcastStreamALSA::createAdjustSessionClockThread()
+{
+    ALOGD("create Adjust Session Clock Thread");
+    status_t status = NO_ERROR;
+
+    if(!mAdjustClockThreadAlive){
+         mKillAdjustClockThread = false;
+         pthread_attr_t attr;
+         pthread_attr_init(&attr);
+         pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+         status = pthread_create(&mAdjustClockThread, (const pthread_attr_t *) NULL,
+                            adjustClockThreadWrapper, this);
+         if(status) {
+             ALOGE("create playback thread failed = %d", status);
+         } else {
+             ALOGD("Adjust Session clock thread created");
+             mAdjustClockThreadAlive = true;
+         }
+    }
+    return status;
+}
 
 void * AudioBroadcastStreamALSA::captureThreadWrapper(void *me)
 {
@@ -1517,6 +1553,129 @@ void * AudioBroadcastStreamALSA::timerThreadWrapper(void *me)
 {
     static_cast<AudioBroadcastStreamALSA *>(me)->timerThreadEntry();
     return NULL;
+}
+
+void * AudioBroadcastStreamALSA::adjustClockThreadWrapper(void *me)
+{
+    static_cast<AudioBroadcastStreamALSA *>(me)->adjustClockThreadEntry();
+    return NULL;
+}
+
+void AudioBroadcastStreamALSA::allocateAdjustClockPollFd()
+{
+    ALOGV("allocateAdjustClockPollFd");
+    if(mAdjustClockfd == -1) {
+        mAdjustClockfd         = eventfd(0,0);
+        mAdjustClockPfd.fd     = mAdjustClockfd;
+        mAdjustClockPfd.events = POLLIN | POLLERR | POLLNVAL;
+        ALOGD("mAdjustClockfd.fd %d ", mAdjustClockPfd.fd);
+    }
+}
+
+void AudioBroadcastStreamALSA::adjustClockThreadEntry()
+{
+    int64_t adjust_time = 0;
+    uint64_t timeStampOri = 0;
+    int sleep_time=0;
+    int ret = 0, i=0,err_poll = 0;
+    int iterations = 0;
+    uint64_t drift_correction = 0;
+    int32_t maxSamplesCorrectionPerSec = 0;
+    int32_t minTimeBetweenTwoSampleCorrection = 0;
+    uint64_t timeForDriftAccumulate = 0;
+
+    if(mCaptureHandle){
+         // timeForDriftAccumulate is the time required to capture
+         // BUFFERS_SAMPLED_FOR_DRIFT_MEASUREMENT buffers.
+         // We accumulate drift for these BUFFERS_SAMPLED_FOR_DRIFT_MEASUREMENT many buffers
+         // And then apply the correction in the next cycle.
+         timeForDriftAccumulate = ((uint64_t)((uint64_t)(BUFFERS_SAMPLED_FOR_DRIFT_MEASUREMENT *
+                                   (mCaptureHandle->periodSize - COMPRE_CAPTURE_HEADER_SIZE)) * 1000000) /
+                                   (mCaptureHandle->channels * 2 * mCaptureHandle->sampleRate));
+
+         // For now we limit to support only MAX_SUPPORTED_DRIFT_CORRECTION_PPM of drift.
+         // Now to correct 100ppm drift, it corresponds to correction of 100us/sec.
+         // Hence we need to apply MIN_DRIFT_CORRECTION(microsec) every
+         // MIN_DRIFT_CORRECTION/
+         maxSamplesCorrectionPerSec = MAX_SUPPORTED_DRIFT_CORRECTION_PPM / MIN_DRIFT_CORRECTION ;
+         minTimeBetweenTwoSampleCorrection = 1000 / maxSamplesCorrectionPerSec; // In miliSeconds
+         ALOGE("maxSamplesCorrectionPerSec %d timeBetweenTwoSampleCorrection %d ",
+                maxSamplesCorrectionPerSec, minTimeBetweenTwoSampleCorrection );
+    }
+    mResidueAdjustTime = 0;
+ 
+    if(!mKillAdjustClockThread)
+        allocateAdjustClockPollFd();
+
+    while(!mKillAdjustClockThread && mPcmTxHandle){
+        mAdjustClockMutex.lock();
+        ALOGE("Waiting for the signal to complete Drift Accumulate period");
+        mAdjustClockCv.wait(mAdjustClockMutex);
+        ALOGE("Adjust Clock thread will now apply correction");
+        mAdjustClockMutex.unlock();
+
+        if(mKillAdjustClockThread)
+           break;
+        timeStampOri = mStartTimeStamp + timeForDriftAccumulate;
+        adjust_time = timeStampOri - mEndTimeStamp + mResidueAdjustTime;
+        ALOGE("timeStampOri  %lld mStartTimeStamp %lld timeForDriftAccumulate %ld", timeStampOri, mStartTimeStamp, timeForDriftAccumulate);
+        ALOGE("mEndTimeStamp %lld adjust_time %lld", mEndTimeStamp, adjust_time);
+        // Spread the drift correction across the next drift calucaltion period
+        // Hence we apply only approx two samples of drift correction
+        // in one iteration This way we reduce the probablity of noise which could be heard
+        // due to drift correction.
+        mResidueAdjustTime = ((abs(adjust_time)) % MIN_DRIFT_CORRECTION);
+
+        if(adjust_time < 0 )
+           mResidueAdjustTime *= -1;
+
+        ALOGE("mResidueAdjustTime %d", mResidueAdjustTime);
+        if ( adjust_time != 0)
+           iterations = (abs(adjust_time)) / MIN_DRIFT_CORRECTION ;
+        else
+           iterations = 0;
+        // Sleep between two consecutive drift corrections.
+        // Should be in miliseconds.
+        // ((timeForDriftAccumulate - 4000000) ensure that we have enough time left
+        // between appllying correction for the previous cycle and end of the current
+        // Drift measurement cycle.
+        if ( iterations > 0 )
+           sleep_time = ((timeForDriftAccumulate - 4000000)/ iterations)/1000 ;
+        else {
+           sleep_time = 0;
+        }
+
+        ALOGE("Drift correction at %dms interval", sleep_time);
+        if( sleep_time > minTimeBetweenTwoSampleCorrection ){
+            for (i = 0 ; (i < iterations && !mKillAdjustClockThread); i++)
+            {
+                 if ( adjust_time != 0 && mPcmRxHandle ) {
+                      // adjust_time is in to microseconds.
+                      if ( adjust_time > 0){
+                           drift_correction = MIN_DRIFT_CORRECTION;
+                           if((ret = ioctl(mPcmRxHandle->handle->fd, SNDRV_PCM_ADJUST_SESSION_CLOCK, &drift_correction)) < 0 )
+                               ALOGE("ADJUST Session clock time command failed %d", ret);
+                      } else if ( adjust_time < 0){
+                           drift_correction = (MIN_DRIFT_CORRECTION * -1);
+                           if((ret = ioctl(mPcmRxHandle->handle->fd, SNDRV_PCM_ADJUST_SESSION_CLOCK, &drift_correction)) < 0 )
+                               ALOGE("ADJUST Session clock time command failed %d", ret);
+                      }
+                 }
+                 ALOGE("Applied drift correction of %lld for %dth time", drift_correction, i);
+                 err_poll = poll(&mAdjustClockPfd, 1, sleep_time);
+                 if(err_poll < 0){
+                    ALOGE("Poll retunred with error", err_poll);
+                    mAdjustClockPfd.revents = 0;
+                 } else if( mAdjustClockPfd.revents & POLLIN ){
+                    ALOGE("Event from userspace");
+                    mAdjustClockPfd.revents = 0;
+                 }
+            }
+       }
+       else
+            ALOGE("Either the drift is more than 100ppm or less than min correction possible");
+    }
+    ALOGE("Adjust Clock Thread dying");
 }
 
 void AudioBroadcastStreamALSA::allocateCapturePollFd()
@@ -1608,6 +1767,7 @@ status_t AudioBroadcastStreamALSA::startCapturePath()
    return status;
 }
 
+
 void AudioBroadcastStreamALSA::captureThreadEntry()
 {
     ALOGV("captureThreadEntry");
@@ -1677,6 +1837,11 @@ void AudioBroadcastStreamALSA::captureThreadEntry()
                          break;
                       }
                 }
+                // For now we enable drift correcton
+                // Only for PCM output and PCM input.
+                if(mPcmRxHandle && mPcmTxHandle)
+                   createAdjustSessionClockThread();
+
                 mSignalToSetupRoutingPath = false;
             } else if(mRoutingSetupDone == false) {
                 ALOGD("Routing Setup is not ready. Dropping the samples");
@@ -1705,9 +1870,22 @@ void AudioBroadcastStreamALSA::captureThreadEntry()
                     bufPtr = tempBuffer + COMPRE_CAPTURE_HEADER_SIZE +
                                  mReadMetaData.dataOffset;
                     frameSize = mReadMetaData.frameSize;
-                    ALOGV("frameSize: %d", frameSize);
-                    if (avSyncDelayUS > 0) captureBuffers(bufPtr, frameSize);
-                    else write_l(bufPtr, frameSize);
+                    if (avSyncDelayUS > 0)
+                         captureBuffers(bufPtr, frameSize);
+                    else {
+                         ALOGD("frameSize: %d BufferCount %d", frameSize, mBufferCount);
+                         write_l(bufPtr, frameSize);
+                         mBufferCount ++;
+                         if(mBufferCount == 1){
+                             mStartTimeStamp = (( (uint64_t)mReadMetaData.timestampMsw << 32) |
+                                                  (uint64_t)mReadMetaData.timestampLsw);
+                         } else if (mBufferCount > BUFFERS_SAMPLED_FOR_DRIFT_MEASUREMENT){
+                             mEndTimeStamp = (( (uint64_t) mReadMetaData.timestampMsw << 32) |
+                                                (uint64_t)mReadMetaData.timestampLsw);
+                             mAdjustClockCv.signal();
+                             mBufferCount = 0;
+                         }
+                    }
                 }
             }
         }
@@ -1756,8 +1934,18 @@ void AudioBroadcastStreamALSA::captureBuffers(char *bufPtr, uint32_t frameSize)
                 else {
                     BuffersAllocated buf = *it;
                     mCaptureFilledQueue.erase(mCaptureFilledQueue.begin());
-                    ALOGD("Writing buffer %x with framesize %d", buf.memBuf, buf.bytesToWrite);
+                    ALOGD("frameSize: %d BufferCount %d", frameSize, mBufferCount);
                     write_l((char *)buf.memBuf, buf.bytesToWrite);
+                    mBufferCount ++;
+                    if(mBufferCount == 1){
+                        mStartTimeStamp = (( (uint64_t)mReadMetaData.timestampMsw << 32) |
+                                              (uint64_t)mReadMetaData.timestampLsw);
+                    } else if (mBufferCount > BUFFERS_SAMPLED_FOR_DRIFT_MEASUREMENT){
+                        mEndTimeStamp = (( (uint64_t) mReadMetaData.timestampMsw << 32) |
+                                           (uint64_t)mReadMetaData.timestampLsw);
+                        mAdjustClockCv.signal();
+                        mBufferCount = 0;
+                    }
                     free(buf.memBuf);
                 }
             }
@@ -1898,7 +2086,7 @@ ssize_t AudioBroadcastStreamALSA::readFromCapturePath(char *buffer)
             break;
         }
         mAvail = pcm_avail(capture_handle);
-        ALOGV("avail is = %d frames = %ld, avai_min = %d\n",\
+        ALOGD("avail is = %d frames = %ld, avai_min = %d\n",\
               mAvail, mFrames,(int)capture_handle->sw_p->avail_min);
 
         if (mAvail < capture_handle->sw_p->avail_min) {
@@ -2222,7 +2410,27 @@ void AudioBroadcastStreamALSA::exitFromTimerThread()
     mTimerMutex.unlock();
     pthread_join(mTimerThread,NULL);
     ALOGD("Timer thread killed");
+    return;
+}
 
+void AudioBroadcastStreamALSA::exitFromAdjustClockThread()
+{
+    ALOGD("exit From Adjust Clock Thread ");
+    if (!mAdjustClockThreadAlive)
+        return;
+
+    mAdjustClockMutex.lock();
+    mKillAdjustClockThread = true;
+    ALOGD(" mAdjustClockfd = %d", mAdjustClockfd);
+    if(mAdjustClockfd != -1) {
+        uint64_t writeValue = KILL_CAPTURE_THREAD;
+        ALOGD("Writing to mAdjustClockfd %d",mAdjustClockfd);
+        sys_broadcast::lib_write(mAdjustClockfd, &writeValue, sizeof(uint64_t));
+    }
+    mAdjustClockCv.signal();
+    mAdjustClockMutex.unlock();
+    pthread_join(mAdjustClockThread,NULL);
+    ALOGD("Adjust Session Clock Thread Killed");
     return;
 }
 
@@ -2456,7 +2664,7 @@ void AudioBroadcastStreamALSA::updateCaptureMetaData(char *buf)
            mReadMetaData.streamId, mReadMetaData.formatId,
            mReadMetaData.dataOffset, mReadMetaData.frameSize);
 
-    ALOGV("timestampMsw: %d timestampLsw: %d", mReadMetaData.timestampMsw,
+    ALOGD("frameSize %d timestampMsw: %ld timestampLsw: %ld", mReadMetaData.frameSize,mReadMetaData.timestampMsw,
             mReadMetaData.timestampLsw);
     return;
 }
@@ -2477,7 +2685,7 @@ void AudioBroadcastStreamALSA::updatePCMCaptureMetaData(char *buf)
            mReadMetaData.streamId, mReadMetaData.formatId,
            mReadMetaData.dataOffset, mReadMetaData.frameSize);
 
-    ALOGV("timestampMsw: %d timestampLsw: %d", mReadMetaData.timestampMsw,
+    ALOGD("frameSize %d timestampMsw: %ld timestampLsw: %ld", mReadMetaData.frameSize, mReadMetaData.timestampMsw,
             mReadMetaData.timestampLsw);
     return;
 }

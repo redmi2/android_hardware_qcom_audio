@@ -916,6 +916,18 @@ private:
     bool                mKillPlaybackThread;
     bool                mPlaybackThreadAlive;
     bool                mSkipWrite;
+    // Adjust Session Clock
+    pthread_t           mAdjustClockThread;
+    bool                mAdjustClockThreadAlive;
+    bool                mKillAdjustClockThread;
+    uint64_t            mStartTimeStamp;
+    uint64_t            mEndTimeStamp;
+    int                 mBufferCount;
+    int                 mAdjustClockfd;
+    int                 mResidueAdjustTime;
+    struct              pollfd mAdjustClockPfd;
+    Mutex               mAdjustClockMutex;
+    Condition           mAdjustClockCv;
 
     //Timer
     pthread_t           mTimerThread;
@@ -980,6 +992,12 @@ private:
     void                timerThreadEntry();
     static void *       timerThreadWrapper(void *me);
     void                 exitFromTimerThread();
+    // Adjust Session Clock
+    status_t            createAdjustSessionClockThread();
+    void                adjustClockThreadEntry();
+    static void *       adjustClockThreadWrapper(void *me);
+    void                exitFromAdjustClockThread();
+    void                allocateAdjustClockPollFd();
     // Avsync Specifics
     void                update_input_meta_data_list_pre_decode(uint32_t type);
     void                update_input_meta_data_list_post_decode(uint32_t type,
