@@ -623,6 +623,7 @@ status_t AudioHardwareALSA::doRouting(int device)
     ALOGV("device = 0x%x,mCurDevice 0x%x", device, mCurDevice);
     if (device == 0)
         device = mCurDevice;
+    device = getUnComprDeviceInCurrDevices(device);
     if(device & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
         mALSADevice->updateHDMIEDIDInfo();
     ALOGD("doRouting: device %d newMode %d mIsVoiceCallActive %d mIsFmActive %d",
@@ -1811,11 +1812,11 @@ void AudioHardwareALSA::updateDevicesOfOtherSessions(int device, int state)
                 device &= ~devices;
             }
         }
+        if(device & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
+            mHdmiRenderFormat = UNCOMPRESSED;
+        if(device & AudioSystem::DEVICE_OUT_SPDIF)
+            mSpdifRenderFormat = UNCOMPRESSED;
         for(it = mSessions.begin(); device && it != mSessions.end(); ++it) {
-            if(device & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
-                mHdmiRenderFormat = UNCOMPRESSED;
-            if(device & AudioSystem::DEVICE_OUT_SPDIF)
-                mSpdifRenderFormat = UNCOMPRESSED;
             key = String8(RESUME_DEVICES_KEY);
             AudioParameter param = AudioParameter(key);
             param.addInt(key, device);
