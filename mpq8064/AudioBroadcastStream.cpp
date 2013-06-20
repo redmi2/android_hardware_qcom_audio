@@ -1801,6 +1801,10 @@ ssize_t AudioBroadcastStreamALSA::readFromCapturePath(char *buffer)
     if(data != NULL)
         memcpy(buffer, (char *)data, capture_handle->period_size);
 
+    if ((unsigned long) capture_handle->sync_ptr->c.control.appl_ptr >=
+        capture_handle->sw_p->boundary - mFrames)
+        capture_handle->sync_ptr->c.control.appl_ptr -= capture_handle->sw_p->boundary;
+
     capture_handle->sync_ptr->c.control.appl_ptr += mFrames;
     capture_handle->sync_ptr->flags = 0;
 
