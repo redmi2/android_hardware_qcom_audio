@@ -36,6 +36,9 @@
 
 #include "AudioHardwareALSA.h"
 
+#include <audio_effects/effect_aec.h>
+#include <audio_effects/effect_ns.h>
+
 extern "C" {
 #ifdef QCOM_CSDCLIENT_ENABLED
 static int (*csd_start_record)(uint32_t, int);
@@ -82,6 +85,8 @@ AudioStreamInALSA::AudioStreamInALSA(AudioHardwareALSA *parent,
     mSurroundInputBufferIdx(0),
     mAmrwbInputBuffer(NULL)
 #endif
+    ,mEnableAEC(false)
+    ,mEnableNS(false)
 {
 #ifdef QCOM_SSR_ENABLED
     char c_multi_ch_dump[128] = {0};
@@ -757,6 +762,9 @@ status_t AudioStreamInALSA::standby()
     mParent->musbRecordingState &= ~USBRECBIT_REC;
     mParent->closeUsbRecordingIfNothingActive();
 #endif
+    mHandle->preProcEffects.enableAEC = false;
+    mHandle->preProcEffects.enableNS = false;
+
     mHandle->module->standby(mHandle);
 
     if (mHandle->format == AUDIO_FORMAT_AMR_WB &&
@@ -766,6 +774,18 @@ status_t AudioStreamInALSA::standby()
     }
 
     return NO_ERROR;
+}
+
+status_t AudioStreamInALSA::setParameters(const String8& keyValuePairs)
+{
+    AudioParameter param = AudioParameter(keyValuePairs);
+    String8 key_input = String8(AudioParameter::keyInputSource);
+    int source;
+    if (param.getInt(key_input, source) == NO_ERROR) {
+        ALOGD("setParameters(), input_source = %d", source);
+        mHandle->source = source;
+   }
+   return ALSAStreamOps::setParameters(keyValuePairs);
 }
 
 void AudioStreamInALSA::resetFramesLost()
@@ -1023,5 +1043,48 @@ status_t AudioStreamInALSA::readCoeffsFromFile()
     return NO_ERROR;
 }
 #endif
+
+status_t AudioStreamInALSA::addRemoveEffect(effect_handle_t effect, bool enable) {
+  effect_descriptor_t desc;
+  status_t err;
+
+  err = (*effect)->get_descriptor(effect, &desc);
+  if (err != OK)
+    return err;
+
+  bool effectAec = memcmp(&desc.type, FX_IID_AEC, sizeof(effect_uuid_t)) == 0;
+  bool effectNs = memcmp(&desc.type, FX_IID_NS, sizeof(effect_uuid_t)) == 0;
+  bool reRoute = false;
+
+  if (!effectAec && !effectNs) {
+      return INVALID_OPERATION;
+  }
+
+  /* any locking ? */
+  Mutex::Autolock _l(mParent->mLock);
+  if (effectAec) {
+      if (mHandle->source ==  AUDIO_SOURCE_VOICE_COMMUNICATION) {
+        reRoute = (enable != mHandle->preProcEffects.enableAEC);
+        mHandle->preProcEffects.enableAEC = enable;
+      }
+  } else if (effectNs) {
+      /* TBD */
+      reRoute = (enable != mHandle->preProcEffects.enableNS);
+      mHandle->preProcEffects.enableNS = enable;
+  }
+
+  if (reRoute /*&& any other condition */) {
+      mHandle->module->route(mHandle, mDevices,
+                             mParent->mode());
+  }
+
+  return OK;
+}
+
+void AudioStreamInALSA::setInput(int input)
+{
+    mHandle->source = input;
+    ALOGD("s_setInput() : input_source = %d", input);
+}
 
 }       // namespace android_audio_legacy

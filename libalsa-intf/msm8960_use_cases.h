@@ -330,6 +330,34 @@ static card_mapping_t card_mapping_list[] = {
 #define SND_USE_CASE_DEV_AANC_DMIC_ENDFIRE  "AANC DMIC Endfire"
 #define SND_USE_CASE_DEV_SPEAKER_PROTECTED	"Speaker Protected"
 
+//Use cases for effects
+#define SND_USE_CASE_DEV_DMIC_BS_FLUENCE_OFF SND_USE_CASE_DEV_DUAL_MIC_BROADSIDE
+#define SND_USE_CASE_DEV_DMIC_EF_FLUENCE_OFF SND_USE_CASE_DEV_DUAL_MIC_ENDFIRE
+#define SND_USE_CASE_DEV_VOICE_RECOG_DMIC_BS_FLUENCE_NS "VoiceRecog DualMic Fluence BS NS"
+#define SND_USE_CASE_DEV_VOICE_RECOG_DMIC_EF_FLUENCE_NS "VoiceRecog DualMic Fluence EF NS"
+#define SND_USE_CASE_DEV_VOICE_RECOG_NS "Voice Recognition NS"
+
+#define SND_USE_CASE_DEV_HANDSET_AEC "Handset Mic AEC"
+#define SND_USE_CASE_DEV_HANDSET_NS "Handset Mic NS"
+#define SND_USE_CASE_DEV_HANDSET_AEC_NS "Handset Mic AEC NS"
+
+#define SND_USE_CASE_DEV_VOICE_COMM_DMIC_BS_FLUENCE_AEC "VoiceComm DualMic Fluence BS AEC"
+#define SND_USE_CASE_DEV_VOICE_COMM_DMIC_EF_FLUENCE_AEC "VoiceComm DualMic Fluence EF AEC"
+
+#define SND_USE_CASE_DEV_VOICE_COMM_DMIC_BS_FLUENCE_NS "VoiceComm DualMic Fluence BS NS"
+#define SND_USE_CASE_DEV_VOICE_COMM_DMIC_EF_FLUENCE_NS "VoiceComm DualMic Fluence EF NS"
+
+#define SND_USE_CASE_DEV_VOICE_COMM_DMIC_BS_FLUENCE_AEC_NS "VoiceComm DualMic Fluence BS AEC NS"
+#define SND_USE_CASE_DEV_VOICE_COMM_DMIC_EF_FLUENCE_AEC_NS "VoiceComm DualMic Fluence EF AEC NS"
+
+#define SND_USE_CASE_DEV_HEADSET_AEC "Headset Mic AEC"
+#define SND_USE_CASE_DEV_HEADSET_NS "Headset Mic NS"
+#define SND_USE_CASE_DEV_HEADSET_AEC_NS "Headset Mic AEC NS"
+
+#define SND_USE_CASE_DEV_LINE_AEC "Line AEC"
+#define SND_USE_CASE_DEV_LINE_NS "Line NS"
+#define SND_USE_CASE_DEV_LINE_AEC_NS "Line AEC NS"
+
 #define SND_USE_CASE_MOD_SPKR_PROT_TX   "VI Capture Mod"
 #define SND_USE_CASE_MOD_PLAY_FM         "Play FM"
 #define SND_USE_CASE_MOD_CAPTURE_FM      "Capture FM"
