@@ -594,14 +594,14 @@ int AudioHardwareALSA::is_buffer_available(struct pcm *pcm, void *data, int coun
 
 int AudioHardwareALSA::hw_pcm_write(struct pcm *pcm, void *data, unsigned count)
 {
-    int ret = 0, n = 0;
+    int ret = 0;
     ret = buffer_data(pcm, data, count);
     if (ret)
         return ret;
     do {
         ret = pcm_write(pcm, data, count);
         if (ret < 0) {
-           ALOGE("error pcm_write returned %d", n);
+           ALOGE("error pcm_write returned %d", ret);
            break;
         }
     } while (is_buffer_available(pcm, data, pcm->period_size, pcm->format));
