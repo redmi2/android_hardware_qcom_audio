@@ -1016,7 +1016,6 @@ status_t AudioBroadcastStreamALSA::openPcmDevice(int devices)
         ALSAHandleList::iterator it = mParent->mDeviceList.end(); it--;
         mPcmRxHandle = &(*it);
         mBufferSize = mPcmRxHandle->periodSize;
-        pcm_prepare(mPcmRxHandle->handle);
 
         if(mPcmRxHandle) {
             if(mPcmRxHandle->type == PCM_FORMAT) {
@@ -1029,6 +1028,8 @@ status_t AudioBroadcastStreamALSA::openPcmDevice(int devices)
             setChannelMap(mPcmRxHandle);
         else if(mPcmRxHandle->channels > 2)
             setPCMChannelMap(mPcmRxHandle);
+
+        pcm_prepare(mPcmRxHandle->handle);
 
         mPcmWriteTempBuffer = (char *) malloc(mBufferSize);
         if(mPcmWriteTempBuffer == NULL) {
