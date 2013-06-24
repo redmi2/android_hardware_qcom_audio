@@ -1084,13 +1084,22 @@ void AudioBroadcastStreamALSA::setPCMChannelMap(alsa_handle_t *handle)
     memset(channelMap, 0, sizeof(channelMap));
     switch (handle->channels) {
     case 3:
+        channelMap[0] = PCM_CHANNEL_FL;
+        channelMap[1] = PCM_CHANNEL_FR;
+        channelMap[2] = PCM_CHANNEL_FC;
+        break;
     case 4:
         channelMap[0] = PCM_CHANNEL_FL;
         channelMap[1] = PCM_CHANNEL_FR;
         channelMap[2] = PCM_CHANNEL_LB;
         channelMap[3] = PCM_CHANNEL_RB;
+        break;
     case 5:
-        ALOGE("TODO: Investigate and add appropriate channel map appropriately");
+        channelMap[0] = PCM_CHANNEL_FL;
+        channelMap[1] = PCM_CHANNEL_FR;
+        channelMap[2] = PCM_CHANNEL_FC;
+        channelMap[3] = PCM_CHANNEL_LB;
+        channelMap[4] = PCM_CHANNEL_RB;
         break;
     case 6:
         channelMap[0] = PCM_CHANNEL_FL;
@@ -1101,7 +1110,13 @@ void AudioBroadcastStreamALSA::setPCMChannelMap(alsa_handle_t *handle)
         channelMap[5] = PCM_CHANNEL_RB;
         break;
     case 7:
-        ALOGE("TODO: Investigate and add appropriate channel map appropriately");
+        channelMap[0] = PCM_CHANNEL_FL;
+        channelMap[1] = PCM_CHANNEL_FR;
+        channelMap[2] = PCM_CHANNEL_FC;
+        channelMap[3] = PCM_CHANNEL_LFE;
+        channelMap[4] = PCM_CHANNEL_LB;
+        channelMap[5] = PCM_CHANNEL_RB;
+        channelMap[6] = PCM_CHANNEL_FLC;
         break;
     case 8:
         channelMap[0] = PCM_CHANNEL_FL;
@@ -1458,16 +1473,13 @@ void AudioBroadcastStreamALSA::allocateCapturePollFd()
         mCapturePfd[1].fd     = mCapturefd;
         mCapturePfd[1].events = POLLIN | POLLERR | POLLNVAL;
 
-        if (flags & PCM_MONO)
-            mFrames   = pcm->period_size/2;
-        else if (flags & PCM_QUAD)
-            mFrames   = pcm->period_size/8;
-        else if (flags & PCM_5POINT1)
-            mFrames   = pcm->period_size/12;
-        else if (flags & PCM_7POINT1)
-            mFrames   = pcm->period_size/16;
+    if ((pcm->flags & PCM_MONO)||(pcm->flags & PCM_TRIPLE)||
+        (pcm->flags & PCM_QUAD)||(pcm->flags & PCM_PENTA)||
+        (pcm->flags & PCM_5POINT1) ||(pcm->flags & PCM_7POINT)||
+        (pcm->flags & PCM_7POINT1))
+            mFrames   = pcm->period_size/(pcm->bytes_per_sample * pcm-> channels);
         else
-            mFrames   = pcm->period_size/4;
+            mFrames   = pcm->period_size/(2*pcm->bytes_per_sample);
     }
 }
 

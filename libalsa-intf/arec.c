@@ -150,18 +150,20 @@ static int set_params(struct pcm *pcm)
     sparams->tstamp_mode = SNDRV_PCM_TSTAMP_NONE;
     sparams->period_step = 1;
 
-    if (pcm->flags & PCM_MONO) {
-        sparams->avail_min = pcm->period_size/2;
-        sparams->xfer_align = pcm->period_size/2;
-    } else if (pcm->flags & PCM_QUAD) {
-        sparams->avail_min = pcm->period_size/8;
-        sparams->xfer_align = pcm->period_size/8;
-    } else if (pcm->flags & PCM_5POINT1) {
-        sparams->avail_min = pcm->period_size/12;
-        sparams->xfer_align = pcm->period_size/12;
+    if (pcm->format == SNDRV_PCM_FORMAT_S16_LE)
+        pcm->bytes_per_sample = 2;
+    else if (pcm->format == SNDRV_PCM_FORMAT_S24_LE)
+        pcm->bytes_per_sample = 4;
+
+    if ((pcm->flags & PCM_MONO)||(pcm->flags & PCM_TRIPLE)||
+        (pcm->flags & PCM_QUAD)||(pcm->flags & PCM_PENTA) ||
+        (pcm->flags & PCM_5POINT1)||(pcm->flags & PCM_7POINT)||
+        (pcm->flags & PCM_7POINT1)) {
+        sparams->avail_min = pcm->period_size/(pcm->bytes_per_sample * pcm-> channels);
+        sparams->xfer_align = pcm->period_size/(pcm->bytes_per_sample * pcm-> channels);
     } else {
-        sparams->avail_min = pcm->period_size/4;
-        sparams->xfer_align = pcm->period_size/4;
+        sparams->avail_min = pcm->period_size/(2*pcm->bytes_per_sample);
+        sparams->xfer_align = pcm->period_size/(2*pcm->bytes_per_sample);
     }
 
     sparams->start_threshold = 1;
@@ -200,10 +202,18 @@ int record_file(unsigned rate, unsigned channels, int fd, unsigned count,  unsig
 
     if (channels == 1)
         flags |= PCM_MONO;
+    else if (channels == 3)
+        flags |= PCM_TRIPLE;
     else if (channels == 4)
         flags |= PCM_QUAD;
+    else if (channels == 5)
+        flags |= PCM_PENTA;
     else if (channels == 6)
         flags |= PCM_5POINT1;
+    else if (channels == 7)
+        flags |= PCM_7POINT;
+    else if (channels == 8)
+        flags |= PCM_7POINT1;
     else
         flags |= PCM_STEREO;
 
@@ -309,14 +319,13 @@ int record_file(unsigned rate, unsigned channels, int fd, unsigned count,  unsig
         pfd[0].events = POLLIN;
 
         hdr.data_sz = 0;
-        if (pcm->flags & PCM_MONO) {
-                frames = bufsize / 2;
-        } else if (pcm->flags & PCM_QUAD) {
-                frames = bufsize / 8;
-        } else if (pcm->flags & PCM_5POINT1) {
-                frames = bufsize / 12;
-        } else{
-                frames = bufsize / 4;
+        if ((pcm->flags & PCM_MONO)||(pcm->flags & PCM_TRIPLE)||
+           (pcm->flags & PCM_QUAD)||(pcm->flags & PCM_PENTA)||
+           (pcm->flags & PCM_5POINT1) ||(pcm->flags & PCM_7POINT)||
+           (pcm->flags & PCM_7POINT1)) {
+                frames = bufsize / (pcm->bytes_per_sample * pcm-> channels);
+        } else {
+                frames = bufsize / (2*pcm->bytes_per_sample);
         }
         x.frames = frames;
         for(;;) {

@@ -334,6 +334,7 @@ status_t AudioUsbALSA::setHardwareParams(pcm *txHandle, uint32_t sampleRate, uin
 
     param_dump(params);
 
+    txHandle->bytes_per_sample = 2;
     txHandle->period_size = pcm_period_size(params);
     txHandle->buffer_size = pcm_buffer_size(params);
     txHandle->period_cnt = txHandle->buffer_size/txHandle->period_size;
