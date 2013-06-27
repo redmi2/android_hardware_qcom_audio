@@ -393,7 +393,7 @@ status_t AudioSessionOutALSA::setVolume(float left, float right)
     for(int i=0; i<mNumRxHandlesActive; i++) {
         if(mRxHandle[i] &&
            mRxHandle[i]->handle &&
-           mRxHandleRouteFormat[i] == ROUTE_UNCOMPRESSED) {
+           (mRxHandleRouteFormat[i] & ROUTE_UNCOMPRESSED)) {
             status = mALSADevice->setPlaybackVolume(mRxHandle[i], mStreamVol);
         }
     }
@@ -705,7 +705,7 @@ void AudioSessionOutALSA::updateDeviceSupportedFormats()
 {
     ALOGV("updateDeviceSupportedFormats");
     int index = getFormatIndex();
-    int formatIndex;
+    int formatIndex, hdmiChannelCount = 2;
 
     mSpdifOutputFormat = mParent->mSpdifOutputFormat;
     mHdmiOutputFormat  = mParent->mHdmiOutputFormat;
@@ -720,7 +720,7 @@ void AudioSessionOutALSA::updateDeviceSupportedFormats()
         compressed convert to ac3
         */
         if((mFormat == AUDIO_FORMAT_EAC3) &&
-           (mSpdifFormat == COMPRESSED)) {
+           (mSpdifFormat == COMPRESSED  || mSpdifFormat == AUTO_DEVICE_FORMAT)) {
             mSpdifFormat = COMPRESSED_CONVERT_EAC3_AC3;
             ALOGV("Fallback to convert as EAC3 pass through not supported on SPDIF");
         }
@@ -734,7 +734,7 @@ void AudioSessionOutALSA::updateDeviceSupportedFormats()
                (mSampleRate == 22050) ||
                (mSampleRate == 44100)) ||
               ((isMS11SupportedFormats(mFormat) && (mSampleRate <= 24000)))) {
-               ALOGV("Fallback to uncompressed as EAC3 pass through not supported on SPDIF");
+               ALOGV("Fallback to uncompressed as sampleRate [%d] not supported on SPDIF", mSampleRate);
                mSpdifFormat = UNCOMPRESSED;
            }
         } else {
@@ -763,6 +763,12 @@ void AudioSessionOutALSA::updateDeviceSupportedFormats()
         fixUpHdmiFormatBasedOnEDID();
         if(mStandByFormats & STANDBY_COMPR_HDMI)
             mHdmiFormat = UNCOMPRESSED;
+        if (mHdmiFormat == UNCOMPRESSED) {
+            hdmiChannelCount = mALSADevice->getHDMIMaxChannelForEDIDFormat(LPCM);
+            ALOGD("LPCM output on HDMI, channels [%d]", hdmiChannelCount);
+            if (hdmiChannelCount > 2)
+                mHdmiFormat = UNCOMPRESSED_MCH;
+        }
     }
     ALOGV("After fix up mSpdifFormat: %d, mHdmiFormat: %d",
            mSpdifFormat, mHdmiFormat);
@@ -778,11 +784,15 @@ void AudioSessionOutALSA::fixUpHdmiFormatBasedOnEDID()
     ALOGV("fixUpHdmiFormatBasedOnEDID");
     switch(mFormat) {
     case AUDIO_FORMAT_EAC3:
-        if(mHdmiFormat == COMPRESSED) {
-            if(mALSADevice->getFormatHDMIIndexEDIDInfo(DOLBY_DIGITAL_PLUS_1) < 0) {
-                ALOGD("Falling back to UNCOMPRESSED as PASS THROUGH is not supported");
-                mHdmiFormat = UNCOMPRESSED;
-                return;
+        if(mHdmiFormat == COMPRESSED ||
+           mHdmiFormat == AUTO_DEVICE_FORMAT) {
+            if (mALSADevice->getFormatHDMIIndexEDIDInfo(DOLBY_DIGITAL_PLUS_1) < 0) {
+                ALOGD("Fallback to convert as EAC3 pass through not supported on SPDIF");
+                mHdmiFormat == COMPRESSED_CONVERT_EAC3_AC3;
+                if(mALSADevice->getFormatHDMIIndexEDIDInfo(AC3) < 0) {
+                    ALOGD("Falling back to UNCOMPRESSED as PASS THROUGH is not supported");
+                    mHdmiFormat = UNCOMPRESSED;
+                }
             }
         } else if((mHdmiFormat == COMPRESSED_CONVERT_EAC3_AC3) ||
                   (mHdmiFormat == COMPRESSED_CONVERT_ANY_AC3)) {
@@ -802,7 +812,8 @@ void AudioSessionOutALSA::fixUpHdmiFormatBasedOnEDID()
     case AUDIO_FORMAT_AC3:
         if((mHdmiFormat == COMPRESSED) ||
            (mHdmiFormat == COMPRESSED_CONVERT_EAC3_AC3) ||
-           (mHdmiFormat == COMPRESSED_CONVERT_ANY_AC3)) {
+           (mHdmiFormat == COMPRESSED_CONVERT_ANY_AC3) ||
+           (mHdmiFormat == AUTO_DEVICE_FORMAT)) {
             if(mALSADevice->getFormatHDMIIndexEDIDInfo(AC3) < 0) {
                 ALOGD("Falling back to UNCOMPRESSED as PASS THROUGH is not supported");
                 mHdmiFormat = UNCOMPRESSED;
@@ -837,6 +848,7 @@ void AudioSessionOutALSA::fixUpHdmiFormatBasedOnEDID()
     case AUDIO_FORMAT_DTS:
     case AUDIO_FORMAT_DTS_LBR:
         if((mHdmiFormat == COMPRESSED) ||
+           (mHdmiFormat == AUTO_DEVICE_FORMAT) ||
            (mHdmiFormat == COMPRESSED_CONVERT_ANY_DTS)) {
             if(mALSADevice->getFormatHDMIIndexEDIDInfo(DTS) < 0) {
                 ALOGD("Falling back to UNCOMPRESSED as PASS THROUGH is not supported");
@@ -936,8 +948,6 @@ void AudioSessionOutALSA::reinitialize()
     mOpenDecodeRoute           = false;
     mOpenPassthroughRoute      = false;
     mOpenTranscodeRoute        = false;
-    mRouteDecodeFormat         = false;
-    mRoutePassthroughFormat    = false;
     mRouteTrancodeFormat       = false;
     mChannelStatusSet          = false;
     mWriteTempBuffer           = NULL;
@@ -949,7 +959,6 @@ void AudioSessionOutALSA::reinitialize()
         mRxHandle[i]               = NULL;
         mRxHandleRouteFormat[i]    = ROUTE_UNCOMPRESSED;
         mRxHandleDevices[i]        = AUDIO_DEVICE_NONE;
-        mRxHandleRouteFormatType[i]= UNCOMPRESSED;
     }
 }
 
@@ -987,9 +996,12 @@ void AudioSessionOutALSA::updateDecodeTypeAndRoutingStates()
     int decodeType;
 
     mOpenDecodeRoute = false;
+    mOpenDecodeMCHRoute = false;
     mOpenPassthroughRoute = false;
     mOpenTranscodeRoute = false;
+    mRouteTrancodeFormat = ROUTE_NONE;
     mDecodeFormatDevices = mDevices;
+    mDecodeMCHFormatDevices = AUDIO_DEVICE_NONE;
     mPassthroughFormatDevices = AUDIO_DEVICE_NONE;
     mTranscodeFormatDevices = AUDIO_DEVICE_NONE;
     mDecoderType = 0;
@@ -1009,29 +1021,29 @@ void AudioSessionOutALSA::updateDecodeTypeAndRoutingStates()
                 case ROUTE_UNCOMPRESSED:
                     ALOGVV("ROUTE_UNCOMPRESSED");
                     mOpenDecodeRoute = true;
-                    mRouteDecodeFormat = routeToDriver[idx][ROUTE_FORMAT_IDX];
                     break;
                 case ROUTE_COMPRESSED:
                     ALOGVV("ROUTE_COMPRESSED");
                     mOpenPassthroughRoute = true;
-                    mRoutePassthroughFormat = routeToDriver[idx][ROUTE_FORMAT_IDX];
                     mDecodeFormatDevices &= ~AudioSystem::DEVICE_OUT_SPDIF;
                     mPassthroughFormatDevices = AudioSystem::DEVICE_OUT_SPDIF;
                     break;
                 case ROUTE_DSP_TRANSCODED_COMPRESSED:
                     ALOGVV("ROUTE_DSP_TRANSCODED_COMPRESSED");
                     mOpenTranscodeRoute = true;
-                    mRouteTrancodeFormat = routeToDriver[idx][ROUTE_FORMAT_IDX];
+                    mRouteTrancodeFormat = ROUTE_DSP_TRANSCODED_COMPRESSED;
                     mTranscodeFormatDevices = AudioSystem::DEVICE_OUT_SPDIF;
                     break;
                 case ROUTE_SW_TRANSCODED_COMPRESSED:
                     ALOGVV("ROUTE_SW_TRANSCODED_COMPRESSED");
                     mOpenTranscodeRoute = true;
-                    mRouteTrancodeFormat = routeToDriver[idx][ROUTE_FORMAT_IDX];
+                    mRouteTrancodeFormat = ROUTE_SW_TRANSCODED_COMPRESSED;
                     mDecodeFormatDevices &= ~AudioSystem::DEVICE_OUT_SPDIF;
                     mTranscodeFormatDevices = AudioSystem::DEVICE_OUT_SPDIF;
                     break;
                 default:
+                    ALOGW("INVALID ROUTE for SPDIF, decoderType %d, routeFormat %d",
+                                    decodeType, routeToDriver[idx][ROUTE_FORMAT_IDX]);
                     break;
                 }
             }
@@ -1047,30 +1059,37 @@ void AudioSessionOutALSA::updateDecodeTypeAndRoutingStates()
                 switch(routeToDriver[idx][ROUTE_FORMAT_IDX]) {
                 case ROUTE_UNCOMPRESSED:
                     ALOGVV("ROUTE_UNCOMPRESSED");
+                    ALOGVV("HDMI attached as stereo device");
                     mOpenDecodeRoute = true;
-                    mRouteDecodeFormat = routeToDriver[idx][ROUTE_FORMAT_IDX];
+                    break;
+                case ROUTE_UNCOMPRESSED_MCH:
+                    ALOGVV("HDMI attached as multichannel device");
+                    mOpenDecodeMCHRoute = true;
+                    mDecodeFormatDevices &= ~AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+                    mDecodeMCHFormatDevices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
                     break;
                 case ROUTE_COMPRESSED:
                     ALOGVV("ROUTE_COMPRESSED");
                     mOpenPassthroughRoute = true;
-                    mRoutePassthroughFormat = routeToDriver[idx][ROUTE_FORMAT_IDX];
                     mDecodeFormatDevices &= ~AudioSystem::DEVICE_OUT_AUX_DIGITAL;
                     mPassthroughFormatDevices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
                     break;
                 case ROUTE_DSP_TRANSCODED_COMPRESSED:
                     ALOGVV("ROUTE_DSP_TRANSCODED_COMPRESSED");
                     mOpenTranscodeRoute = true;
-                    mRouteTrancodeFormat = routeToDriver[idx][ROUTE_FORMAT_IDX];
+                    mRouteTrancodeFormat = ROUTE_DSP_TRANSCODED_COMPRESSED;
                     mTranscodeFormatDevices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
                     break;
                 case ROUTE_SW_TRANSCODED_COMPRESSED:
                     ALOGVV("ROUTE_SW_TRANSCODED_COMPRESSED");
                     mOpenTranscodeRoute = true;
-                    mRouteTrancodeFormat = routeToDriver[idx][ROUTE_FORMAT_IDX];
+                    mRouteTrancodeFormat = ROUTE_SW_TRANSCODED_COMPRESSED;
                     mDecodeFormatDevices &= ~AudioSystem::DEVICE_OUT_AUX_DIGITAL;
                     mTranscodeFormatDevices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
                     break;
                 default:
+                    ALOGW("INVALID ROUTE for HDMI, decoderType %d, routeFormat %d",
+                                    decodeType, routeToDriver[idx][ROUTE_FORMAT_IDX]);
                     break;
                 }
             }
@@ -1080,14 +1099,14 @@ void AudioSessionOutALSA::updateDecodeTypeAndRoutingStates()
                     AudioSystem::DEVICE_OUT_SPDIF)) {
         mDecoderType |= usecaseDecodeFormat[NUM_STATES_FOR_EACH_DEVICE_FMT*formatIndex];
         mOpenDecodeRoute = true;
-        mRouteDecodeFormat = ROUTE_UNCOMPRESSED;
     }
 }
 
 void AudioSessionOutALSA::updateStandByDevices(int device, int enable) {
     if(enable) {
         if(device & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
-            if(mHdmiFormat == UNCOMPRESSED) {
+            if(mHdmiFormat == UNCOMPRESSED ||
+               mHdmiFormat == UNCOMPRESSED_MCH) {
                 mStandByFormats |= STANDBY_LPCM_HDMI;
                 mStandByDevices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
             } else if(mHdmiFormat != INVALID_FORMAT) {
@@ -1096,7 +1115,7 @@ void AudioSessionOutALSA::updateStandByDevices(int device, int enable) {
                     mHdmiFormat = UNCOMPRESSED;
                 else {
                     mStandByDevices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
-                    mSpdifFormat = INVALID_FORMAT;
+                    mHdmiFormat = INVALID_FORMAT;
                 }
             }
         }
@@ -1129,16 +1148,19 @@ void AudioSessionOutALSA::updateSessionDevices(int devices) {
     Mutex::Autolock autolock(mParent->mDeviceStateLock);
     if(devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
         if (mParent->mHdmiRenderFormat == UNCOMPRESSED) {
-            if(mHdmiFormat != UNCOMPRESSED) {
+            if(mHdmiFormat != UNCOMPRESSED &&
+               mHdmiFormat != UNCOMPRESSED_MCH) {
                 mParent->mHdmiRenderFormat = COMPRESSED;
                 updateDevicesInSessionList(AudioSystem::DEVICE_OUT_AUX_DIGITAL, STANDBY);
             }
         } else {
             /*Compressed session is in progress.
-            So also no other sessions would be running*/
-            mParent->mHdmiRenderFormat = mHdmiFormat == UNCOMPRESSED ? UNCOMPRESSED : COMPRESSED;
-            if(mHdmiFormat == UNCOMPRESSED) {
+            So no other sessions would be running*/
+            if (mHdmiFormat == UNCOMPRESSED || mHdmiFormat == UNCOMPRESSED_MCH) {
+                mParent->mHdmiRenderFormat = UNCOMPRESSED;
                 mALSADevice->setHdmiOutputProperties(ROUTE_UNCOMPRESSED);
+            } else {
+                mParent->mHdmiRenderFormat = COMPRESSED;
             }
             updateDevicesInSessionList(AudioSystem::DEVICE_OUT_AUX_DIGITAL, STANDBY);
         }
@@ -1163,48 +1185,34 @@ void AudioSessionOutALSA::updateRxHandleStates()
     ALOGD("updateRxHandleStates");
     int index = 0;
     if(mOpenDecodeRoute) {
-        mRxHandleRouteFormat[index] = mRouteDecodeFormat;
+        mRxHandleRouteFormat[index] = ROUTE_UNCOMPRESSED;
         mRxHandleDevices[index] = mDecodeFormatDevices;
-        mRxHandleRouteFormatType[index] = getDeviceFormat(mDecodeFormatDevices);
         ALOGD("mOpenDecodeRoute: index: %d routeformat: %d, devices: 0x%x: "
-               "routeformatType: %d", index, mRxHandleRouteFormat[index],
-               mRxHandleDevices[index], mRxHandleRouteFormatType[index]);
+               , index, mRxHandleRouteFormat[index], mRxHandleDevices[index]);
+        index++;
+    }
+    if(mOpenDecodeMCHRoute) {
+        mRxHandleRouteFormat[index] = ROUTE_UNCOMPRESSED_MCH;
+        mRxHandleDevices[index] = mDecodeMCHFormatDevices;
+        ALOGD("mOpenMCHDecodeRoute: index: %d routeformat: %d, devices: 0x%x: "
+               , index, mRxHandleRouteFormat[index], mRxHandleDevices[index]);
         index++;
     }
     if(mOpenPassthroughRoute) {
-        mRxHandleRouteFormat[index] = mRoutePassthroughFormat;
+        mRxHandleRouteFormat[index] = ROUTE_COMPRESSED;
         mRxHandleDevices[index] = mPassthroughFormatDevices;
-        mRxHandleRouteFormatType[index] = getDeviceFormat(mPassthroughFormatDevices);
         ALOGD("mOpenPassthroughRoute: index: %d routeformat: %d, devices: 0x%x: "
-               "routeformatType: %d", index, mRxHandleRouteFormat[index],
-               mRxHandleDevices[index], mRxHandleRouteFormatType[index]);
+               , index, mRxHandleRouteFormat[index], mRxHandleDevices[index]);
         index++;
     }
     if(mOpenTranscodeRoute) {
         mRxHandleRouteFormat[index] = mRouteTrancodeFormat;
         mRxHandleDevices[index] = mTranscodeFormatDevices;
-        mRxHandleRouteFormatType[index] = getDeviceFormat(mTranscodeFormatDevices);
         ALOGD("mOpenTranscodeRoute: index: %d routeformat: %d, devices: 0x%x: "
-               "routeformatType: %d", index, mRxHandleRouteFormat[index],
-               mRxHandleDevices[index], mRxHandleRouteFormatType[index]);
+               , index, mRxHandleRouteFormat[index], mRxHandleDevices[index]);
         index++;
     }
     mNumRxHandlesActive = index;
-}
-
-/*******************************************************************************
-Description: Get the device format based on the available devices
-*******************************************************************************/
-int AudioSessionOutALSA::getDeviceFormat(int devices)
-{
-    ALOGVV("getDeviceFormat");
-    if (devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
-        return mHdmiFormat;
-    else if (devices & AudioSystem::DEVICE_OUT_SPDIF)
-        return mSpdifFormat;
-    else
-        return UNCOMPRESSED;
-
 }
 
 /*******************************************************************************
@@ -1312,7 +1320,7 @@ status_t AudioSessionOutALSA::routingSetup()
                 updateDecodeTypeAndRoutingStates();
                 numOfActiveRxHandles--;
             } else {
-                if(mRxHandleRouteFormat[index] == ROUTE_UNCOMPRESSED)
+                if(mRxHandleRouteFormat[index] & ROUTE_UNCOMPRESSED)
                     status = mALSADevice->setPlaybackVolume(mRxHandle[index],
                                                             mStreamVol);
                 if(status)
@@ -1439,6 +1447,7 @@ status_t AudioSessionOutALSA::openPlaybackDevice(int index, int devices,
     char *use_case1;
 
     if(deviceFormat == ROUTE_UNCOMPRESSED ||
+       deviceFormat == ROUTE_UNCOMPRESSED_MCH ||
        deviceFormat == ROUTE_COMPRESSED ||
        deviceFormat == ROUTE_SW_TRANSCODED_COMPRESSED) {
         snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
@@ -1506,7 +1515,7 @@ status_t AudioSessionOutALSA::openPlaybackDevice(int index, int devices,
     } else if(deviceFormat == ROUTE_NONE) {
         ALOGD("No Routing format to taken an action");
     }
-    return NO_ERROR;
+    return status;
 }
 
 /*******************************************************************************
@@ -1542,6 +1551,9 @@ status_t AudioSessionOutALSA::openDevice(const char *useCase, bool bIsUseCase,
     alsa_handle.spdifFormat = devices & AudioSystem::DEVICE_OUT_SPDIF ?
                               deviceFormat : ROUTE_NONE;
 
+    if (deviceFormat == ROUTE_UNCOMPRESSED && (mDecoderType & SW_DECODE))
+        alsa_handle.channels = 2;
+
     strlcpy(alsa_handle.useCase, useCase, sizeof(alsa_handle.useCase));
     if (mALSADevice->setUseCase(&alsa_handle, bIsUseCase))
         return NO_INIT;
@@ -1550,7 +1562,7 @@ status_t AudioSessionOutALSA::openDevice(const char *useCase, bool bIsUseCase,
         ALOGE("Could not open the ALSA device for use case %s", alsa_handle.useCase);
         mALSADevice->close(&alsa_handle);
     } else {
-        if(deviceFormat == ROUTE_UNCOMPRESSED) {
+        if(deviceFormat & ROUTE_UNCOMPRESSED) {
            if(mUseMS11Decoder && mChannels > 2) {
                setMS11ChannelMap(&alsa_handle);
            } else if((mFormat == AUDIO_FORMAT_PCM_16_BIT ||
@@ -1597,9 +1609,13 @@ void AudioSessionOutALSA::getPeriodSizeCountAndFormat(int routeFormat, int *peri
     case AUDIO_FORMAT_AAC_ADIF:
     case AUDIO_FORMAT_AC3:
     case AUDIO_FORMAT_EAC3:
-        if(routeFormat == ROUTE_UNCOMPRESSED) {
+        if(routeFormat == ROUTE_UNCOMPRESSED_MCH) {
             frameSize = PCM_16_BITS_PER_SAMPLE * mChannels;
             *periodSize = nextMultiple(AC3_PERIOD_SIZE * mChannels + MIN_SIZE_FOR_METADATA, frameSize * 32);
+            *format = AUDIO_FORMAT_PCM_16_BIT;
+        } else if(routeFormat == ROUTE_UNCOMPRESSED) {
+            frameSize = PCM_16_BITS_PER_SAMPLE * 2;
+            *periodSize = nextMultiple(AC3_PERIOD_SIZE * 2 + MIN_SIZE_FOR_METADATA, frameSize * 32);
             *format = AUDIO_FORMAT_PCM_16_BIT;
         } else {
             *periodSize = PERIOD_SIZE_COMPR;
@@ -1912,7 +1928,7 @@ void AudioSessionOutALSA::copyBitstreamInternalBuffer(char *buffer, size_t bytes
     // copy bitstream to internal buffer
     mBitstreamSM->copyBitstreamToInternalBuffer((char *)buffer, bytes);
 #ifdef DEBUG
-    dumpInputOutput(INPUT, buffer, bytes);
+    dumpInputOutput(INPUT, buffer, bytes, 0);
 #endif
 }
 
@@ -2004,28 +2020,35 @@ bool AudioSessionOutALSA::swDecode(char *buffer, size_t bytes)
         ALOGD("Change in sample rate. New sample rate: %d", outSampleRate);
         mSampleRate = outSampleRate;
         mChannels = outChannels;
-        int index = getIndexHandleBasedOnHandleFormat(ROUTE_UNCOMPRESSED);
-        if(mRxHandle[index]) {
-            pTempRxHandle = mRxHandle[index];
-            mRxHandle[index] = NULL;
-            status_t status = closeDevice(pTempRxHandle);
-            if(status != NO_ERROR)
-                ALOGE("change in sample rate - close pcm device fail");
-            status = openPlaybackDevice(index, mRxHandleDevices[index],
+        for (int index = 0; index < mNumRxHandlesActive; index++) {
+            if(mRxHandle[index] && (mRxHandleRouteFormat[index] & ROUTE_UNCOMPRESSED)) {
+                pTempRxHandle = mRxHandle[index];
+                mRxHandle[index] = NULL;
+                status_t status = closeDevice(pTempRxHandle);
+                if(status != NO_ERROR)
+                    ALOGE("change in sample rate - close pcm device fail");
+                status = openPlaybackDevice(index, mRxHandleDevices[index],
                                        mRxHandleRouteFormat[index]);
-            if(status != NO_ERROR) {
-                ALOGE("change in sample rate - open pcm device fail");
-            } else if(mRxHandleRouteFormat[index] == ROUTE_UNCOMPRESSED) {
-                status = mALSADevice->setPlaybackVolume(mRxHandle[index],
+                if(status != NO_ERROR) {
+                    ALOGE("change in sample rate - open pcm device fail");
+                } else {
+                    status = mALSADevice->setPlaybackVolume(mRxHandle[index],
                                                         mStreamVol);
-                if(status)
-                    ALOGE("setPlaybackVolume for playback failed");
+                    if(status)
+                        ALOGE("setPlaybackVolume for playback failed");
+                }
             }
         }
         mChannelStatusSet = false;
     }
     // copy the output of decoder to HAL internal buffers
     if(mDecoderType & SW_DECODE) {
+        bufPtr=mBitstreamSM->getOutputBufferWritePtr(PCM_2CH_OUT);
+        copyOutputBytesSize = mMS11Decoder->copyOutputFromMS11Buf(PCM_2CH_OUT,
+                                                                 bufPtr);
+        mBitstreamSM->setOutputBufferWritePtr(PCM_2CH_OUT,copyOutputBytesSize);
+    }
+    if(mDecoderType & SW_DECODE_MCH) {
         bufPtr=mBitstreamSM->getOutputBufferWritePtr(PCM_MCH_OUT);
         copyOutputBytesSize = mMS11Decoder->copyOutputFromMS11Buf(PCM_MCH_OUT,
                                                                  bufPtr);
@@ -2071,10 +2094,10 @@ bool AudioSessionOutALSA::dspDecode(char *buffer, size_t bytes)
     // copy the output of decoder to HAL internal buffers
     if(mDecoderType & DSP_DECODE) {
         ALOGVV("DSP_DECODE");
-        bufPtr = mBitstreamSM->getOutputBufferWritePtr(PCM_MCH_OUT);
+        bufPtr = mBitstreamSM->getOutputBufferWritePtr(PCM_2CH_OUT);
         copyOutputBytesSize = bytesConsumedInDecode;
         memcpy(bufPtr, mBitstreamSM->getInputBufferPtr(), copyOutputBytesSize);
-        mBitstreamSM->setOutputBufferWritePtr(PCM_MCH_OUT,
+        mBitstreamSM->setOutputBufferWritePtr(PCM_2CH_OUT,
                                               copyOutputBytesSize);
     }
     if(mDecoderType & DSP_PASSTHROUGH) {
@@ -2135,6 +2158,10 @@ uint32_t AudioSessionOutALSA::render(bool continueDecode/* used for time stamp m
         switch(mRxHandleRouteFormat[index]) {
         case ROUTE_UNCOMPRESSED:
             ALOGVV("ROUTE_UNCOMPRESSED");
+            renderType = PCM_2CH_OUT;
+            break;
+        case ROUTE_UNCOMPRESSED_MCH:
+            ALOGVV("ROUTE_UNCOMPRESSED_MCH");
             renderType = PCM_MCH_OUT;
             break;
         case ROUTE_COMPRESSED:
@@ -2182,14 +2209,15 @@ uint32_t AudioSessionOutALSA::render(bool continueDecode/* used for time stamp m
                 ALOGE("pcm_write returned n < 0");
                 return static_cast<ssize_t>(n);
             } else {
-                if(renderType == ROUTE_UNCOMPRESSED) {
+                if(renderType == ROUTE_UNCOMPRESSED ||
+                   (renderType == ROUTE_UNCOMPRESSED_MCH && !mOpenDecodeRoute)) {
                     mFrameCount++;
+                }
 #ifdef DEBUG
                     dumpInputOutput(OUTPUT,
-                                    mBitstreamSM->getOutputBufferPtr(PCM_MCH_OUT),
-                                    mOutputMetadata.bufferLength);
+                                    mBitstreamSM->getOutputBufferPtr(renderType),
+                                    mOutputMetadata.bufferLength, index);
 #endif
-                }
                 renderedPcmBytes += mOutputMetadata.bufferLength;
                 mBitstreamSM->copyResidueOutputToStart(renderType,
                         mOutputMetadata.bufferLength);
@@ -2212,6 +2240,7 @@ void AudioSessionOutALSA::eosHandling()
     for(int index=0; index < mNumRxHandlesActive; index++) {
         switch(mRxHandleRouteFormat[index]) {
             case ROUTE_UNCOMPRESSED:
+            case ROUTE_UNCOMPRESSED_MCH:
             case ROUTE_COMPRESSED:
             case ROUTE_SW_TRANSCODED_COMPRESSED:
                 pfd = mRxHandle[index]->handle->fd;
@@ -2303,6 +2332,9 @@ status_t AudioSessionOutALSA::doRouting(int devices)
     if(!mOpenDecodeRoute)
         handleCloseForDeviceSwitch(ROUTE_UNCOMPRESSED);
 
+    if(!mOpenDecodeMCHRoute)
+        handleCloseForDeviceSwitch(ROUTE_UNCOMPRESSED_MCH);
+
     if(!mOpenPassthroughRoute)
         handleCloseForDeviceSwitch(ROUTE_COMPRESSED);
 
@@ -2312,10 +2344,13 @@ status_t AudioSessionOutALSA::doRouting(int devices)
 
     if(mOpenDecodeRoute)
         handleSwitchAndOpenForDeviceSwitch(mDecodeFormatDevices,
-                                        mRouteDecodeFormat);
+                                        ROUTE_UNCOMPRESSED);
+    if(mOpenDecodeMCHRoute)
+        handleSwitchAndOpenForDeviceSwitch(mDecodeMCHFormatDevices,
+                                        ROUTE_UNCOMPRESSED_MCH);
     if(mOpenPassthroughRoute)
         handleSwitchAndOpenForDeviceSwitch(mPassthroughFormatDevices,
-                                        mRoutePassthroughFormat);
+                                        ROUTE_COMPRESSED);
     if(mOpenTranscodeRoute)
         handleSwitchAndOpenForDeviceSwitch(mTranscodeFormatDevices,
                                         mRouteTrancodeFormat);
@@ -2341,7 +2376,6 @@ void AudioSessionOutALSA::adjustRxHandleAndStates()
             mRxHandle[index-1] = mRxHandle[index];
             mRxHandleRouteFormat[index-1] = mRxHandleRouteFormat[index];
             mRxHandleDevices[index-1] = mRxHandleDevices[index];
-            mRxHandleRouteFormatType[index-1] = mRxHandleRouteFormatType[index];
 
             resetRxHandleState(index);
         }
@@ -2358,7 +2392,6 @@ void AudioSessionOutALSA::resetRxHandleState(int index)
     mRxHandle[index]                = NULL;
     mRxHandleRouteFormat[index]     = ROUTE_UNCOMPRESSED;
     mRxHandleDevices[index]         = AUDIO_DEVICE_NONE;
-    mRxHandleRouteFormatType[index] = UNCOMPRESSED;
     return;
 }
 
@@ -2388,13 +2421,12 @@ void AudioSessionOutALSA::handleSwitchAndOpenForDeviceSwitch(int devices, int fo
             updateSessionDevices(devices);
         mRxHandleDevices[index] = devices;
         mRxHandleRouteFormat[index] = format;
-        mRxHandleRouteFormatType[index] = getDeviceFormat(devices);
         if(openPlaybackDevice(index, mRxHandleDevices[index],
                            mRxHandleRouteFormat[index])) {
               ALOGE("openPlaybackDevice failed");
         } else {
             mNumRxHandlesActive++;
-            if(mRxHandleRouteFormat[index] == ROUTE_UNCOMPRESSED) {
+            if(mRxHandleRouteFormat[index] & ROUTE_UNCOMPRESSED) {
                 if(mALSADevice->setPlaybackVolume(mRxHandle[index],
                                                         mStreamVol))
                     ALOGE("setPlaybackVolume for playback failed");
@@ -2454,56 +2486,43 @@ Description: dumping the data based on the state of the playback
 *******************************************************************************/
 void AudioSessionOutALSA::updateDumpWithPlaybackControls(int controlType)
 {
+    char debugString[17] = {0};
+    char outFile[30] = {0};
+
     switch(controlType) {
     case PAUSE:
-        char debugString[] = "Playback Paused";
-        mFpDumpPCMOutput = fopen("/data/pcm_output.raw","a");
-        if(mFpDumpPCMOutput != NULL) {
-            fwrite(debugString, 1, sizeof(debugString), mFpDumpPCMOutput);
-            fclose(mFpDumpPCMOutput);
-        }
-        mFpDumpInput = fopen("/data/input.raw","a");
-        if(mFpDumpInput != NULL) {
-            fwrite(debugString, 1, sizeof(debugString), mFpDumpInput);
-            fclose(mFpDumpInput);
-        }
+        strlcpy(debugString, sizeof(debugString), "dumping   paused");
         break;
     case RESUME:
-        char debugString[] = "Playback Resumd";
-        mFpDumpPCMOutput = fopen("/data/pcm_output.raw","a");
-        if(mFpDumpPCMOutput != NULL) {
-            fwrite(debugString, 1, sizeof(debugString), mFpDumpPCMOutput);
-            fclose(mFpDumpPCMOutput);
-        }
-        mFpDumpInput = fopen("/data/input.raw","a");
-        if(mFpDumpInput != NULL) {
-            fwrite(debugString, 1, sizeof(debugString), mFpDumpInput);
-            fclose(mFpDumpInput);
-        }
+        strlcpy(debugString, sizeof(debugString), "dumping  resumed");
         break;
     case SEEK:
-        char debugString[] = "Playback Flushd";
-        mFpDumpPCMOutput = fopen("/data/pcm_output.raw","a");
+        strlcpy(debugString, sizeof(debugString), "dumping  flushed");
+        break;
+    case PLAY:
+        return;
+    }
+    mFpDumpInput = fopen("/data/input.raw","a");
+    if(mFpDumpInput != NULL) {
+        fwrite(debugString, 1, sizeof(debugString), mFpDumpInput);
+        fclose(mFpDumpInput);
+    }
+    for (int i = 0; i < mNumRxHandlesActive; i++) {
+        snprintf(outFile, sizeof(outFile), "/data/output%d.raw", i);
+        mFpDumpPCMOutput = fopen(outFile, "a");
         if(mFpDumpPCMOutput != NULL) {
             fwrite(debugString, 1, sizeof(debugString), mFpDumpPCMOutput);
             fclose(mFpDumpPCMOutput);
         }
-        mFpDumpInput = fopen("/data/input.raw","a");
-        if(mFpDumpInput != NULL) {
-            fwrite(debugString, 1, sizeof(debugString), mFpDumpInput);
-            fclose(mFpDumpInput);
-        }
-        break;
-    case PLAY:
-        break;
     }
 }
 
 /*****************************************************************************
 Description: dump input and output
 *****************************************************************************/
-void AudioSessionOutALSA::dumpInputOutput(int type, char *buffer, size_t bytes)
+void AudioSessionOutALSA::dumpInputOutput(int type, char *buffer, size_t bytes, unsigned int index)
 {
+    char outFile[30] = {0};
     if(type == INPUT) {
         mFpDumpInput = fopen("/data/input.raw","a");
         if(mFpDumpInput != NULL) {
@@ -2511,7 +2530,8 @@ void AudioSessionOutALSA::dumpInputOutput(int type, char *buffer, size_t bytes)
             fclose(mFpDumpInput);
         }
     } else if(type == OUTPUT) {
-        mFpDumpPCMOutput = fopen("/data/pcm_output.raw","a");
+        snprintf(outFile, sizeof(outFile), "/data/output%u.raw", index);
+        mFpDumpPCMOutput = fopen(outFile, "a");
         if(mFpDumpPCMOutput != NULL) {
             fwrite(buffer, 1, bytes, mFpDumpPCMOutput);
             fclose(mFpDumpPCMOutput);

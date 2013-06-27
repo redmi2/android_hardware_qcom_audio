@@ -143,13 +143,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
 
     if (handle->activeDevice & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
         int channel_count = 0;
-        for (int i = 0; i < mEDIDInfo.nAudioBlocks && i < MAX_EDID_BLOCKS; i++) {
-            if (mEDIDInfo.AudioBlocksArray[i].nFormatId == LPCM &&
-                mEDIDInfo.AudioBlocksArray[i].nChannels > channel_count &&
-                mEDIDInfo.AudioBlocksArray[i].nChannels <= MAX_HDMI_CHANNEL_CNT) {
-                channel_count = mEDIDInfo.AudioBlocksArray[i].nChannels;
-            }
-        }
+        channel_count = getHDMIMaxChannelForEDIDFormat(LPCM);
         hdmiChannels = channel_count;
         pcm_set_channel_map(NULL, mMixer, MAX_HDMI_CHANNEL_CNT, mEDIDInfo.channelMap);
         setChannelAlloc(mEDIDInfo.channelAllocation);
@@ -1226,7 +1220,7 @@ void ALSADevice::enableDevice(alsa_handle_t *handle, bool bIsUseCaseSet)
         int deviceToEnable = devices & (-devices);
         getDevices(deviceToEnable, handle->mode, &rxDevice, &txDevice);
         //PCM_FORMAT needs to removed when the type is initialized ROUTE_UNCOMPRESSED for Stream out
-        setPlaybackFormat(deviceToEnable, handle->type != ROUTE_UNCOMPRESSED && handle->type != PCM_FORMAT);
+        setPlaybackFormat(deviceToEnable, (handle->type & ROUTE_COMPRESSED) && handle->type != PCM_FORMAT);
         if(rxDevice != NULL) {
             usecase_type = getUseCaseType(handle->useCase);
             if (usecase_type & USECASE_TYPE_RX) {
@@ -1818,7 +1812,7 @@ status_t ALSADevice::setCaptureFormat(const char *value)
     err = setMixerControl("MI2S TX Format",value);
 
     if(err) {
-        ALOGE("setPlaybackFormat error = %d",err);
+        ALOGE("setCaptureFormat error = %d",err);
     }
 
     return err;
@@ -2575,6 +2569,20 @@ int ALSADevice::getFormatHDMIIndexEDIDInfo(EDID_AUDIO_FORMAT_ID formatId)
     return -1;
 }
 
+int ALSADevice::getHDMIMaxChannelForEDIDFormat(EDID_AUDIO_FORMAT_ID formatId)
+{
+    int hdmiChannels = 2;
+    for (int i = 0; i < mEDIDInfo.nAudioBlocks && i < MAX_EDID_BLOCKS; i++) {
+        if (mEDIDInfo.AudioBlocksArray[i].nFormatId == formatId &&
+            mEDIDInfo.AudioBlocksArray[i].nChannels > hdmiChannels &&
+            mEDIDInfo.AudioBlocksArray[i].nChannels <= MAX_HDMI_CHANNEL_CNT) {
+            hdmiChannels = mEDIDInfo.AudioBlocksArray[i].nChannels;
+            ALOGV("hdmiChannels form edid: %d", hdmiChannels);
+        }
+    }
+    return hdmiChannels;
+}
+
 status_t ALSADevice::openPlayback(alsa_handle_t *handle, bool isMmapMode)
 {
     char *devName = NULL;
@@ -2695,7 +2703,8 @@ status_t ALSADevice::setPlaybackHardwareParams(alsa_handle_t *handle)
     param_init(params);
 
     reqBuffSize = handle->bufferSize;
-    ALOGD("Handle type %d, format=%d", (int)handle->type, handle->format);
+    ALOGD("Handle type %d, format=%d, devices %x",
+                    (int)handle->type, handle->format, handle->activeDevice);
     if (ioctl(handle->handle->fd, SNDRV_COMPRESS_GET_CAPS, &compr_cap)) {
         ALOGE("SNDRV_COMPRESS_GET_CAPS, failed Error no %d \n", errno);
         err = -errno;
@@ -2770,15 +2779,15 @@ status_t ALSADevice::setPlaybackHardwareParams(alsa_handle_t *handle)
          break;
     case AUDIO_FORMAT_DTS:
          ALOGV("DTS CODEC");
-         compr_params.codec.id = handle->type == ROUTE_UNCOMPRESSED ?
+         compr_params.codec.id = (handle->type & ROUTE_UNCOMPRESSED) ?
                                  compr_cap.codecs[5] : compr_cap.codecs[7];
-         setDtsModelId = handle->type == ROUTE_UNCOMPRESSED ? true : false;
+         setDtsModelId = (handle->type & ROUTE_UNCOMPRESSED) ? true : false;
          break;
     case AUDIO_FORMAT_DTS_LBR:
              ALOGV("DTS LBR CODEC");
-         compr_params.codec.id = handle->type == ROUTE_UNCOMPRESSED ?
+         compr_params.codec.id = (handle->type & ROUTE_UNCOMPRESSED) ?
                                  compr_cap.codecs[6] : compr_cap.codecs[13];
-         setDtsModelId = handle->type == ROUTE_UNCOMPRESSED ? true : false;
+         setDtsModelId = (handle->type & ROUTE_UNCOMPRESSED) ? true : false;
          break;
     case AUDIO_FORMAT_MP2:
          ALOGV("MP2 CODEC");
@@ -2897,17 +2906,10 @@ void ALSADevice::setHdmiOutputProperties(int type)
     char channelMap[MAX_HDMI_CHANNEL_CNT] = {PCM_CHANNEL_FL, PCM_CHANNEL_FR,
                                              0, 0, 0, 0, 0 , 0};
     int channelAllocation = 0;
-    if(type == ROUTE_UNCOMPRESSED) {
-        for (int i = 0; i < mEDIDInfo.nAudioBlocks && i < MAX_EDID_BLOCKS; i++) {
-            if (mEDIDInfo.AudioBlocksArray[i].nFormatId == LPCM &&
-                mEDIDInfo.AudioBlocksArray[i].nChannels > hdmiChannels &&
-                mEDIDInfo.AudioBlocksArray[i].nChannels <= MAX_HDMI_CHANNEL_CNT) {
-                hdmiChannels = mEDIDInfo.AudioBlocksArray[i].nChannels;
-                ALOGV("hdmiChannels form edid: %d", hdmiChannels);
-                memcpy(channelMap, mEDIDInfo.channelMap, MAX_HDMI_CHANNEL_CNT);
-                channelAllocation = mEDIDInfo.channelAllocation;
-            }
-        }
+    if(type & ROUTE_UNCOMPRESSED) {
+        hdmiChannels = getHDMIMaxChannelForEDIDFormat(LPCM);
+        memcpy(channelMap, mEDIDInfo.channelMap, MAX_HDMI_CHANNEL_CNT);
+        channelAllocation = mEDIDInfo.channelAllocation;
     }
     setHDMIChannelCount(hdmiChannels);
     pcm_set_channel_map(NULL, mMixer, MAX_HDMI_CHANNEL_CNT,
