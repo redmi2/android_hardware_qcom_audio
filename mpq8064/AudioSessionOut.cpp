@@ -236,14 +236,37 @@ status_t AudioSessionOutALSA::start()
     Mutex::Autolock autoLock(mLock);
     int ret = 0;
     status_t status = NO_ERROR;
+    struct snd_compr_tstamp tstamp;
+    uint64_t min_resume_delay = ULLONG_MAX, delay[NUM_DEVICES_SUPPORT_COMPR_DATA] = {0};
     ALOGD("start: mSessionState %d", mSessionState);
     if(mSessionState & PAUSE) {
         if (mRouteAudioToA2dp)
             status = a2dpRenderingControl(A2DP_RENDER_START);
-        for(int i=0; i<mNumRxHandlesActive; i++) {
-            if(mRxHandle[i] &&
-                    mRxHandle[i]->handle &&
+
+       //Sync the active sessions
+        if(mNumRxHandlesActive > 1) {
+            for(int i=0; i< mNumRxHandlesActive; i++) {
+                if(mRxHandle[i] && mRxHandle[i]->handle &&
+                        mRxHandleRouteFormat[i] != ROUTE_DSP_TRANSCODED_COMPRESSED) {
+                    if(ioctl(mRxHandle[i]->handle->fd, SNDRV_COMPRESS_TSTAMP, &tstamp)) {
+                        ALOGE("Failed SNDRV_COMPRESS_TSTAMP\n");
+                    } else {
+                        delay[i] = tstamp.timestamp;
+                        if(min_resume_delay > tstamp.timestamp)
+                            min_resume_delay = tstamp.timestamp;
+                        ALOGVV("start: Timestamp returned = %lld\n", tstamp1.timestamp/1000);
+                    }
+                }
+            }
+            for(int i=0; i<mNumRxHandlesActive; i++)
+                delay[i] -= min_resume_delay;
+        }
+        for(int i = 0; i < mNumRxHandlesActive; i++) {
+            if(mRxHandle[i] && mRxHandle[i]->handle &&
                     mRxHandleRouteFormat[i] != ROUTE_DSP_TRANSCODED_COMPRESSED) {
+                ALOGVV("Apply a delay of %lld ms", delay[i]/1000);
+                if (ioctl(mRxHandle[i]->handle->fd, SNDRV_COMPRESS_SET_START_DELAY, &delay[i]))
+                    ALOGE("Setting delay failed for use case %s", mRxHandle[i]->useCase);
                 if ((ret = ioctl(mRxHandle[i]->handle->fd, SNDRV_PCM_IOCTL_PAUSE,0)) < 0) {
                     ALOGE("Resume failed for use case %s ret = %d", mRxHandle[i]->useCase, ret);
                 }
