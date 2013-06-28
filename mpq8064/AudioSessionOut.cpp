@@ -124,16 +124,16 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     -------------------------------------------------------------------------*/
     fixUpDevicesForA2DPPlayback();
     /* ------------------------------------------------------------------------
-    Adjust sample rate for MS11 supported formats - AAC, AC3 and EAC3
-    cas
-    -------------------------------------------------------------------------*/
-    fixupSampleRateChannelModeMS11Formats();
-    /* ------------------------------------------------------------------------
     Update output formats chosen for playback
     required formats from user might not be supported. So, look into the table
     based on the device and update the format states that are supported locally
     -------------------------------------------------------------------------*/
     updateDeviceSupportedFormats();
+    /* ------------------------------------------------------------------------
+    Adjust sample rate for MS11 supported formats - AAC, AC3 and EAC3
+    cas
+    -------------------------------------------------------------------------*/
+    fixupSampleRateChannelModeMS11Formats();
     /* ------------------------------------------------------------------------
     Update use decoder type and routing flags and corresponding states
     decoderType will cache the decode types such as decode/passthrough/transcode
@@ -607,12 +607,13 @@ Description: check for MS11 supported formats
 bool AudioSessionOutALSA::isMS11SupportedFormats(int format)
 {
     ALOGVV("isMS11SupportedFormats");
-    if(((format == AudioSystem::AAC) ||
-        (format == AudioSystem::HE_AAC_V1) ||
-        (format == AudioSystem::HE_AAC_V2) ||
-        (format == AudioSystem::AC3) ||
-        (format == AudioSystem::AC3_PLUS) ||
-        (format == AudioSystem::EAC3))) {
+    int mainFormat = format & AUDIO_FORMAT_MAIN_MASK;
+    if(((mainFormat == AudioSystem::AAC) ||
+        (mainFormat == AudioSystem::HE_AAC_V1) ||
+        (mainFormat == AudioSystem::HE_AAC_V2) ||
+        (mainFormat == AudioSystem::AC3) ||
+        (mainFormat == AudioSystem::AC3_PLUS) ||
+        (mainFormat == AudioSystem::EAC3))) {
         return true;
     } else {
         return false;
@@ -625,11 +626,14 @@ Description: check if ac3 can played as pass through without MS11 decoder
 bool AudioSessionOutALSA::canAc3PassThroughWithoutMS11(int format)
 {
     ALOGVV("canAc3PassThroughWithoutMS11");
-    if(format == AudioSystem::AC3) {
+    int mainFormat = format & AUDIO_FORMAT_MAIN_MASK;
+    if(mainFormat == AudioSystem::AC3) {
         if(((mHdmiFormat == COMPRESSED) ||
+            (mHdmiFormat == AUTO_DEVICE_FORMAT) ||
             (mHdmiFormat == COMPRESSED_CONVERT_EAC3_AC3) ||
             (mHdmiFormat == COMPRESSED_CONVERT_ANY_AC3)) &&
             ((mSpdifFormat == COMPRESSED) ||
+             (mSpdifFormat == AUTO_DEVICE_FORMAT) ||
              (mSpdifFormat == COMPRESSED_CONVERT_EAC3_AC3) ||
              (mSpdifFormat == COMPRESSED_CONVERT_ANY_AC3))) {
             if(mALSADevice->getFormatHDMIIndexEDIDInfo(AC3) >= 0) {
@@ -706,7 +710,9 @@ void AudioSessionOutALSA::updateDeviceSupportedFormats()
     ALOGV("updateDeviceSupportedFormats");
     int index = getFormatIndex();
     int formatIndex, hdmiChannelCount = 2;
+    int mainFormat;
 
+    mainFormat = mFormat & AUDIO_FORMAT_MAIN_MASK;
     mSpdifOutputFormat = mParent->mSpdifOutputFormat;
     mHdmiOutputFormat  = mParent->mHdmiOutputFormat;
     ALOGV("mSpdifOutputFormat: %d, mHdmiOutputFormat: %d",
@@ -734,8 +740,14 @@ void AudioSessionOutALSA::updateDeviceSupportedFormats()
                (mSampleRate == 22050) ||
                (mSampleRate == 44100)) ||
               ((isMS11SupportedFormats(mFormat) && (mSampleRate <= 24000)))) {
-               ALOGV("Fallback to uncompressed as sampleRate [%d] not supported on SPDIF", mSampleRate);
-               mSpdifFormat = UNCOMPRESSED;
+               if ((mainFormat == AUDIO_FORMAT_AC3 || mainFormat == AUDIO_FORMAT_EAC3)
+                   && mSampleRate == 44100) {
+                   ALOGD("44.1KHz ac3/eac3: will be transcoded out to ac3 48K");
+               } else {
+                   ALOGV("Fallback to uncompressed as sampleRate [%d] not supported on SPDIF",
+                                                                                  mSampleRate);
+                   mSpdifFormat = UNCOMPRESSED;
+               }
            }
         } else {
            mSpdifFormat = UNCOMPRESSED;
@@ -754,7 +766,7 @@ void AudioSessionOutALSA::updateDeviceSupportedFormats()
         if(usecaseDecodeHdmiSpdif[NUM_STATES_FOR_EACH_DEVICE_FMT*index+ROUTE_FORMAT_IDX]
                                  [mHdmiFormat] == FORMAT_COMPR) {
             if((isMS11SupportedFormats(mFormat) && (mSampleRate <= 24000))) {
-                ALOGD("fallback to uncompressed as sample rate is less than 32kHz");
+                ALOGD("fallback to uncompressed as sample rate is less than 24kHz");
                 mHdmiFormat = UNCOMPRESSED;
             }
         } else {
@@ -782,7 +794,8 @@ Description: fix Up Hdmi Format Based On EDID
 void AudioSessionOutALSA::fixUpHdmiFormatBasedOnEDID()
 {
     ALOGV("fixUpHdmiFormatBasedOnEDID");
-    switch(mFormat) {
+    int mainFormat = mFormat & AUDIO_FORMAT_MAIN_MASK;
+    switch(mainFormat) {
     case AUDIO_FORMAT_EAC3:
         if(mHdmiFormat == COMPRESSED ||
            mHdmiFormat == AUTO_DEVICE_FORMAT) {
@@ -968,22 +981,38 @@ Description: fixup sample rate and channel info based on format
 void AudioSessionOutALSA::fixupSampleRateChannelModeMS11Formats()
 {
     ALOGV("fixupSampleRateChannelModeMS11Formats");
+    int mainFormat = mFormat & AUDIO_FORMAT_MAIN_MASK;
+    int subFormat = mFormat & AUDIO_FORMAT_SUB_MASK;
 /*
 NOTE: For AAC, the output of MS11 is 48000 for the sample rates greater than
       24000. The samples rates <= 24000 will be at their native sample rate
       For AC3, the PCM output is at its native sample rate if the decoding is
       single decode usecase for MS11.
 */
-    if(mFormat == AUDIO_FORMAT_AAC ||
-       mFormat == AUDIO_FORMAT_HE_AAC_V1 ||
-       mFormat == AUDIO_FORMAT_HE_AAC_V2 ||
-       mFormat == AUDIO_FORMAT_AAC_ADIF) {
+    if(mainFormat == AUDIO_FORMAT_AAC ||
+       mainFormat == AUDIO_FORMAT_HE_AAC_V1 ||
+       mainFormat == AUDIO_FORMAT_HE_AAC_V2 ||
+       mainFormat == AUDIO_FORMAT_AAC_ADIF) {
         mSampleRate = mSampleRate > 24000 ? 48000 : mSampleRate;
         mChannels       = 6;
-    } else if (mFormat == AUDIO_FORMAT_AC3 ||
-               mFormat == AUDIO_FORMAT_EAC3) {
+    } else if (mainFormat == AUDIO_FORMAT_AC3 ||
+               mainFormat == AUDIO_FORMAT_EAC3) {
+        /* transcode AC3/EAC3 44.1K to 48K AC3 for non dual-mono clips */
+        if (mSampleRate == 44100 && (subFormat != AUDIO_FORMAT_DOLBY_SUB_DM) &&
+            (mSpdifFormat == COMPRESSED ||
+             mSpdifFormat == AUTO_DEVICE_FORMAT ||
+             mSpdifFormat == COMPRESSED_CONVERT_EAC3_AC3) &&
+             (mHdmiFormat == UNCOMPRESSED ||
+              mHdmiFormat == UNCOMPRESSED_MCH)) {
+            mSampleRate = 48000;
+            mSpdifFormat = COMPRESSED_CONVERT_AC3_ASSOC;
+        } else if (mSampleRate == 44100) {
+            mSpdifFormat = UNCOMPRESSED;
+        }
         mChannels   = 6;
     }
+    ALOGD("ms11 format fixup: mSpdifFormat %d, mHdmiFormat %d",
+                                     mSpdifFormat, mHdmiFormat);
 }
 
 /*******************************************************************************
@@ -1013,7 +1042,7 @@ void AudioSessionOutALSA::updateDecodeTypeAndRoutingStates()
     if(mDevices & AudioSystem::DEVICE_OUT_SPDIF) {
         decodeType = usecaseDecodeHdmiSpdif[NUM_STATES_FOR_EACH_DEVICE_FMT*formatIndex]
                                            [mSpdifFormat];
-        ALOGVV("decoderType: %d", decodeType);
+        ALOGV("SPDIF: decoderType: %d", decodeType);
         mDecoderType = decodeType;
         for(int idx=0; idx<NUM_DECODE_PATH; idx++) {
             if(routeToDriver[idx][DECODER_TYPE_IDX] == decodeType) {
@@ -1052,7 +1081,7 @@ void AudioSessionOutALSA::updateDecodeTypeAndRoutingStates()
     if(mDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
         decodeType = usecaseDecodeHdmiSpdif[NUM_STATES_FOR_EACH_DEVICE_FMT*formatIndex]
                                            [mHdmiFormat];
-        ALOGVV("decoderType: %d", decodeType);
+        ALOGV("HDMI: decoderType: %d", decodeType);
         mDecoderType |= decodeType;
         for(int idx=0; idx<NUM_DECODE_PATH; idx++) {
             if(routeToDriver[idx][DECODER_TYPE_IDX] == decodeType) {
@@ -1222,10 +1251,11 @@ Description: validate if the decoder requires configuration to be set as first
 bool AudioSessionOutALSA::isDecoderConfigRequired()
 {
     ALOGVV("isDecoderConfigRequired");
+    int mainFormat = mFormat & AUDIO_FORMAT_MAIN_MASK;
     if(!mIsMS11FilePlaybackMode)
         return false;
     for(int i=0; i<sizeof(decodersRequireConfig)/sizeof(int); i++)
-        if(mFormat == decodersRequireConfig[i])
+        if(mainFormat == decodersRequireConfig[i])
             return true;
 
     return false;
@@ -1267,6 +1297,7 @@ status_t AudioSessionOutALSA::routingSetup()
     int bufferCount;
     int numOfActiveRxHandles;
     int index;
+    int mainFormat = mFormat & AUDIO_FORMAT_MAIN_MASK;
 
     /*
     setup the bitstream state machine
@@ -1298,13 +1329,13 @@ status_t AudioSessionOutALSA::routingSetup()
     AAC_ADIF would require worst case frame size before decode starts
     other decoder formats handles the partial data, hence threshold is zero.
     */
-    if(mFormat == AUDIO_FORMAT_AAC_ADIF)
+    if(mainFormat == AUDIO_FORMAT_AAC_ADIF)
         mMinBytesReqToDecode = AAC_BLOCK_PER_CHANNEL_MS11*mChannels-1;
     else
         mMinBytesReqToDecode = 0;
 
-    if((mFormat != AUDIO_FORMAT_WMA) &&
-       (mFormat != AUDIO_FORMAT_WMA_PRO)) {
+    if((mainFormat != AUDIO_FORMAT_WMA) &&
+       (mainFormat != AUDIO_FORMAT_WMA_PRO)) {
         numOfActiveRxHandles = mNumRxHandlesActive;
         for(index=0; index < mNumRxHandlesActive; index++) {
             status = openPlaybackDevice(index,
@@ -1358,6 +1389,7 @@ status_t AudioSessionOutALSA::openMS11Instance()
 {
     ALOGV("openMS11Instance");
     int32_t formatMS11;
+    int mainFormat = mFormat & AUDIO_FORMAT_MAIN_MASK;
     /*
     MS11 created
     */
@@ -1370,10 +1402,13 @@ status_t AudioSessionOutALSA::openMS11Instance()
     /*
     update format
     */
-    if((mFormat == AUDIO_FORMAT_AC3) ||
-       (mFormat == AUDIO_FORMAT_EAC3))
-        formatMS11 = FORMAT_DOLBY_DIGITAL_PLUS_MAIN;
-    else
+    if((mainFormat == AUDIO_FORMAT_AC3) ||
+       (mainFormat == AUDIO_FORMAT_EAC3)) {
+        if (mSpdifFormat == COMPRESSED_CONVERT_AC3_ASSOC)
+            formatMS11 = FORMAT_DOLBY_DIGITAL_PLUS_MAIN_ASSOC;
+        else
+            formatMS11 = FORMAT_DOLBY_DIGITAL_PLUS_MAIN;
+    } else
         formatMS11 = FORMAT_DOLBY_PULSE_MAIN;
     /*
     set the use case to the MS11 decoder and open the stream for decoding
@@ -1608,7 +1643,9 @@ void AudioSessionOutALSA::getPeriodSizeCountAndFormat(int routeFormat, int *peri
     case AUDIO_FORMAT_HE_AAC_V2:
     case AUDIO_FORMAT_AAC_ADIF:
     case AUDIO_FORMAT_AC3:
+    case AUDIO_FORMAT_AC3_DM:
     case AUDIO_FORMAT_EAC3:
+    case AUDIO_FORMAT_EAC3_DM:
         if(routeFormat == ROUTE_UNCOMPRESSED_MCH) {
             frameSize = PCM_16_BITS_PER_SAMPLE * mChannels;
             *periodSize = nextMultiple(AC3_PERIOD_SIZE * mChannels + MIN_SIZE_FOR_METADATA, frameSize * 32);
@@ -1655,7 +1692,9 @@ int AudioSessionOutALSA::getBufferLength()
         bufferSize = AAC_BLOCK_PER_CHANNEL_MS11 * mChannels;
         break;
     case AUDIO_FORMAT_AC3:
+    case AUDIO_FORMAT_AC3_DM:
     case AUDIO_FORMAT_EAC3:
+    case AUDIO_FORMAT_EAC3_DM:
         bufferSize = AC3_BUFFER_SIZE;
         break;
     case AUDIO_FORMAT_DTS:
@@ -1872,8 +1911,9 @@ int AudioSessionOutALSA::setDecodeConfig(char *buffer, size_t bytes)
 {
     ALOGD("setDecodeConfig");
     uint32_t bytesConsumed = 0;
+    int mainFormat = mFormat & AUDIO_FORMAT_MAIN_MASK;
     if(!mDecoderConfigSet) {
-        if(mFormat == AUDIO_FORMAT_WMA || mFormat == AUDIO_FORMAT_WMA_PRO) {
+        if(mainFormat == AUDIO_FORMAT_WMA || mainFormat == AUDIO_FORMAT_WMA_PRO) {
             ALOGV("Configuring the WMA params");
             status_t err = mALSADevice->setWMAParams((int *)buffer, bytes/sizeof(int));
             if (err) {
@@ -1898,10 +1938,10 @@ int AudioSessionOutALSA::setDecodeConfig(char *buffer, size_t bytes)
             if(mRouteAudioToA2dp)
                 if(a2dpRenderingControl(A2DP_RENDER_SETUP))
                     return 0;
-        } else if(mFormat == AUDIO_FORMAT_AAC ||
-                  mFormat == AUDIO_FORMAT_HE_AAC_V1 ||
-                  mFormat == AUDIO_FORMAT_AAC_ADIF ||
-                  mFormat == AUDIO_FORMAT_HE_AAC_V2) {
+        } else if(mainFormat == AUDIO_FORMAT_AAC ||
+                  mainFormat == AUDIO_FORMAT_HE_AAC_V1 ||
+                  mainFormat == AUDIO_FORMAT_AAC_ADIF ||
+                  mainFormat == AUDIO_FORMAT_HE_AAC_V2) {
             if(mMS11Decoder != NULL) {
                 if(mMS11Decoder->setAACConfig((unsigned char *)buffer,
                                      bytes) == false) {
