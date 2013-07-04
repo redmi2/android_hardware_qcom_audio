@@ -2795,11 +2795,13 @@ status_t ALSADevice::setPlaybackHardwareParams(alsa_handle_t *handle)
                                 compr_cap.codecs[2] : compr_cap.codecs[1];
         break;
     case AUDIO_FORMAT_AC3:
+    case AUDIO_FORMAT_AC3_DM:
         ALOGV("AC3 CODEC");
         compr_params.codec.id = (handle->type == ROUTE_COMPRESSED) ?
                                 compr_cap.codecs[2] : compr_cap.codecs[2];
         break;
     case AUDIO_FORMAT_EAC3:
+    case AUDIO_FORMAT_EAC3_DM:
         ALOGV("EAC3 CODEC");
         compr_params.codec.id = (handle->type == ROUTE_COMPRESSED) ?
                                 compr_cap.codecs[14] :
