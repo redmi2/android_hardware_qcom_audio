@@ -97,7 +97,7 @@ AudioHardwareALSA::AudioHardwareALSA() :
 {
     FILE *fp;
     char soundCardInfo[200];
-    char platform[128], baseband[128], platformVer[128];
+    char platform[128], baseband[128], platformVer[128], audioInit[128];
     int verNum = 0;
     struct snd_ctl_card_info *cardInfo;
 
@@ -108,6 +108,8 @@ AudioHardwareALSA::AudioHardwareALSA() :
     mVSID = 0;
     mIsFmActive = 0;
     mDevSettingsFlag = 0;
+    bool audioInitDone = false;
+    int sleepRetry = 0;
 #ifdef QCOM_USBAUDIO_ENABLED
     mAudioUsbALSA = new AudioUsbALSA();
     musbPlaybackState = 0;
@@ -179,6 +181,18 @@ AudioHardwareALSA::AudioHardwareALSA() :
         mAudioUsbALSA->setProxySoundCard(cardInfo->card);
     }
 #endif
+
+    while (audioInitDone == false && sleepRetry < MAX_SLEEP_RETRY) {
+        property_get("qcom.audio.init", audioInit, NULL);
+        ALOGD("qcom.audio.init is set to %s\n",audioInit);
+        if (!strncmp(audioInit, "complete", sizeof("complete"))) {
+            audioInitDone = true;
+        } else {
+            ALOGD("Sleeping for 50 ms");
+            usleep(AUDIO_INIT_SLEEP_WAIT*1000);
+            sleepRetry++;
+        }
+    }
 
     if (!strcmp((const char*)cardInfo->name, "msm8974-taiko-mtp-snd-card")) {
         snd_use_case_mgr_create(&mUcMgr, "snd_soc_msm_Taiko", cardInfo->card);
@@ -2022,7 +2036,18 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                                     sizeof(alsa_handle.useCase));
                         }
                     }
-                }
+                } else if (*channels & AUDIO_CHANNEL_IN_VOICE_UPLINK) {
+                   if (mFusion3Platform == false) {
+                       strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL,
+                               sizeof(SND_USE_CASE_MOD_CAPTURE_VOICE_UL));
+                   } else {
+                       /* Use normal audio recording for Fusion3 target, this behavior
+                          will be changed in Fusion4
+                        */
+                       strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC,
+                               sizeof(SND_USE_CASE_MOD_CAPTURE_MUSIC));
+                   }
+               }
 #ifdef QCOM_FM_ENABLED
             } else if((devices == AudioSystem::DEVICE_IN_FM_RX)) {
                 strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_FM, sizeof(alsa_handle.useCase));
@@ -2075,6 +2100,14 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                                     sizeof(alsa_handle.useCase));
                         }
                     }
+                } else if (*channels & AUDIO_CHANNEL_IN_VOICE_UPLINK) {
+                   if (mFusion3Platform == false) {
+                       strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_UL_REC,
+                               sizeof(SND_USE_CASE_VERB_UL_REC));
+                   } else {
+                       strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_HIFI_REC,
+                               sizeof(SND_USE_CASE_VERB_HIFI_REC));
+                   }
                 }
 #ifdef QCOM_FM_ENABLED
             } else if(devices == AudioSystem::DEVICE_IN_FM_RX) {
