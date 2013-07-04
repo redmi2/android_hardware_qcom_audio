@@ -230,7 +230,6 @@ So, a (AC3/EAC3) pass through + trancode require - 1 for pas through, 1 - pcm an
 */
 #define NUM_DEVICES_SUPPORT_COMPR_DATA 2+1
 #define NUM_SUPPORTED_CODECS           14
-#define NUM_DECODE_PATH                6
 #define NUM_COLUMN_FOR_INDEXING        2
 #define NUM_STATES_FOR_EACH_DEVICE_FMT 3
 #define DECODER_TYPE_IDX               0
@@ -292,17 +291,23 @@ enum {
     COMPRESSED_CONVERT_EAC3_AC3,
     COMPRESSED_CONVERT_ANY_AC3,
     COMPRESSED_CONVERT_ANY_DTS,
+    AUTO_DEVICE_FORMAT,
+    UNCOMPRESSED_MCH,
     ALL_DEVICE_FORMATS
 };
 /*
 List of type of data routed on end device
 */
 enum {
-    ROUTE_NONE = 0,
-    ROUTE_UNCOMPRESSED = 1,
-    ROUTE_COMPRESSED = 2,
-    ROUTE_SW_TRANSCODED_COMPRESSED = 4,
-    ROUTE_DSP_TRANSCODED_COMPRESSED = 8
+    ROUTE_NONE = 0x0,
+    ROUTE_UNCOMPRESSED = 0x1,
+    ROUTE_COMPRESSED = 0x2,
+    ROUTE_SW_TRANSCODED = 0x10,   //route sub-format, not to be used directly
+    ROUTE_DSP_TRANSCODED = 0x20,  //route sub-format, not to be used directly
+    ROUTE_MCH = 0x40,             //route sub-format, not to be used directly
+    ROUTE_UNCOMPRESSED_MCH = (ROUTE_UNCOMPRESSED | ROUTE_MCH),
+    ROUTE_SW_TRANSCODED_COMPRESSED = (ROUTE_COMPRESSED | ROUTE_SW_TRANSCODED),
+    ROUTE_DSP_TRANSCODED_COMPRESSED = (ROUTE_COMPRESSED | ROUTE_DSP_TRANSCODED)
 };
 /*
 List of end device formats
@@ -320,8 +325,10 @@ enum {
     DSP_PASSTHROUGH = 2, // render compressed
     DSP_TRANSCODE = 4,   // render as compressed
     SW_DECODE = 8,       // render as uncompressed
-    SW_PASSTHROUGH = 16, // render compressed
-    SW_TRANSCODE = 32    // render compressed
+    SW_DECODE_MCH = 16,   // render as uncompressed
+    SW_PASSTHROUGH = 32, // render compressed
+    SW_TRANSCODE = 64,    // render compressed
+    NUM_DECODE_PATH = 7
 };
 /*
 Modes of buffering that we can support
@@ -394,6 +401,7 @@ const int routeToDriver[NUM_DECODE_PATH][NUM_COLUMN_FOR_INDEXING] = {
     {DSP_PASSTHROUGH, ROUTE_COMPRESSED},
     {DSP_TRANSCODE,   ROUTE_DSP_TRANSCODED_COMPRESSED},
     {SW_DECODE,       ROUTE_UNCOMPRESSED},
+    {SW_DECODE_MCH,   ROUTE_UNCOMPRESSED_MCH},
     {SW_PASSTHROUGH,  ROUTE_COMPRESSED},
     {SW_TRANSCODE,    ROUTE_SW_TRANSCODED_COMPRESSED}
 };
@@ -474,50 +482,50 @@ decode, type of data routed to end device and type of transcoding needed
 */
 const int usecaseDecodeHdmiSpdif[ALL_FORMATS_IDX*NUM_STATES_FOR_EACH_DEVICE_FMT]
                                 [ALL_DEVICE_FORMATS] = {
-/*--------------------------------------------------------------------------------
-|   UNCOMPRESSED   |     COMPR      |  COMPR_CONV  | COMPR_CONV    |   COMPR_CONV    |
-|                  |                |   EAC3_AC3   |   ANY_AC3     |     ANY_DTS     |
----------------------------------------------------------------------------------*/
-/*   PCM            PCM              PCM             PCM             PCM       */
-    {DSP_DECODE,    DSP_DECODE,      DSP_DECODE,     DSP_DECODE,     DSP_DECODE|DSP_TRANSCODE},     //PCM_IDX
-    {FORMAT_PCM,    FORMAT_PCM,      FORMAT_PCM,     FORMAT_PCM,     FORMAT_COMPR},   //ROUTE_FORMAT
-    {NO_TRANSCODER, NO_TRANSCODER,   NO_TRANSCODER,  NO_TRANSCODER,  DTS_TRANSCODER}, //TRANSCODE_FMT
-/*   PCM            PCM              PCM             AC3             PCM       */
-    {SW_DECODE,     SW_DECODE,       SW_DECODE,      SW_TRANSCODE,   DSP_DECODE},     //AAC_IDX
-    {FORMAT_PCM,    FORMAT_PCM,      FORMAT_PCM,     FORMAT_COMPR,   FORMAT_PCM},     //ROUTE_FORMAT
-    {NO_TRANSCODER, NO_TRANSCODER,   NO_TRANSCODER,  AC3_TRANSCODER,  NO_TRANSCODER}, //TRANSCODE_FMT
-/*   PCM            AC3              AC3             AC3             PCM       */
-    {SW_DECODE,     SW_PASSTHROUGH,  SW_PASSTHROUGH, SW_PASSTHROUGH, DSP_DECODE},     //AC3_IDX
-    {FORMAT_PCM,    FORMAT_COMPR,    FORMAT_COMPR,   FORMAT_COMPR,   FORMAT_PCM},     //ROUTE_FORMAT
-    {NO_TRANSCODER, AC3_PASSTHR,     AC3_PASSTHR,    AC3_PASSTHR,    NO_TRANSCODER},  //TRANSCODE_FMT
-/*   PCM            EAC3             AC3             AC3             PCM       */
-    {SW_DECODE,     SW_PASSTHROUGH,  SW_TRANSCODE,   SW_TRANSCODE,   DSP_DECODE},     //EAC3_IDX
-    {FORMAT_PCM,    FORMAT_COMPR,    FORMAT_COMPR,   FORMAT_COMPR,   FORMAT_PCM},     //ROUTE_FORMAT
-    {NO_TRANSCODER, EAC3_PASSTHR,    AC3_TRANSCODER, AC3_TRANSCODER, NO_TRANSCODER},  //TRANSCODE_FMT
-/*   PCM            DTS              PCM             PCM             DTS       */
-    {DSP_DECODE,    DSP_PASSTHROUGH, DSP_DECODE,     DSP_DECODE,     DSP_PASSTHROUGH},//DTS_IDX
-    {FORMAT_PCM,    FORMAT_COMPR,    FORMAT_PCM,     FORMAT_PCM,     FORMAT_COMPR},   //ROUTE_FORMAT
-    {NO_TRANSCODER, DTS_PASSTHR,     NO_TRANSCODER,  NO_TRANSCODER,  DTS_PASSTHR},    //TRANSCODE_FMT
-/*   PCM            DTS_LBR          PCM             PCM             DTS       */
-    {DSP_DECODE,    DSP_PASSTHROUGH, DSP_DECODE,     DSP_DECODE,     DSP_PASSTHROUGH},//DTS_LBR_IDX
-    {FORMAT_PCM,    FORMAT_COMPR,    FORMAT_PCM,     FORMAT_PCM,     FORMAT_COMPR},   //ROUTE_FORMAT
-    {NO_TRANSCODER, DTS_PASSTHR,     NO_TRANSCODER,  NO_TRANSCODER,  DTS_PASSTHR},    //TRANSCODE_FMT
-/*   PCM            PCM              PCM             PCM             DTS       */
-    {DSP_DECODE,    DSP_DECODE,      DSP_DECODE,     DSP_DECODE,     DSP_DECODE|DSP_TRANSCODE},  //MP3_IDX
-    {FORMAT_PCM,    FORMAT_PCM,      FORMAT_PCM,     FORMAT_PCM,     FORMAT_COMPR},   //ROUTE_FORMAT
-    {NO_TRANSCODER, NO_TRANSCODER,   NO_TRANSCODER,  NO_TRANSCODER,  DTS_TRANSCODER}, //TRANSCODE_FMT
-/*   PCM            PCM              PCM             PCM             DTS       */
-    {DSP_DECODE,    DSP_DECODE,      DSP_DECODE,     DSP_DECODE,     DSP_DECODE|DSP_TRANSCODE},  //WMA_IDX
-    {FORMAT_PCM,    FORMAT_PCM,      FORMAT_PCM,     FORMAT_PCM,     FORMAT_COMPR},   //ROUTE_FORMAT
-    {NO_TRANSCODER, NO_TRANSCODER,   NO_TRANSCODER,  NO_TRANSCODER,  DTS_TRANSCODER}, //TRANSCODE_FMT
-/*   PCM            PCM              PCM             PCM             DTS       */
-    {DSP_DECODE,    DSP_DECODE,      DSP_DECODE,     DSP_DECODE,     DSP_DECODE|DSP_TRANSCODE},  //WMA_PRO_IDX
-    {FORMAT_PCM,    FORMAT_PCM,      FORMAT_PCM,     FORMAT_PCM,     FORMAT_COMPR},   //ROUTE_FORMAT
-    {NO_TRANSCODER, NO_TRANSCODER,   NO_TRANSCODER,  NO_TRANSCODER,  DTS_TRANSCODER}, //TRANSCODE_FMT
-/*   PCM            PCM              PCM             PCM             DTS       */
-    {DSP_DECODE,    DSP_DECODE,      DSP_DECODE,     DSP_DECODE,     DSP_DECODE|DSP_TRANSCODE},  //MP2_IDX
-    {FORMAT_PCM,    FORMAT_PCM,      FORMAT_PCM,     FORMAT_PCM,     FORMAT_COMPR},   //ROUTE_FORMAT
-    {NO_TRANSCODER, NO_TRANSCODER,   NO_TRANSCODER,  NO_TRANSCODER,  DTS_TRANSCODER}  //TRANSCODE_FMT
+/*----------------------------------------------------------------------------------------------------------------------------------
+|   UNCOMPRESSED   |     COMPR      |  COMPR_CONV  | COMPR_CONV    |   COMPR_CONV              |      AUTO         | UNCOMPR_MCH    |
+|                  |                |   EAC3_AC3   |   ANY_AC3     |     ANY_DTS               |                   |                |
+-----------------------------------------------------------------------------------------------------------------------------------*/
+/*   PCM            PCM              PCM             PCM             PCM                         PCM               PCM      */
+    {DSP_DECODE,    DSP_DECODE,      DSP_DECODE,     DSP_DECODE,     DSP_DECODE|DSP_TRANSCODE,   DSP_DECODE,       DSP_DECODE},     //PCM_IDX
+    {FORMAT_PCM,    FORMAT_PCM,      FORMAT_PCM,     FORMAT_PCM,     FORMAT_COMPR,               FORMAT_PCM,       FORMAT_PCM},   //ROUTE_FORMAT
+    {NO_TRANSCODER, NO_TRANSCODER,   NO_TRANSCODER,  NO_TRANSCODER,  DTS_TRANSCODER,             NO_TRANSCODER,    NO_TRANSCODER}, //TRANSCODE_FMT
+/*   PCM            PCM              PCM             AC3             PCM                         PCM               PCM      */
+    {SW_DECODE,     SW_DECODE,       SW_DECODE,      SW_TRANSCODE,   DSP_DECODE,                 SW_DECODE,        SW_DECODE_MCH},     //AAC_IDX
+    {FORMAT_PCM,    FORMAT_PCM,      FORMAT_PCM,     FORMAT_COMPR,   FORMAT_PCM,                 FORMAT_PCM,       FORMAT_PCM},     //ROUTE_FORMAT
+    {NO_TRANSCODER, NO_TRANSCODER,   NO_TRANSCODER,  AC3_TRANSCODER, NO_TRANSCODER,              NO_TRANSCODER,    NO_TRANSCODER}, //TRANSCODE_FMT
+/*   PCM            AC3              AC3             AC3             PCM                         AC3               PCM      */
+    {SW_DECODE,     SW_PASSTHROUGH,  SW_PASSTHROUGH, SW_PASSTHROUGH, DSP_DECODE,                 SW_PASSTHROUGH,   SW_DECODE_MCH},     //AC3_IDX
+    {FORMAT_PCM,    FORMAT_COMPR,    FORMAT_COMPR,   FORMAT_COMPR,   FORMAT_PCM,                 FORMAT_COMPR,     FORMAT_PCM},     //ROUTE_FORMAT
+    {NO_TRANSCODER, AC3_PASSTHR,     AC3_PASSTHR,    AC3_PASSTHR,    NO_TRANSCODER,              AC3_PASSTHR,      NO_TRANSCODER},  //TRANSCODE_FMT
+/*   PCM            EAC3             AC3             AC3             PCM                         EAC3              PCM     */
+    {SW_DECODE,     SW_PASSTHROUGH,  SW_TRANSCODE,   SW_TRANSCODE,   DSP_DECODE,                 SW_PASSTHROUGH,   SW_DECODE_MCH},     //EAC3_IDX
+    {FORMAT_PCM,    FORMAT_COMPR,    FORMAT_COMPR,   FORMAT_COMPR,   FORMAT_PCM,                 FORMAT_COMPR,     FORMAT_PCM},     //ROUTE_FORMAT
+    {NO_TRANSCODER, EAC3_PASSTHR,    AC3_TRANSCODER, AC3_TRANSCODER, NO_TRANSCODER,              EAC3_PASSTHR,     NO_TRANSCODER},  //TRANSCODE_FMT
+/*   PCM            DTS              PCM             PCM             DTS                         DTS               PCM       */
+    {DSP_DECODE,    DSP_PASSTHROUGH, DSP_DECODE,     DSP_DECODE,     DSP_PASSTHROUGH,            DSP_PASSTHROUGH,  DSP_DECODE},//DTS_IDX
+    {FORMAT_PCM,    FORMAT_COMPR,    FORMAT_PCM,     FORMAT_PCM,     FORMAT_COMPR,               FORMAT_COMPR,     FORMAT_PCM},   //ROUTE_FORMAT
+    {NO_TRANSCODER, DTS_PASSTHR,     NO_TRANSCODER,  NO_TRANSCODER,  DTS_PASSTHR,                DTS_PASSTHR,      NO_TRANSCODER},    //TRANSCODE_FMT
+/*   PCM            DTS_LBR          PCM             PCM             DTS                         DTS               PCM       */
+    {DSP_DECODE,    DSP_PASSTHROUGH, DSP_DECODE,     DSP_DECODE,     DSP_PASSTHROUGH,            DSP_PASSTHROUGH,  DSP_DECODE},//DTS_LBR_IDX
+    {FORMAT_PCM,    FORMAT_COMPR,    FORMAT_PCM,     FORMAT_PCM,     FORMAT_COMPR,               FORMAT_COMPR,     FORMAT_PCM},   //ROUTE_FORMAT
+    {NO_TRANSCODER, DTS_PASSTHR,     NO_TRANSCODER,  NO_TRANSCODER,  DTS_PASSTHR,                DTS_PASSTHR,      NO_TRANSCODER},    //TRANSCODE_FMT
+/*   PCM            PCM              PCM             PCM             DTS                         PCM               PCM       */
+    {DSP_DECODE,    DSP_DECODE,      DSP_DECODE,     DSP_DECODE,     DSP_DECODE|DSP_TRANSCODE,   DSP_DECODE,       DSP_DECODE},  //MP3_IDX
+    {FORMAT_PCM,    FORMAT_PCM,      FORMAT_PCM,     FORMAT_PCM,     FORMAT_COMPR,               FORMAT_PCM,       FORMAT_PCM},   //ROUTE_FORMAT
+    {NO_TRANSCODER, NO_TRANSCODER,   NO_TRANSCODER,  NO_TRANSCODER,  DTS_TRANSCODER,             NO_TRANSCODER,    NO_TRANSCODER}, //TRANSCODE_FMT
+/*   PCM            PCM              PCM             PCM             DTS                         PCM               PCM       */
+    {DSP_DECODE,    DSP_DECODE,      DSP_DECODE,     DSP_DECODE,     DSP_DECODE|DSP_TRANSCODE,   DSP_DECODE,       DSP_DECODE},  //WMA_IDX
+    {FORMAT_PCM,    FORMAT_PCM,      FORMAT_PCM,     FORMAT_PCM,     FORMAT_COMPR,               FORMAT_PCM,       FORMAT_PCM},   //ROUTE_FORMAT
+    {NO_TRANSCODER, NO_TRANSCODER,   NO_TRANSCODER,  NO_TRANSCODER,  DTS_TRANSCODER,             NO_TRANSCODER,    NO_TRANSCODER}, //TRANSCODE_FMT
+/*   PCM            PCM              PCM             PCM             DTS                         PCM               PCM       */
+    {DSP_DECODE,    DSP_DECODE,      DSP_DECODE,     DSP_DECODE,     DSP_DECODE|DSP_TRANSCODE,   DSP_DECODE,       DSP_DECODE},  //WMA_PRO_IDX
+    {FORMAT_PCM,    FORMAT_PCM,      FORMAT_PCM,     FORMAT_PCM,     FORMAT_COMPR,               FORMAT_PCM,       FORMAT_PCM},   //ROUTE_FORMAT
+    {NO_TRANSCODER, NO_TRANSCODER,   NO_TRANSCODER,  NO_TRANSCODER,  DTS_TRANSCODER,             NO_TRANSCODER,    NO_TRANSCODER}, //TRANSCODE_FMT
+/*   PCM            PCM              PCM             PCM             DTS                         PCM               PCM       */
+    {DSP_DECODE,    DSP_DECODE,      DSP_DECODE,     DSP_DECODE,     DSP_DECODE|DSP_TRANSCODE,   DSP_DECODE,       DSP_DECODE},  //MP2_IDX
+    {FORMAT_PCM,    FORMAT_PCM,      FORMAT_PCM,     FORMAT_PCM,     FORMAT_COMPR,               FORMAT_PCM,       FORMAT_PCM},   //ROUTE_FORMAT
+    {NO_TRANSCODER, NO_TRANSCODER,   NO_TRANSCODER,  NO_TRANSCODER,  DTS_TRANSCODER,             NO_TRANSCODER,    NO_TRANSCODER}  //TRANSCODE_FMT
 };
 /*
 List of decoders which require config as part of first buffer
@@ -695,6 +703,7 @@ public:
     status_t    configureTranscode(alsa_handle_t *handle);
     void        updateHDMIEDIDInfo();
     int         getFormatHDMIIndexEDIDInfo(EDID_AUDIO_FORMAT_ID formatId);
+    int         getHDMIMaxChannelForEDIDFormat(EDID_AUDIO_FORMAT_ID formatId);
     bool        isTunnelPlaybackUseCase(const char *useCase);
     bool        isMultiChannelPlaybackUseCase(const char *useCase);
     bool        isTunnelPseudoPlaybackUseCase(const char *useCase);
@@ -988,12 +997,12 @@ private:
     bool                mRouteAudioToA2dp;
     bool                mOpenDecodeRoute;
     int                 mDecodeFormatDevices;
+    bool                mOpenDecodeMCHRoute;
+    int                 mDecodeMCHFormatDevices;
     bool                mOpenPassthroughRoute;
     int                 mPassthroughFormatDevices;
     bool                mOpenTranscodeRoute;
     int                 mTranscodeFormatDevices;
-    int                 mRouteDecodeFormat;
-    int                 mRoutePassthroughFormat;
     int                 mRouteTrancodeFormat;
     bool                mChannelStatusSet;
     unsigned char       mChannelStatus[24];
@@ -1012,7 +1021,6 @@ private:
     alsa_handle_t       *mRxHandle[NUM_DEVICES_SUPPORT_COMPR_DATA];
     int                 mRxHandleRouteFormat[NUM_DEVICES_SUPPORT_COMPR_DATA];
     int                 mRxHandleDevices[NUM_DEVICES_SUPPORT_COMPR_DATA];
-    int                 mRxHandleRouteFormatType[NUM_DEVICES_SUPPORT_COMPR_DATA];
     output_metadata_handle_t  mOutputMetadata;
 
     uint32_t            channelMapToChannels(uint32_t channelMap);
