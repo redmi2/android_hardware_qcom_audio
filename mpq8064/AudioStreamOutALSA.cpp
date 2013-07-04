@@ -201,6 +201,11 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
             ALOGV("StreamOut write - mRouteAudioToA2dp = %d ", mParent->mRouteAudioToA2dp);
             mParent->mRouteAudioToA2dp = true;
         }
+        if(mDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+            ALOGD("Update EDID info");
+            mHandle->module->updateHDMIEDIDInfo();
+        }
+
         snd_use_case_get(mHandle->ucMgr, "_verb", (const char **)&use_case);
         if ((use_case == NULL) || (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
                                             strlen(SND_USE_CASE_VERB_INACTIVE)))) {
