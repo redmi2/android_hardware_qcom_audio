@@ -1627,25 +1627,53 @@ status_t ALSADevice::setPlaybackVolume(alsa_handle_t *handle, int volume)
 status_t ALSADevice::setPlaybackFormat(int device, bool isCompressed)
 {
     status_t err = NO_ERROR;
+    char mi2s[128];
+
+    property_get("spdif.mi2s",mi2s,"0");
+
     if (device & AudioSystem::DEVICE_OUT_SPDIF) {
         if (isCompressed) {
-            err = setMixerControl("SEC RX Format", "Compr");
-            if (NO_ERROR != err){
-              ALOGE("setMixerControl failed for SEC RX Format + Compr err = %d",err);
+            if((strcmp("true",mi2s) != 0)){
+               err = setMixerControl("SEC RX Format", "Compr");
+               if (NO_ERROR != err){
+                   ALOGE("setMixerControl failed for SEC RX Format + Compr err = %d",err);
+               }
+               err = setMixerControl("SEC RX Rate", "Variable");
+               if (NO_ERROR != err){
+                   ALOGE("setMixerControl failed for SEC RX Rate + Variable err = %d",err);
+               }
             }
-            err = setMixerControl("SEC RX Rate", "Variable");
-            if (NO_ERROR != err){
-              ALOGE("setMixerControl failed for SEC RX Rate + Variable err = %d",err);
+            else {
+                err = setMixerControl("MI2S RX Format", "Compr");
+                if (NO_ERROR != err){
+                   ALOGE("setMixerControl failed for MI2S RX Format + Compr err = %d",err);
+                }
+                err = setMixerControl("MI2S RX Rate", "Variable");
+                if (NO_ERROR != err){
+                   ALOGE("setMixerControl failed for MI2S RX Rate + Variable err = %d",err);
+                }
             }
         } else {
-            err = setMixerControl("SEC RX Format", "LPCM");
-            if (NO_ERROR != err){
-              ALOGE("setMixerControl failed for SEC RX Format + LPCM err = %d",err);
-            }
-            err = setMixerControl("SEC RX Rate", "Default");
-            if (NO_ERROR != err){
-              ALOGE("setMixerControl failed for SEC RX Rate + Default err = %d",err);
-            }
+          if((strcmp("true",mi2s) != 0)){
+                err = setMixerControl("SEC RX Format", "LPCM");
+                if (NO_ERROR != err){
+                    ALOGE("setMixerControl failed for SEC RX Format + LPCM err = %d",err);
+                }
+                err = setMixerControl("SEC RX Rate", "Default");
+                if (NO_ERROR != err){
+                    ALOGE("setMixerControl failed for SEC RX Rate + Default err = %d",err);
+                }
+           }
+           else {
+                err = setMixerControl("MI2S RX Format", "LPCM");
+                if (NO_ERROR != err){
+                   ALOGE("setMixerControl failed for MI2S RX Format + LPCM err = %d",err);
+                }
+                err = setMixerControl("MI2S RX Rate", "Default");
+                if (NO_ERROR != err){
+                   ALOGE("setMixerControl failed for MI2S RX Rate + Default err = %d",err);
+                }
+           }
         }
     }
     else if(device & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
@@ -1680,9 +1708,17 @@ status_t ALSADevice::setPlaybackFormat(int device, bool isCompressed)
 
 int ALSADevice::mapDeviceToPort(int device)
 {
-    for(int i=0; i<NUM_DEVICES_WITH_PP_PARAMS; i++)
-        if(deviceToPortID[i][0] == device)
-            return deviceToPortID[i][1];
+    char mi2s[128];
+    property_get("spdif.mi2s",mi2s,"0");
+
+    switch(device) {
+    case AudioSystem::DEVICE_OUT_AUX_DIGITAL:
+        return HDMI_RX;
+    case AudioSystem::DEVICE_OUT_SPDIF:
+        if(!strncmp("true",mi2s, sizeof(mi2s)))
+            return MI2S_RX;
+        return SECONDARY_I2S_RX;
+    }
     return 0;
 }
 

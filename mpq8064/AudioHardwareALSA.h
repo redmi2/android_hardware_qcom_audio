@@ -213,6 +213,7 @@ HDMI and SPDIF Device Output format control
 #define NUM_DEVICES_WITH_PP_PARAMS 2
 #define HDMI_RX 0x8001
 #define SECONDARY_I2S_RX 0x8002
+#define MI2S_RX 0x8003
 //Param ID's
 #define ADM_PP_PARAM_MUTE_ID 0
 #define ADM_PP_PARAM_MUTE_LENGTH 3
