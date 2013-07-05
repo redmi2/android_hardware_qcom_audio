@@ -254,7 +254,7 @@ status_t AudioSessionOutALSA::start()
                         delay[i] = tstamp.timestamp;
                         if(min_resume_delay > tstamp.timestamp)
                             min_resume_delay = tstamp.timestamp;
-                        ALOGVV("start: Timestamp returned = %lld\n", tstamp1.timestamp/1000);
+                        ALOGVV("start: Timestamp returned = %lld\n", tstamp.timestamp/1000);
                     }
                 }
             }
@@ -983,8 +983,8 @@ void AudioSessionOutALSA::reinitialize()
     // routing states
     mOpenDecodeRoute           = false;
     mOpenPassthroughRoute      = false;
-    mOpenTranscodeRoute        = false;
-    mRouteTrancodeFormat       = false;
+    mHwOpenTranscodeRoute      = false;
+    mSwOpenTranscodeRoute      = false;
     mChannelStatusSet          = false;
     mWriteTempBuffer           = NULL;
     mNumRxHandlesActive        = 0;
@@ -1050,12 +1050,13 @@ void AudioSessionOutALSA::updateDecodeTypeAndRoutingStates()
     mOpenDecodeRoute = false;
     mOpenDecodeMCHRoute = false;
     mOpenPassthroughRoute = false;
-    mOpenTranscodeRoute = false;
-    mRouteTrancodeFormat = ROUTE_NONE;
+    mSwOpenTranscodeRoute = false;
+    mHwOpenTranscodeRoute = false;
     mDecodeFormatDevices = mDevices;
     mDecodeMCHFormatDevices = AUDIO_DEVICE_NONE;
     mPassthroughFormatDevices = AUDIO_DEVICE_NONE;
-    mTranscodeFormatDevices = AUDIO_DEVICE_NONE;
+    mSwTranscodeFormatDevices = AUDIO_DEVICE_NONE;
+    mHwTranscodeFormatDevices = AUDIO_DEVICE_NONE;
     mDecoderType = 0;
 
     if(isMS11SupportedFormats(mFormat))
@@ -1082,16 +1083,14 @@ void AudioSessionOutALSA::updateDecodeTypeAndRoutingStates()
                     break;
                 case ROUTE_DSP_TRANSCODED_COMPRESSED:
                     ALOGVV("ROUTE_DSP_TRANSCODED_COMPRESSED");
-                    mOpenTranscodeRoute = true;
-                    mRouteTrancodeFormat = ROUTE_DSP_TRANSCODED_COMPRESSED;
-                    mTranscodeFormatDevices = AudioSystem::DEVICE_OUT_SPDIF;
+                    mHwOpenTranscodeRoute = true;
+                    mHwTranscodeFormatDevices = AudioSystem::DEVICE_OUT_SPDIF;
                     break;
                 case ROUTE_SW_TRANSCODED_COMPRESSED:
                     ALOGVV("ROUTE_SW_TRANSCODED_COMPRESSED");
-                    mOpenTranscodeRoute = true;
-                    mRouteTrancodeFormat = ROUTE_SW_TRANSCODED_COMPRESSED;
+                    mSwOpenTranscodeRoute = true;
                     mDecodeFormatDevices &= ~AudioSystem::DEVICE_OUT_SPDIF;
-                    mTranscodeFormatDevices = AudioSystem::DEVICE_OUT_SPDIF;
+                    mSwTranscodeFormatDevices = AudioSystem::DEVICE_OUT_SPDIF;
                     break;
                 default:
                     ALOGW("INVALID ROUTE for SPDIF, decoderType %d, routeFormat %d",
@@ -1128,16 +1127,14 @@ void AudioSessionOutALSA::updateDecodeTypeAndRoutingStates()
                     break;
                 case ROUTE_DSP_TRANSCODED_COMPRESSED:
                     ALOGVV("ROUTE_DSP_TRANSCODED_COMPRESSED");
-                    mOpenTranscodeRoute = true;
-                    mRouteTrancodeFormat = ROUTE_DSP_TRANSCODED_COMPRESSED;
-                    mTranscodeFormatDevices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+                    mHwOpenTranscodeRoute = true;
+                    mHwTranscodeFormatDevices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
                     break;
                 case ROUTE_SW_TRANSCODED_COMPRESSED:
                     ALOGVV("ROUTE_SW_TRANSCODED_COMPRESSED");
-                    mOpenTranscodeRoute = true;
-                    mRouteTrancodeFormat = ROUTE_SW_TRANSCODED_COMPRESSED;
+                    mSwOpenTranscodeRoute = true;
                     mDecodeFormatDevices &= ~AudioSystem::DEVICE_OUT_AUX_DIGITAL;
-                    mTranscodeFormatDevices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+                    mSwTranscodeFormatDevices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
                     break;
                 default:
                     ALOGW("INVALID ROUTE for HDMI, decoderType %d, routeFormat %d",
@@ -1257,9 +1254,16 @@ void AudioSessionOutALSA::updateRxHandleStates()
                , index, mRxHandleRouteFormat[index], mRxHandleDevices[index]);
         index++;
     }
-    if(mOpenTranscodeRoute) {
-        mRxHandleRouteFormat[index] = mRouteTrancodeFormat;
-        mRxHandleDevices[index] = mTranscodeFormatDevices;
+    if(mSwOpenTranscodeRoute) {
+        mRxHandleRouteFormat[index] = ROUTE_SW_TRANSCODED_COMPRESSED;
+        mRxHandleDevices[index] = mSwTranscodeFormatDevices;
+        ALOGD("mOpenTranscodeRoute: index: %d routeformat: %d, devices: 0x%x: "
+               , index, mRxHandleRouteFormat[index], mRxHandleDevices[index]);
+        index++;
+    }
+    if(mHwOpenTranscodeRoute) {
+        mRxHandleRouteFormat[index] = ROUTE_DSP_TRANSCODED_COMPRESSED;
+        mRxHandleDevices[index] = mHwTranscodeFormatDevices;
         ALOGD("mOpenTranscodeRoute: index: %d routeformat: %d, devices: 0x%x: "
                , index, mRxHandleRouteFormat[index], mRxHandleDevices[index]);
         index++;
@@ -1737,14 +1741,10 @@ Description: open temp buffer so that meta data mode can be updated properly
 *******************************************************************************/
 status_t AudioSessionOutALSA::openTempBufForMetadataModeRendering()
 {
-    int maxLength = 0;
-    for(int index=0; index < mNumRxHandlesActive; index++) {
-       maxLength = mRxHandle[index]->periodSize > maxLength ?
-                       mRxHandle[index]->periodSize :
-                       maxLength;
-    }
     if (mWriteTempBuffer == NULL) {
-        mWriteTempBuffer = (char *) malloc(maxLength);
+        /*Max Period size which is exposed by the compr driver
+        The value needs to be modified when the period size is modified*/
+        mWriteTempBuffer = (char *) malloc(PLAYBACK_MAX_PERIOD_SIZE);
         if (mWriteTempBuffer == NULL) {
             ALOGE("Memory allocation of temp buffer to write pcm to driver failed");
             return BAD_VALUE;
@@ -2401,9 +2401,11 @@ status_t AudioSessionOutALSA::doRouting(int devices)
     if(!mOpenPassthroughRoute)
         handleCloseForDeviceSwitch(ROUTE_COMPRESSED);
 
-    if(!mOpenTranscodeRoute)
-        handleCloseForDeviceSwitch(ROUTE_SW_TRANSCODED_COMPRESSED|
-                                   ROUTE_DSP_TRANSCODED_COMPRESSED);
+    if(!mSwOpenTranscodeRoute)
+        handleCloseForDeviceSwitch(ROUTE_SW_TRANSCODED_COMPRESSED);
+
+    if(!mHwOpenTranscodeRoute)
+        handleCloseForDeviceSwitch(ROUTE_DSP_TRANSCODED_COMPRESSED);
 
     if(mOpenDecodeRoute)
         handleSwitchAndOpenForDeviceSwitch(mDecodeFormatDevices,
@@ -2414,9 +2416,12 @@ status_t AudioSessionOutALSA::doRouting(int devices)
     if(mOpenPassthroughRoute)
         handleSwitchAndOpenForDeviceSwitch(mPassthroughFormatDevices,
                                         ROUTE_COMPRESSED);
-    if(mOpenTranscodeRoute)
-        handleSwitchAndOpenForDeviceSwitch(mTranscodeFormatDevices,
-                                        mRouteTrancodeFormat);
+    if(mSwOpenTranscodeRoute)
+        handleSwitchAndOpenForDeviceSwitch(mSwTranscodeFormatDevices,
+                                        ROUTE_SW_TRANSCODED_COMPRESSED);
+    if(mHwOpenTranscodeRoute)
+        handleSwitchAndOpenForDeviceSwitch(mHwTranscodeFormatDevices,
+                                        ROUTE_DSP_TRANSCODED_COMPRESSED);
 
     if(stopA2DP)
         status = a2dpRenderingControl(A2DP_RENDER_STOP);
@@ -2465,8 +2470,8 @@ Description: Handles device switch - switch in the existing handle and opening
 void AudioSessionOutALSA::handleSwitchAndOpenForDeviceSwitch(int devices, int format)
 {
     ALOGV("handleSwitchAndOpenForDeviceSwitch device = %d format = %d", devices, format);
+    Mutex::Autolock autoLock(mLock);
     int index;
-    Mutex::Autolock autoLock1(mLock);
     for(index = 0; index < mNumRxHandlesActive; index++) {
         ALOGD("index format = %d", mRxHandleRouteFormat[index]);
         if(mRxHandleRouteFormat[index] == format) {
@@ -2494,6 +2499,7 @@ void AudioSessionOutALSA::handleSwitchAndOpenForDeviceSwitch(int devices, int fo
                                                         mStreamVol))
                     ALOGE("setPlaybackVolume for playback failed");
             }
+            openTempBufForMetadataModeRendering();
         }
     }
     return;
@@ -2506,9 +2512,9 @@ void AudioSessionOutALSA::handleCloseForDeviceSwitch(int format)
 {
     ALOGV("handleCloseForDeviceSwitch");
     int ret;
-    Mutex::Autolock autoLock1(mLock);
+    Mutex::Autolock autoLock(mLock);
     for(int index = 0; index < mNumRxHandlesActive; index++) {
-        if(mRxHandleRouteFormat[index] & format) {
+        if(mRxHandleRouteFormat[index] == format) {
             if(closeDevice(mRxHandle[index]) != NO_ERROR) {
                 ALOGE("Error closing pcm route device in doRouting");
                 return;

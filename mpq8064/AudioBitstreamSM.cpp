@@ -176,7 +176,7 @@ void AudioBitstreamSM::copyBitstreamToInternalBuffer(char *bufPtr, size_t bytes)
     // flush the input buffer if input is not consumed
     if( (mInputBufferWritePtr+bytes) > (mInputBuffer+bufLen) ) {
         ALOGE("Input bitstream is not consumed");
-        mInputBufferWritePtr = mInputBuffer;
+        return;
     }
 
     memcpy(mInputBufferWritePtr, bufPtr, bytes);
@@ -334,18 +334,27 @@ output buffer
 */
 void AudioBitstreamSM::setOutputBufferWritePtr(int format, size_t outputPCMSample)
 {
+    int allocBytes;
     switch(format) {
     case PCM_MCH_OUT:
-        mPCMMChOutputBufferWritePtr += outputPCMSample;
+        allocBytes = SAMPLES_PER_CHANNEL*MAX_OUTPUT_CHANNELS_SUPPORTED*FACTOR_FOR_BUFFERING;
+        if (mPCMMChOutputBuffer + allocBytes > mPCMMChOutputBufferWritePtr + outputPCMSample)
+            mPCMMChOutputBufferWritePtr += outputPCMSample;
         break;
     case PCM_2CH_OUT:
-        mPCM2ChOutputBufferWritePtr += outputPCMSample;
+        allocBytes = SAMPLES_PER_CHANNEL*STEREO_CHANNELS*FACTOR_FOR_BUFFERING;
+        if(mPCM2ChOutputBuffer + allocBytes > mPCM2ChOutputBufferWritePtr + outputPCMSample)
+            mPCM2ChOutputBufferWritePtr += outputPCMSample;
         break;
     case COMPRESSED_OUT:
-        mEncOutputBufferWritePtr += outputPCMSample;
+        allocBytes = SAMPLES_PER_CHANNEL*MAX_INPUT_CHANNELS_SUPPORTED*FACTOR_FOR_BUFFERING;
+        if (mEncOutputBuffer + allocBytes > mEncOutputBufferWritePtr + outputPCMSample)
+            mEncOutputBufferWritePtr += outputPCMSample;
         break;
     case TRANSCODE_OUT:
-        mPassthroughOutputBufferWritePtr += outputPCMSample;
+        allocBytes = SAMPLES_PER_CHANNEL*MAX_INPUT_CHANNELS_SUPPORTED*FACTOR_FOR_BUFFERING;
+        if (mPassthroughOutputBuffer + allocBytes > mPassthroughOutputBufferWritePtr + outputPCMSample)
+            mPassthroughOutputBufferWritePtr += outputPCMSample;
         break;
     default:
         break;
