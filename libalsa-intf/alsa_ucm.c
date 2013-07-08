@@ -1912,6 +1912,8 @@ int snd_use_case_set_case(snd_use_case_mgr_t *uc_mgr,
             if (ret < 0) {
                 ALOGE("Invalid device: Device not part of enabled device list");
             } else {
+                snd_ucm_del_ident_from_list(&uc_mgr->card_ctxt_ptr->mod_list_head,
+                        usecase);
                 ALOGV("disdev: device value to be disabled: %s", value);
                 /* Apply Mixer controls of usecase for this device*/
                 ret = set_controls_of_device_for_usecase(uc_mgr, value,
