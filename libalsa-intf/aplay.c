@@ -324,6 +324,10 @@ static int play_file(unsigned rate, unsigned channels, int fd,
                compr_params.codec.id = SND_AUDIOCODEC_AAC;
                printf("codec -d = %x\n", SND_AUDIOCODEC_AAC);
                break;
+           case SND_AUDIOCODEC_PCM:
+               compr_params.codec.id = SND_AUDIOCODEC_PCM;
+               printf("codec -d = %x\n", SND_AUDIOCODEC_PCM);
+               break;
            default:
                break;
            }
@@ -385,7 +389,8 @@ static int play_file(unsigned rate, unsigned channels, int fd,
         pfd[0].fd = pcm->timer_fd;
         pfd[0].events = POLLIN;
 
-        if (!compressed && (format == SNDRV_PCM_FORMAT_S24_LE))
+        if ((!compressed || (get_compressed_format(compr_codec) == SND_AUDIOCODEC_PCM)) &&
+            (format == SNDRV_PCM_FORMAT_S24_LE))
             frames = bufsize / (2*2*channels);
         else
             frames = bufsize / (2*channels);
@@ -445,7 +450,8 @@ static int play_file(unsigned rate, unsigned channels, int fd,
               */
              memset(dst_addr, 0x0, bufsize);
 
-             if (!compressed && (format == SNDRV_PCM_FORMAT_S24_LE))
+             if ((!compressed || (get_compressed_format(compr_codec) == SND_AUDIOCODEC_PCM)) &&
+                 (format == SNDRV_PCM_FORMAT_S24_LE))
                  bytes_to_read = (bufsize / 4) * 3;
              else
                  bytes_to_read = bufsize;
@@ -453,7 +459,9 @@ static int play_file(unsigned rate, unsigned channels, int fd,
              if (data_sz && !piped) {
                  if (remainingData < bytes_to_read) {
                      bytes_to_read = remainingData;
-                     if (!compressed && (format == SNDRV_PCM_FORMAT_S24_LE)) {
+                     if ((!compressed ||
+                          (get_compressed_format(compr_codec) == SND_AUDIOCODEC_PCM)) &&
+                         (format == SNDRV_PCM_FORMAT_S24_LE)) {
                          bufsize = (bytes_to_read * 4) / 3;
                          frames = remainingData / (2*2*channels);
                      }
@@ -461,8 +469,29 @@ static int play_file(unsigned rate, unsigned channels, int fd,
                          frames = remainingData / (2*channels);
                  }
              }
-             fprintf(stderr, "addr = 0x%08x, size = %d \n", (dst_addr + outputMetadataLength),(bytes_to_read - outputMetadataLength));
-             err = read(fd, (dst_addr + outputMetadataLength) , (bytes_to_read - outputMetadataLength));
+             if ( compressed &&
+                  (get_compressed_format(compr_codec) == SND_AUDIOCODEC_PCM) &&
+                  (format == SNDRV_PCM_FORMAT_S24_LE)) {
+                 /* the data read from file is with 24 bit. So, the valid data read should
+                    be copied to the buffer which is of length in the order multiples of 3
+                    reducing just by meta data length which is 64 is a fractional multipel of 3
+                    hence reduce 64 + additional data = 32 to make sure the buffer length
+                    is aligned properly. Similarly when the 24 bit data is packed to 32 bit
+                    before sending it to driver, reduce the length by 128 = 96 * 4 / 3 */
+                 fprintf(stderr, "addr = 0x%08x, size = %d \n", (dst_addr + outputMetadataLength),(bytes_to_read - 96));
+                 err = read(fd, (dst_addr + outputMetadataLength) , (bytes_to_read - 96));
+                 data = (char *)(dst_addr + outputMetadataLength);
+                 rc = buffer_data(pcm, data, bufsize - 128);
+                 err =  bufsize - 128;
+                 if (rc) {
+                     fprintf(stderr, "Aplay: error in buffer padding\n");
+                     pcm_close(pcm);
+                     return rc;
+                 }
+             } else {
+                 fprintf(stderr, "addr = 0x%08x, size = %d \n", (dst_addr + outputMetadataLength),(bytes_to_read - outputMetadataLength));
+                 err = read(fd, (dst_addr + outputMetadataLength) , (bytes_to_read - outputMetadataLength));
+             }
 
              if (!compressed) {
                  data = (char *)(dst_addr + outputMetadataLength);
@@ -675,7 +704,7 @@ int play_wav(const char *fg, int rate, int ch, const char *device, const char *f
                 return fd;
             }
         }
-        if (compressed) {
+        if (compressed && (get_compressed_format(compr_codec) != SND_AUDIOCODEC_PCM) ) {
             hdr.sample_rate = rate;
             hdr.num_channels = ch;
             hdr.data_sz = 0;

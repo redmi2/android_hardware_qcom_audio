@@ -62,7 +62,7 @@ namespace android_audio_legacy
 #define BUFFER_COUNT 4
 #define LPA_BUFFER_SIZE 128*1024
 #define TUNNEL_BUFFER_SIZE 240*1024
-#define TUNNEL_METADATA_SIZE 64
+#define METADATA_SIZE 64
 #define MONO_CHANNEL_MODE 1
 // ----------------------------------------------------------------------------
 
@@ -86,7 +86,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     mUcMgr              = mParent->mUcMgr;
     mFormat             = format;
     mSampleRate         = samplingRate;
-    mChannels           = channels;
+    mChannels           = AudioSystem::popCount(channels);
 
 
     mBufferSize         = 0;
@@ -117,8 +117,8 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
         mSessionStatus = -1;
         return;
     }
-    if((format == AUDIO_FORMAT_PCM_16_BIT) && (channels == 0 || channels > 6)) {
-        ALOGE("Invalid number of channels %d", channels);
+    if((format == AUDIO_FORMAT_PCM_16_BIT) && (mChannels < 1 || mChannels > 8)) {
+        ALOGE("Invalid number of channels %d", mChannels);
         mSessionStatus = -1;
         return;
     }
@@ -325,7 +325,12 @@ status_t AudioSessionOutALSA::openAudioSessionDevice(int type, int devices)
         return status;
     }
     bufferAlloc(mAlsaHandle);
-    mBufferSize = mAlsaHandle->periodSize;
+    mBufferSize = mTunnelMode ? TUNNEL_BUFFER_SIZE : LPA_BUFFER_SIZE;
+    mBufferSize -= METADATA_SIZE;
+    if (mFormat == AUDIO_FORMAT_PCM_16_BIT) {
+        mBufferSize = floor(mBufferSize/(mChannels * 16)) * mChannels * 16;
+    }
+    ALOGD("buffer size from driver: %d", mBufferSize);
     return NO_ERROR;
 }
 
@@ -410,7 +415,7 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
     ALOGV("PCM write start");
     err = pcm_write(mAlsaHandle->handle, buf.memBuf, mAlsaHandle->handle->period_size);
     ALOGV("PCM write complete");
-    if (bytes < (mAlsaHandle->handle->period_size - mOutputMetadataLength)) {
+    if (bytes < mBufferSize) {
         ALOGV("Last buffer case %d", mAlsaHandle->handle->start);
         if(!mAlsaHandle->handle->start) {
             if ( ioctl(mAlsaHandle->handle->fd, SNDRV_PCM_IOCTL_START) < 0 ) {
@@ -974,14 +979,8 @@ status_t AudioSessionOutALSA::openDevice(char *useCase, bool bIsUseCase, int dev
     alsa_handle.bufferSize  = mInputBufferSize;
     alsa_handle.devices     = devices;
     alsa_handle.handle      = 0;
-    alsa_handle.format      = (mFormat == AUDIO_FORMAT_PCM_16_BIT ?
-SNDRV_PCM_FORMAT_S16_LE : mFormat);
-    //ToDo: Add conversion from channel Mask to channel count.
-    if (mChannels == AUDIO_CHANNEL_OUT_MONO)
-        alsa_handle.channels = MONO_CHANNEL_MODE;
-    else
-        alsa_handle.channels = DEFAULT_CHANNEL_MODE;
-    alsa_handle.channels =  AudioSystem::popCount(mChannels);
+    alsa_handle.format      = mFormat;
+    alsa_handle.channels    = mChannels ? mChannels : DEFAULT_CHANNEL_MODE;
     alsa_handle.sampleRate  = mSampleRate;
     alsa_handle.latency     = PLAYBACK_LATENCY;
     alsa_handle.rxHandle    = 0;
