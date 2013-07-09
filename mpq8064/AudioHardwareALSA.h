@@ -241,6 +241,9 @@ So, a (AC3/EAC3) pass through + trancode require - 1 for pas through, 1 - pcm an
 So min period size = LCM (1,2...8) * 4*/
 #define PERIOD_SIZE_COMPR        3360
 #define MS11_INPUT_BUFFER_SIZE   1536
+/*Max Period size which is exposed by the compr driver
+The value needs to be modified when the period size is modified*/
+#define PLAYBACK_MAX_PERIOD_SIZE (160 * 1024)
 
 #define COMPR_INPUT_BUFFER_SIZE  (PERIOD_SIZE_COMPR - MIN_SIZE_FOR_METADATA)
 #define PCM_16_BITS_PER_SAMPLE   2
@@ -1006,9 +1009,10 @@ private:
     int                 mDecodeMCHFormatDevices;
     bool                mOpenPassthroughRoute;
     int                 mPassthroughFormatDevices;
-    bool                mOpenTranscodeRoute;
-    int                 mTranscodeFormatDevices;
-    int                 mRouteTrancodeFormat;
+    bool                mSwOpenTranscodeRoute;
+    int                 mSwTranscodeFormatDevices;
+    bool                mHwOpenTranscodeRoute;
+    int                 mHwTranscodeFormatDevices;
     bool                mChannelStatusSet;
     unsigned char       mChannelStatus[24];
     char                *mWriteTempBuffer;
