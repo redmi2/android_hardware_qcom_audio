@@ -403,7 +403,7 @@ const int supportedFormats[NUM_SUPPORTED_CODECS] = {
 we can only have 6 types of decoder type stored with bit masks.
 */
 const int routeToDriver[NUM_DECODE_PATH][NUM_COLUMN_FOR_INDEXING] = {
-    {DSP_DECODE,      ROUTE_UNCOMPRESSED},
+    {DSP_DECODE,      ROUTE_UNCOMPRESSED_MCH},
     {DSP_PASSTHROUGH, ROUTE_COMPRESSED},
     {DSP_TRANSCODE,   ROUTE_DSP_TRANSCODED_COMPRESSED},
     {SW_DECODE,       ROUTE_UNCOMPRESSED},

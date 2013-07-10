@@ -824,7 +824,7 @@ void AudioSessionOutALSA::fixUpHdmiFormatBasedOnEDID()
            mHdmiFormat == AUTO_DEVICE_FORMAT) {
             if (mALSADevice->getFormatHDMIIndexEDIDInfo(DOLBY_DIGITAL_PLUS_1) < 0) {
                 ALOGD("Fallback to convert as EAC3 pass through not supported on SPDIF");
-                mHdmiFormat == COMPRESSED_CONVERT_EAC3_AC3;
+                mHdmiFormat = COMPRESSED_CONVERT_EAC3_AC3;
                 if(mALSADevice->getFormatHDMIIndexEDIDInfo(AC3) < 0) {
                     ALOGD("Falling back to UNCOMPRESSED as PASS THROUGH is not supported");
                     mHdmiFormat = UNCOMPRESSED;
@@ -1073,7 +1073,15 @@ void AudioSessionOutALSA::updateDecodeTypeAndRoutingStates()
                 switch(routeToDriver[idx][ROUTE_FORMAT_IDX]) {
                 case ROUTE_UNCOMPRESSED:
                     ALOGVV("ROUTE_UNCOMPRESSED");
+                    ALOGVV("SPDIF opened with stereo decode");
                     mOpenDecodeRoute = true;
+                    break;
+                case ROUTE_UNCOMPRESSED_MCH:
+                    ALOGVV("ROUTE_UNCOMPRESSED_MCH");
+                    ALOGVV("SPDIF opened with multichannel decode");
+                    mOpenDecodeMCHRoute = true;
+                    mDecodeFormatDevices &= ~AudioSystem::DEVICE_OUT_SPDIF;
+                    mDecodeMCHFormatDevices |= AudioSystem::DEVICE_OUT_SPDIF;
                     break;
                 case ROUTE_COMPRESSED:
                     ALOGVV("ROUTE_COMPRESSED");
@@ -1110,11 +1118,12 @@ void AudioSessionOutALSA::updateDecodeTypeAndRoutingStates()
                 switch(routeToDriver[idx][ROUTE_FORMAT_IDX]) {
                 case ROUTE_UNCOMPRESSED:
                     ALOGVV("ROUTE_UNCOMPRESSED");
-                    ALOGVV("HDMI attached as stereo device");
+                    ALOGVV("HDMI opened with stereo decode");
                     mOpenDecodeRoute = true;
                     break;
                 case ROUTE_UNCOMPRESSED_MCH:
-                    ALOGVV("HDMI attached as multichannel device");
+                    ALOGVV("ROUTE_UNCOMPRESSED_MCH");
+                    ALOGVV("HDMI opened with multichannel decode");
                     mOpenDecodeMCHRoute = true;
                     mDecodeFormatDevices &= ~AudioSystem::DEVICE_OUT_AUX_DIGITAL;
                     mDecodeMCHFormatDevices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
@@ -1146,8 +1155,35 @@ void AudioSessionOutALSA::updateDecodeTypeAndRoutingStates()
     }
     if(mDevices & ~(AudioSystem::DEVICE_OUT_AUX_DIGITAL |
                     AudioSystem::DEVICE_OUT_SPDIF)) {
-        mDecoderType |= usecaseDecodeFormat[NUM_STATES_FOR_EACH_DEVICE_FMT*formatIndex];
-        mOpenDecodeRoute = true;
+        decodeType = usecaseDecodeFormat[NUM_STATES_FOR_EACH_DEVICE_FMT*formatIndex];
+        ALOGV("Other Devices: decoderType: %d", decodeType);
+        mDecoderType |= decodeType;
+        for(int idx=0; idx<NUM_DECODE_PATH; idx++) {
+            if(routeToDriver[idx][DECODER_TYPE_IDX] == decodeType) {
+                switch(routeToDriver[idx][ROUTE_FORMAT_IDX]) {
+                case ROUTE_UNCOMPRESSED:
+                    ALOGVV("ROUTE_UNCOMPRESSED");
+                    ALOGVV("Other Devices opened with stereo decode");
+                    mOpenDecodeRoute = true;
+                    break;
+                case ROUTE_UNCOMPRESSED_MCH:
+                    ALOGVV("ROUTE_UNCOMPRESSED_MCH");
+                    ALOGVV("Other Devices opened with multichannel decode");
+                    mOpenDecodeMCHRoute = true;
+                    mDecodeFormatDevices &= ~(mDevices &
+                                              ~(AudioSystem::DEVICE_OUT_SPDIF |
+                                                AudioSystem::DEVICE_OUT_AUX_DIGITAL));
+                    mDecodeMCHFormatDevices |= ~(mDevices &
+                                                 ~(AudioSystem::DEVICE_OUT_SPDIF |
+                                                   AudioSystem::DEVICE_OUT_AUX_DIGITAL));
+                    break;
+                default:
+                    ALOGW("INVALID ROUTE for Other Devices, decoderType %d, routeFormat %d",
+                                    decodeType, routeToDriver[idx][ROUTE_FORMAT_IDX]);
+                    break;
+                }
+            }
+        }
     }
 }
 
@@ -1625,11 +1661,11 @@ status_t AudioSessionOutALSA::openDevice(const char *useCase, bool bIsUseCase,
         mALSADevice->close(&alsa_handle);
     } else {
         if(deviceFormat & ROUTE_UNCOMPRESSED) {
-           if(mUseMS11Decoder && mChannels > 2) {
+           if(mUseMS11Decoder && alsa_handle.channels > 2) {
                setMS11ChannelMap(&alsa_handle);
            } else if((mFormat == AUDIO_FORMAT_PCM_16_BIT ||
                       mFormat == AUDIO_FORMAT_PCM_24_BIT) &&
-                      mChannels > 2) {
+                      alsa_handle.channels > 2) {
                setPCMChannelMap(&alsa_handle);
            }
         }
@@ -2157,10 +2193,10 @@ bool AudioSessionOutALSA::dspDecode(char *buffer, size_t bytes)
     // copy the output of decoder to HAL internal buffers
     if(mDecoderType & DSP_DECODE) {
         ALOGVV("DSP_DECODE");
-        bufPtr = mBitstreamSM->getOutputBufferWritePtr(PCM_2CH_OUT);
+        bufPtr = mBitstreamSM->getOutputBufferWritePtr(PCM_MCH_OUT);
         copyOutputBytesSize = bytesConsumedInDecode;
         memcpy(bufPtr, mBitstreamSM->getInputBufferPtr(), copyOutputBytesSize);
-        mBitstreamSM->setOutputBufferWritePtr(PCM_2CH_OUT,
+        mBitstreamSM->setOutputBufferWritePtr(PCM_MCH_OUT,
                                               copyOutputBytesSize);
     }
     if(mDecoderType & DSP_PASSTHROUGH) {
