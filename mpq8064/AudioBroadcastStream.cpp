@@ -1301,6 +1301,7 @@ status_t AudioBroadcastStreamALSA::openRoutingDevice(char *useCase,
                           strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2))) ||
         (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL3,
                           strlen(SND_USE_CASE_MOD_PLAY_TUNNEL3))))) {
+        alsa_handle.type = COMPRESSED_FORMAT;
         if (mUseMS11Decoder == true)
             alsa_handle.type = COMPRESSED_PASSTHROUGH_FORMAT;
         else if (mFormat == AUDIO_FORMAT_DTS || mFormat == AUDIO_FORMAT_DTS_LBR) {
@@ -1316,8 +1317,6 @@ status_t AudioBroadcastStreamALSA::openRoutingDevice(char *useCase,
                     ((mHdmiFormat == COMPRESSED_FORMAT) &&
                     (mDevices & (AudioSystem::DEVICE_OUT_AUX_DIGITAL))))
                     alsa_handle.type = COMPRESSED_PASSTHROUGH_FORMAT;
-            else
-                alsa_handle.type = COMPRESSED_FORMAT;
         }
     }
     else
