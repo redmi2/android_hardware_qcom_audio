@@ -164,6 +164,7 @@ static int USBRECBIT_FM = (1 << 3);
 #define POLL_FD_MODIFIED 3
 #define KILL_PLAYBACK_THREAD 1
 #define KILL_CAPTURE_THREAD 1
+#define KILL_TIMER_THREAD 1
 #define NUM_FDS 2
 #define NUM_PLAYBACK_FDS 3
 #define NUM_AUDIOSESSION_FDS 3
@@ -747,7 +748,9 @@ public:
                              uint32_t channels,
                              uint32_t sampleRate,
                              uint32_t audioSource,
-                             status_t *status);
+                             status_t *status,
+                             cb_func_ptr cb,
+                             void* private_data);
 
     virtual            ~AudioBroadcastStreamALSA();
 
@@ -881,6 +884,11 @@ private:
     ALSADevice *        mALSADevice;
     snd_use_case_mgr_t *mUcMgr;
     AudioEventObserver *mObserver;
+    cb_func_ptr AudioSetupCompleteCB;
+    void *cbPvtData;
+    int64_t avSyncDelayUS;
+    bool avSyncFlag;
+    bool internalBufRendered;
 
     //Declare all the threads
     //Capture
@@ -909,6 +917,12 @@ private:
     bool                mPlaybackThreadAlive;
     bool                mSkipWrite;
 
+    //Timer
+    pthread_t           mTimerThread;
+    Mutex               mTimerMutex;
+    int                 mTimerfd;
+    bool                mTimerThreadAlive;
+    bool                mKillTimerThread;
 
     void                updateSampleRateChannelMode();
     void                initialization();
@@ -943,6 +957,7 @@ private:
     status_t            openPcmDevice(int devices);
     status_t            openTunnelDevice(int devices);
     void                bufferAlloc(alsa_handle_t *handle, int bufIndex);
+    void                bufferAlloc(alsa_handle_t *handle);
     void                bufferDeAlloc(int bufIndex);
     status_t            openTranscodeDevice(alsa_handle_t * handle);
     status_t            createPlaybackThread();
@@ -960,6 +975,11 @@ private:
     int32_t             writeToCompressedDriver(char *buffer, int bytes);
     void                resetPlaybackPathVariables();
     void                exitFromPlaybackThread();
+    //Timer
+    status_t            createTimerThread();
+    void                timerThreadEntry();
+    static void *       timerThreadWrapper(void *me);
+    void                 exitFromTimerThread();
     // Avsync Specifics
     void                update_input_meta_data_list_pre_decode(uint32_t type);
     void                update_input_meta_data_list_post_decode(uint32_t type,
@@ -969,6 +989,8 @@ private:
                            uint32_t remainingSamples,
                            uint32_t requiredBufferSize);
     void                update_input_meta_data_list_post_write(uint32_t type);
+    void                registerAudioSetupCompleCB(cb_func_ptr cb, void* private_data);
+    void                captureBuffers(char *bufPtr, uint32_t frameSize);
 
     //Structure to hold mem buffer information
     class BuffersAllocated {
@@ -982,6 +1004,9 @@ private:
     List<BuffersAllocated> mInputMemEmptyQueue[2];
     List<BuffersAllocated> mInputMemFilledQueue[2];
     List<BuffersAllocated> mInputBufPool[2];
+    List<BuffersAllocated> mCaptureFilledQueue;
+    List<BuffersAllocated> mCaptureEmptyQueue;
+    List<BuffersAllocated> mCapturePool;
 
     void                copyBuffers(alsa_handle_t *destHandle, List<BuffersAllocated> filledQueue);
     void                initFilledQueue(alsa_handle_t *handle, int queueIndex, int consumedIndex);
@@ -1135,7 +1160,9 @@ public:
             uint32_t channels=0,
             uint32_t sampleRate=0,
             uint32_t audioSource=0,
-            status_t *status=0);
+            status_t *status=0,
+            cb_func_ptr cb=NULL,
+            void* private_data=NULL);
     virtual    void        closeBroadcastStream(AudioBroadcastStream* out);
 
     /** This method creates and opens the audio hardware input stream */

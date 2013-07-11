@@ -862,7 +862,9 @@ AudioHardwareALSA::openBroadcastStream(uint32_t  devices,
                                        uint32_t channels,
                                        uint32_t sampleRate,
                                        uint32_t audioSource,
-                                       status_t *status)
+                                       status_t *status,
+                                       cb_func_ptr cb,
+                                       void* private_data)
 {
     Mutex::Autolock autoLock(mLock);
     status_t err = BAD_VALUE;
@@ -882,7 +884,7 @@ AudioHardwareALSA::openBroadcastStream(uint32_t  devices,
     }
 #endif
     out = new AudioBroadcastStreamALSA(this, devices, format, channels,
-                                       sampleRate, audioSource, &err);
+                                       sampleRate, audioSource, &err, cb, private_data);
     if(err != OK) {
         delete out;
         out = NULL;
