@@ -178,7 +178,7 @@ LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
 LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
 
 ifeq ($(call is-board-platform,msm8974),true)
-  LOCAL_MODULE := audio.primary.msm8974
+  LOCAL_MODULE := audio.primary.msm8974-disable
 endif
 
 ifeq ($(call is-board-platform,msm8226),true)
@@ -263,7 +263,7 @@ endif
 
 
 ifeq ($(call is-board-platform,msm8974),true)
-  LOCAL_MODULE := audio_policy.msm8974
+  LOCAL_MODULE := audio_policy.msm8974-disable
 endif
 
 ifeq ($(call is-board-platform,msm8226),true)
