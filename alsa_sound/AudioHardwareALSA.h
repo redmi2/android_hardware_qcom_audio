@@ -110,6 +110,7 @@ class AudioHardwareALSA;
 #define FENS_KEY            "fens_enable"
 #define ST_KEY              "st_enable"
 #define INCALLMUSIC_KEY     "incall_music_enabled"
+#define AUDIO_PARAMETER_KEY_FM_VOLUME "fm_volume"
 
 #define ANC_FLAG        0x00000001
 #define DMIC_FLAG       0x00000002
@@ -127,6 +128,9 @@ class AudioHardwareALSA;
 #define LPA_SESSION_ID 1
 #define TUNNEL_SESSION_ID 2
 #ifdef QCOM_USBAUDIO_ENABLED
+#define PROXY_OPEN_WAIT_TIME  20
+#define PROXY_OPEN_RETRY_COUNT 100
+
 static int USBPLAYBACKBIT_MUSIC = (1 << 0);
 static int USBPLAYBACKBIT_VOICECALL = (1 << 1);
 static int USBPLAYBACKBIT_VOIPCALL = (1 << 2);
@@ -160,9 +164,13 @@ static int USBRECBIT_FM = (1 << 3);
 #define NUM_FDS 2
 #define AFE_PROXY_SAMPLE_RATE 48000
 #define AFE_PROXY_CHANNEL_COUNT 2
+#define AFE_PROXY_PERIOD_SIZE 3072
 
 #define MAX_SLEEP_RETRY 100  /*  Will check 100 times before continuing */
 #define AUDIO_INIT_SLEEP_WAIT 50 /* 50 ms */
+
+#define SOUND_CARD_SLEEP_RETRY 5  /*  Will check 5 times before continuing */
+#define SOUND_CARD_SLEEP_WAIT 100 /* 100 ms */
 
 static uint32_t FLUENCE_MODE_ENDFIRE   = 0;
 static uint32_t FLUENCE_MODE_BROADSIDE = 1;
@@ -265,6 +273,7 @@ public:
 #endif
 
     bool mSSRComplete;
+    int mCurDevice;
 protected:
     friend class AudioHardwareALSA;
 private:
@@ -274,7 +283,7 @@ private:
     status_t setHardwareParams(alsa_handle_t *handle);
     int      deviceName(alsa_handle_t *handle, unsigned flags, char **value);
     status_t setSoftwareParams(alsa_handle_t *handle);
-    bool     platform_is_Fusion3();
+    bool     isPlatformFusion3();
     status_t getMixerControl(const char *name, unsigned int &value, int index = 0);
     status_t setMixerControl(const char *name, unsigned int value, int index = -1);
     status_t setMixerControl(const char *name, const char *);
@@ -309,6 +318,7 @@ private:
     struct mixer*  mMixer;
     int mInChannels;
     bool mIsSglte;
+    bool mIsFmEnabled;
 #ifdef SEPERATED_AUDIO_INPUT
     int mInput_source
 #endif
@@ -511,6 +521,7 @@ public:
     status_t            resume_l();
 
     void updateMetaData(size_t bytes);
+    status_t setMetaDataMode();
 
 private:
     Mutex               mLock;
@@ -550,6 +561,7 @@ private:
     static void *       eventThreadWrapper(void *me);
     void                eventThreadEntry();
     void                reset();
+    status_t            drainAndPostEOS_l();
 
     //Structure to hold mem buffer information
     class BuffersAllocated {
@@ -584,6 +596,7 @@ private:
 
     //event fd to signal the EOS and Kill from the userspace
     int mEfd;
+    bool mTunnelMode;
 
 public:
     bool mRouteAudioToA2dp;
@@ -711,9 +724,6 @@ public:
      * the software mixer will emulate this capability.
      */
     virtual status_t    setMasterVolume(float volume);
-#ifdef QCOM_FM_ENABLED
-    virtual status_t    setFmVolume(float volume);
-#endif
     /**
      * setMode is called when the audio mode changes. NORMAL mode is for
      * standard audio playback, RINGTONE when a ringtone is playing, and IN_CALL
@@ -767,6 +777,7 @@ public:
 
     status_t    startPlaybackOnExtOut(uint32_t activeUsecase);
     status_t    stopPlaybackOnExtOut(uint32_t activeUsecase);
+    status_t    setProxyProperty(uint32_t value);
     bool        suspendPlaybackOnExtOut(uint32_t activeUsecase);
 
     status_t    startPlaybackOnExtOut_l(uint32_t activeUsecase);
@@ -821,8 +832,9 @@ protected:
     void                setInChannels(int device);
 
     void                disableVoiceCall(char* verb, char* modifier, int mode, int device);
-    void                enableVoiceCall(char* verb, char* modifier, int mode, int device);
+    status_t                enableVoiceCall(char* verb, char* modifier, int mode, int device);
     bool                routeVoiceCall(int device, int	newMode);
+    bool                isAnyCallActive();
     bool                routeVoLTECall(int device, int newMode);
     bool                routeSGLTECall(int device, int newMode);
     friend class AudioSessionOutALSA;
@@ -844,10 +856,12 @@ protected:
 
     int32_t            mCurRxDevice;
     int32_t            mCurDevice;
+    int32_t            mCanOpenProxy;
     /* The flag holds all the audio related device settings from
      * Settings and Qualcomm Settings applications */
     uint32_t            mDevSettingsFlag;
-    uint32_t            mVoipStreamCount;
+    uint32_t            mVoipInStreamCount;
+    uint32_t            mVoipOutStreamCount;
     bool                mVoipMicMute;
     uint32_t            mVoipBitRate;
     uint32_t            mIncallMode;
@@ -877,6 +891,8 @@ protected:
     audio_stream_out   *mUsbStream;
     audio_hw_device_t  *mUsbDevice;
     audio_stream_out   *mExtOutStream;
+    struct resampler_itfe *mResampler;
+
 
     volatile bool       mKillExtOutThread;
     volatile bool       mExtOutThreadAlive;
@@ -894,6 +910,7 @@ protected:
       USECASE_FM = 0x10,
     };
     uint32_t mExtOutActiveUseCases;
+    status_t mStatus;
 
 public:
     bool mRouteAudioToExtOut;

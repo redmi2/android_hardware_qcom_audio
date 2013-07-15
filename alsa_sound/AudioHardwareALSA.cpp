@@ -37,6 +37,7 @@
 #include <cutils/properties.h>
 #include <media/AudioRecord.h>
 #include <hardware_legacy/power.h>
+#include <audio_utils/resampler.h>
 #include <pthread.h>
 
 #include "AudioHardwareALSA.h"
@@ -82,8 +83,8 @@ AudioHardwareInterface *AudioHardwareALSA::create() {
 }
 
 AudioHardwareALSA::AudioHardwareALSA() :
-    mALSADevice(0),mVoipStreamCount(0),mVoipMicMute(false),mVoipBitRate(0)
-    ,mCallState(0),mAcdbHandle(NULL),mCsdHandle(NULL),mMicMute(0)
+    mALSADevice(0),mVoipInStreamCount(0),mVoipOutStreamCount(0),mVoipMicMute(false),
+    mVoipBitRate(0),mCallState(0),mAcdbHandle(NULL),mCsdHandle(NULL),mMicMute(0)
 {
     FILE *fp;
     char soundCardInfo[200];
@@ -129,6 +130,8 @@ AudioHardwareALSA::AudioHardwareALSA() :
 
     if((fp = fopen("/proc/asound/cards","r")) == NULL) {
         ALOGE("Cannot open /proc/asound/cards file to get sound card info");
+        mStatus = NO_INIT;
+        return;
     } else {
         while((fgets(soundCardInfo, sizeof(soundCardInfo), fp) != NULL)) {
             ALOGV("SoundCardInfo %s", soundCardInfo);
@@ -136,6 +139,9 @@ AudioHardwareALSA::AudioHardwareALSA() :
                 codec_rev = 1;
                 break;
             } else if (strstr(soundCardInfo, "msm-snd-card")) {
+                codec_rev = 2;
+                break;
+            } else if (strstr(soundCardInfo, "msm8960-snd-card")) {
                 codec_rev = 2;
                 break;
             } else if (strstr(soundCardInfo, "msm8930-sitar-snd-card")) {
@@ -153,11 +159,32 @@ AudioHardwareALSA::AudioHardwareALSA() :
             } else if (strstr(soundCardInfo, "msm8974-taiko-liquid-snd-card")) {
                 codec_rev = 43;
                 break;
+            } else if(strstr(soundCardInfo, "no soundcards")) {
+                ALOGE("NO SOUND CARD DETECTED");
+                if(sleep_retry < SOUND_CARD_SLEEP_RETRY) {
+                    ALOGD("Sleeping for 100 ms");
+                    usleep(SOUND_CARD_SLEEP_WAIT * 1000);
+                    sleep_retry++;
+                    fseek(fp, 0, SEEK_SET);
+                    continue;
+                }
+                else {
+                    ALOGE("Failed %d attempts for sound card detection", sleep_retry);
+                    fclose(fp);
+                    mStatus = NO_INIT;
+                    return;
+                }
+            } else {
+                ALOGE("ERROR - Sound card detection");
+                fclose(fp);
+                mStatus = NO_INIT;
+                return;
             }
         }
         fclose(fp);
     }
 
+    sleep_retry = 0;
     while (audio_init_done == false && sleep_retry < MAX_SLEEP_RETRY) {
         property_get("qcom.audio.init", audio_init, NULL);
         ALOGD("qcom.audio.init is set to %s\n",audio_init);
@@ -244,6 +271,8 @@ AudioHardwareALSA::AudioHardwareALSA() :
 
     if (mUcMgr < 0) {
         ALOGE("Failed to open ucm instance: %d", errno);
+        mStatus = NO_INIT;
+        return;
     } else {
         ALOGI("ucm instance opened: %u", (unsigned)mUcMgr);
         mUcMgr->isFusion3Platform = mFusion3Platform;
@@ -288,6 +317,8 @@ AudioHardwareALSA::AudioHardwareALSA() :
     mKillExtOutThread = false;
     mExtOutThreadAlive = false;
     mExtOutThread = NULL;
+
+    mStatus = OK;
 }
 
 AudioHardwareALSA::~AudioHardwareALSA()
@@ -303,6 +334,10 @@ AudioHardwareALSA::~AudioHardwareALSA()
             it != mDeviceList.end(); ++it) {
         it->useCase[0] = 0;
         mDeviceList.erase(it);
+    }
+    if (mResampler) {
+        release_resampler(mResampler);
+        mResampler = NULL;
     }
 #ifdef QCOM_ACDB_ENABLED
      if (acdb_deallocate == NULL) {
@@ -336,10 +371,7 @@ AudioHardwareALSA::~AudioHardwareALSA()
 
 status_t AudioHardwareALSA::initCheck()
 {
-    if (!mALSADevice)
-        return NO_INIT;
-
-    return NO_ERROR;
+    return mStatus;
 }
 
 status_t AudioHardwareALSA::setVoiceVolume(float v)
@@ -378,32 +410,6 @@ status_t AudioHardwareALSA::setVoiceVolume(float v)
     return NO_ERROR;
 }
 
-#ifdef QCOM_FM_ENABLED
-status_t  AudioHardwareALSA::setFmVolume(float value)
-{
-    Mutex::Autolock autoLock(mLock);
-    status_t status = NO_ERROR;
-
-    int vol;
-
-    if (value < 0.0) {
-        ALOGW("setFmVolume(%f) under 0.0, assuming 0.0\n", value);
-        value = 0.0;
-    } else if (value > 1.0) {
-        ALOGW("setFmVolume(%f) over 1.0, assuming 1.0\n", value);
-        value = 1.0;
-    }
-    vol  = lrint((value * 0x2000) + 0.5);
-
-    ALOGV("setFmVolume(%f)\n", value);
-    ALOGV("Setting FM volume to %d (available range is 0 to 0x2000)\n", vol);
-
-    mALSADevice->setFmVolume(vol);
-
-    return status;
-}
-#endif
-
 status_t AudioHardwareALSA::setMasterVolume(float volume)
 {
     return NO_ERROR;
@@ -431,6 +437,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
     AudioParameter param = AudioParameter(keyValuePairs);
     String8 key;
     String8 value;
+    float fm_volume;
     status_t status = NO_ERROR;
     int device;
     int btRate;
@@ -500,6 +507,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         }
         mALSADevice->setFlags(mDevSettingsFlag);
         doRouting(0);
+        param.remove(key);
     }
 
 #ifdef QCOM_CSDCLIENT_ENABLED
@@ -536,6 +544,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         }
         mALSADevice->setFlags(mDevSettingsFlag);
         doRouting(0);
+        param.remove(key);
     }
 
     key = String8(AudioParameter::keyRouting);
@@ -560,6 +569,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         } else {
             mBluetoothVGS = false;
         }
+        param.remove(key);
     }
 
     key = String8(WIDEVOICE_KEY);
@@ -568,6 +578,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         if (value == "true") {
             flag = true;
         }
+
         if(mALSADevice) {
             mALSADevice->enableWideVoice(flag);
         }
@@ -589,6 +600,25 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         if (mA2dpDevice != NULL) {
             mA2dpDevice->set_parameters(mA2dpDevice,keyValuePairs);
         }
+        param.remove(key);
+    }
+
+    key = String8(AUDIO_PARAMETER_KEY_FM_VOLUME);
+
+    if (param.getFloat(key, fm_volume) == NO_ERROR) {
+        if (fm_volume < 0.0) {
+            ALOGW("set Fm Volume(%f) under 0.0, assuming 0.0\n", fm_volume);
+            fm_volume = 0.0;
+        } else if (fm_volume > 1.0) {
+            ALOGW("set Fm Volume(%f) over 1.0, assuming 1.0\n", fm_volume);
+            fm_volume = 1.0;
+        }
+        fm_volume = lrint((fm_volume * 0x2000) + 0.5);
+
+        ALOGV("set Fm Volume(%f)\n", fm_volume);
+        ALOGV("Setting FM volume to %d (available range is 0 to 0x2000)\n", fm_volume);
+
+        mALSADevice->setFmVolume(fm_volume);
         param.remove(key);
     }
 
@@ -663,9 +693,9 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
     if (param.getInt(key,state) == NO_ERROR) {
         if (mCallState != state) {
             mCallState = state;
-            doRouting(0);
+                doRouting(0);
         }
-        mCallState = state;
+        param.remove(key);
     }
     if (param.size()) {
         status = BAD_VALUE;
@@ -780,7 +810,8 @@ void AudioHardwareALSA::closeUSBRecording()
 void AudioHardwareALSA::closeUsbPlaybackIfNothingActive(){
     ALOGV("closeUsbPlaybackIfNothingActive, musbPlaybackState: %d", musbPlaybackState);
     if(!musbPlaybackState && mAudioUsbALSA != NULL) {
-        mAudioUsbALSA->exitPlaybackThread(SIGNAL_EVENT_TIMEOUT);
+        setProxyProperty(1);
+        mAudioUsbALSA->exitPlaybackThread(SIGNAL_EVENT_KILLTHREAD);
     }
 }
 
@@ -788,7 +819,7 @@ void AudioHardwareALSA::closeUsbRecordingIfNothingActive(){
     ALOGV("closeUsbRecordingIfNothingActive, musbRecordingState: %d", musbRecordingState);
     if(!musbRecordingState && mAudioUsbALSA != NULL) {
         ALOGD("Closing USB Recording Session as no stream is active");
-        mAudioUsbALSA->setkillUsbRecordingThread(true);
+        mAudioUsbALSA->exitRecordingThread(SIGNAL_EVENT_KILLTHREAD);
     }
 }
 
@@ -796,7 +827,8 @@ void AudioHardwareALSA::startUsbPlaybackIfNotStarted(){
     ALOGV("Starting the USB playback %d kill %d", musbPlaybackState,
              mAudioUsbALSA->getkillUsbPlaybackThread());
     if((!musbPlaybackState) || (mAudioUsbALSA->getkillUsbPlaybackThread() == true)) {
-        mAudioUsbALSA->startPlayback();
+           setProxyProperty(0);
+           mAudioUsbALSA->startPlayback();
     }
 }
 
@@ -815,6 +847,8 @@ status_t AudioHardwareALSA::doRouting(int device)
     int newMode = mode();
     bool isRouted = false;
 
+    if(device)
+        mALSADevice->mCurDevice = device;
     if ((device == AudioSystem::DEVICE_IN_VOICE_CALL)
 #ifdef QCOM_FM_ENABLED
         || (device == AudioSystem::DEVICE_IN_FM_RX)
@@ -1043,23 +1077,15 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
 
     status_t err = BAD_VALUE;
 #ifdef QCOM_OUTPUT_FLAGS_ENABLED
-    if (flags & AUDIO_OUTPUT_FLAG_LPA) {
+    if (flags & (AUDIO_OUTPUT_FLAG_LPA | AUDIO_OUTPUT_FLAG_TUNNEL)) {
+        int type = !(flags & AUDIO_OUTPUT_FLAG_LPA); //0 for LPA, 1 for tunnel
         AudioSessionOutALSA *out = new AudioSessionOutALSA(this, devices, *format, *channels,
-                                                           *sampleRate, 0, &err);
+                                                           *sampleRate, type, &err);
         if(err != NO_ERROR) {
+            mLock.unlock();
             delete out;
             out = NULL;
-        }
-        if (status) *status = err;
-        return out;
-    }
-
-    if (flags & AUDIO_OUTPUT_FLAG_TUNNEL) {
-        AudioSessionOutALSA *out = new AudioSessionOutALSA(this, devices, *format, *channels,
-                                                           *sampleRate, 1, &err);
-        if(err != NO_ERROR) {
-            delete out;
-            out = NULL;
+            mLock.lock();
         }
         if (status) *status = err;
         return out;
@@ -1094,7 +1120,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
                 }
         }
       if(voipstream_active == false) {
-         mVoipStreamCount = 0;
+         mVoipOutStreamCount = 0;
          mVoipMicMute = false;
          alsa_handle_t alsa_handle;
          unsigned long bufferSize;
@@ -1134,7 +1160,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
           mDeviceList.push_back(alsa_handle);
           it = mDeviceList.end();
           it--;
-          ALOGV("openoutput: mALSADevice->route useCase %s mCurDevice %d mVoipStreamCount %d mode %d", it->useCase,mCurDevice,mVoipStreamCount, mode());
+          ALOGV("openoutput: mALSADevice->route useCase %s mCurDevice %d mVoipOutStreamCount %d mode %d", it->useCase,mCurDevice,mVoipOutStreamCount, mode());
           if((mCurDevice & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
              (mCurDevice & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)||
              (mCurDevice & AudioSystem::DEVICE_OUT_PROXY)){
@@ -1165,8 +1191,14 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
       out = new AudioStreamOutALSA(this, &(*it));
       err = out->set(format, channels, sampleRate, devices);
       if(err == NO_ERROR) {
-          mVoipStreamCount++;   //increment VoipstreamCount only if success
-          ALOGD("openoutput mVoipStreamCount %d",mVoipStreamCount);
+          mVoipOutStreamCount++;   //increment VoipOutputstreamCount only if success
+          ALOGD("openoutput mVoipOutStreamCount %d",mVoipOutStreamCount);
+      } else {
+          mLock.unlock();
+          delete out;
+          out = NULL;
+          ALOGE("AudioStreamOutALSA->set() failed, return NULL");
+          mLock.lock();
       }
       if (status) *status = err;
       return out;
@@ -1455,7 +1487,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                 }
         }
         if(voipstream_active == false) {
-           mVoipStreamCount = 0;
+           mVoipInStreamCount = 0;
            mVoipMicMute = false;
            alsa_handle_t alsa_handle;
            unsigned long bufferSize;
@@ -1529,11 +1561,21 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                return NULL;
            }
         }
+        if(mVoipInStreamCount>=1){
+            ALOGE("Trying to Open Multiple inpust Stream: Not supported %d",mVoipInStreamCount);
+            return in;
+        }
         in = new AudioStreamInALSA(this, &(*it), acoustics);
         err = in->set(format, channels, sampleRate, devices);
         if(err == NO_ERROR) {
-            mVoipStreamCount++;   //increment VoipstreamCount only if success
-            ALOGD("OpenInput mVoipStreamCount %d",mVoipStreamCount);
+            mVoipInStreamCount++;   //increment VoipInputstreamCount only if success
+            ALOGD("OpenInput mVoipInStreamCount %d",mVoipInStreamCount);
+        } else {
+            mLock.unlock();
+            delete in;
+            in = NULL;
+            ALOGE("AudioStreamInALSA->set() failed, return NULL");
+            mLock.lock();
         }
         ALOGD("openInput: After Get alsahandle");
         if (status) *status = err;
@@ -1747,6 +1789,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         }
         if (err) {
            ALOGE("Error opening pcm input device");
+           mDeviceList.erase(it);
         } else {
            in = new AudioStreamInALSA(this, &(*it), acoustics);
            err = in->set(format, channels, sampleRate, devices);
@@ -1810,7 +1853,14 @@ status_t AudioHardwareALSA::dump(int fd, const Vector<String16>& args)
 size_t AudioHardwareALSA::getInputBufferSize(uint32_t sampleRate, int format, int channelCount)
 {
     size_t bufferSize = 0;
-    if (format == AUDIO_FORMAT_PCM_16_BIT) {
+    if (format == AUDIO_FORMAT_PCM_16_BIT
+#ifdef QCOM_AUDIO_FORMAT_ENABLED
+        || format == AUDIO_FORMAT_EVRC
+        || format == AUDIO_FORMAT_EVRCB
+        || format == AUDIO_FORMAT_EVRCWB
+#endif
+        || format == AUDIO_FORMAT_AMR_NB
+        || format == AUDIO_FORMAT_AMR_WB) {
         if(sampleRate == 8000 || sampleRate == 16000 || sampleRate == 32000) {
             bufferSize = (sampleRate * channelCount * 20 * sizeof(int16_t)) / 1000;
         } else if (sampleRate == 11025 || sampleRate == 12000) {
@@ -1821,7 +1871,8 @@ size_t AudioHardwareALSA::getInputBufferSize(uint32_t sampleRate, int format, in
             bufferSize = 1024 * sizeof(int16_t) * channelCount;
         }
     } else {
-        ALOGE("getInputBufferSize bad format: %d", format);
+        bufferSize = DEFAULT_IN_BUFFER_SIZE * channelCount;
+        ALOGE("getInputBufferSize bad format: %x use default input buffersize:%d", format, bufferSize);
     }
     return bufferSize;
 }
@@ -1927,7 +1978,7 @@ void AudioHardwareALSA::disableVoiceCall(char* verb, char* modifier, int mode, i
          it != mDeviceList.end(); ++it) {
         if((!strcmp(it->useCase, verb)) ||
            (!strcmp(it->useCase, modifier))) {
-            ALOGV("Disabling voice call");
+            mALSADevice->setInChannels(0);
             mALSADevice->close(&(*it));
             mALSADevice->route(&(*it), (uint32_t)device, mode);
             mDeviceList.erase(it);
@@ -1945,12 +1996,16 @@ void AudioHardwareALSA::disableVoiceCall(char* verb, char* modifier, int mode, i
    }
 #endif
 }
-void AudioHardwareALSA::enableVoiceCall(char* verb, char* modifier, int mode, int device)
+
+status_t AudioHardwareALSA::enableVoiceCall(char* verb, char* modifier, int mode,
+                                            int device)
 {
-// Start voice call
-unsigned long bufferSize = DEFAULT_VOICE_BUFFER_SIZE;
-alsa_handle_t alsa_handle;
-char *use_case;
+    // Start voice call
+    status_t status;
+    unsigned long bufferSize = DEFAULT_VOICE_BUFFER_SIZE;
+    alsa_handle_t alsa_handle;
+    char *use_case;
+
     snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
     if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
         strlcpy(alsa_handle.useCase, verb, sizeof(alsa_handle.useCase));
@@ -1983,6 +2038,14 @@ char *use_case;
     }
     mALSADevice->startVoiceCall(&(*it));
 
+    if (status == NO_ERROR) {
+        ALOGV("AudioHardwareAlsa: voice call succesfully started");
+    }
+    else {
+        ALOGE("AudioHardwareAlsa: voice call setup was unsuccesfull");
+        mDeviceList.erase(it);
+        return NO_INIT;
+    }
 #ifdef QCOM_USBAUDIO_ENABLED
     if((device & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
        (device & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)){
@@ -1992,12 +2055,16 @@ char *use_case;
        musbRecordingState |= USBRECBIT_VOICECALL;
     }
 #endif
+
+    return NO_ERROR;
 }
 
 bool AudioHardwareALSA::routeVoiceCall(int device, int newMode)
 {
-int csCallState = mCallState&0xF;
- bool isRouted = false;
+    int csCallState = mCallState&0xF;
+    bool isRouted = false;
+    status_t status;
+
  switch (csCallState) {
     case CS_INACTIVE:
         if (mCSCallActive != CS_INACTIVE) {
@@ -2011,7 +2078,7 @@ int csCallState = mCallState&0xF;
     case CS_ACTIVE:
         if (mCSCallActive == CS_INACTIVE) {
             ALOGD("doRouting: Enabling CS voice call ");
-            enableVoiceCall((char *)SND_USE_CASE_VERB_VOICECALL,
+            status = enableVoiceCall((char *)SND_USE_CASE_VERB_VOICECALL,
                 (char *)SND_USE_CASE_MOD_PLAY_VOICE, newMode, device);
             isRouted = true;
             mCSCallActive = CS_ACTIVE;
@@ -2058,8 +2125,10 @@ int csCallState = mCallState&0xF;
 
 bool AudioHardwareALSA::routeSGLTECall(int device, int newMode)
 {
-int SGLTECallState = mCallState&0xF00;
- bool isRouted = false;
+    int SGLTECallState = mCallState&0xF00;
+     bool isRouted = false;
+    status_t status;
+
  switch (SGLTECallState) {
     case CS_INACTIVE_SESSION2:
         if (mSGLTECallActive != CS_INACTIVE_SESSION2) {
@@ -2073,7 +2142,7 @@ int SGLTECallState = mCallState&0xF00;
     case CS_ACTIVE_SESSION2:
         if (mSGLTECallActive == CS_INACTIVE_SESSION2) {
             ALOGV("doRouting: Enabling CS voice call session2 ");
-            enableVoiceCall((char *)SND_USE_CASE_VERB_SGLTECALL,
+            status = enableVoiceCall((char *)SND_USE_CASE_VERB_SGLTECALL,
                 (char *)SND_USE_CASE_MOD_PLAY_SGLTE, newMode, device);
             isRouted = true;
             mSGLTECallActive = CS_ACTIVE_SESSION2;
@@ -2122,6 +2191,7 @@ int SGLTECallState = mCallState&0xF00;
 bool AudioHardwareALSA::routeVoLTECall(int device, int newMode)
 {
 int volteCallState = mCallState&0xF0;
+status_t status;
 bool isRouted = false;
 switch (volteCallState) {
     case IMS_INACTIVE:
@@ -2136,7 +2206,7 @@ switch (volteCallState) {
     case IMS_ACTIVE:
         if (mVolteCallActive == IMS_INACTIVE) {
             ALOGD("doRouting: Enabling IMS voice call ");
-            enableVoiceCall((char *)SND_USE_CASE_VERB_VOLTE,
+            status = enableVoiceCall((char *)SND_USE_CASE_VERB_VOLTE,
                 (char *)SND_USE_CASE_MOD_PLAY_VOLTE, newMode, device);
             isRouted = true;
             mVolteCallActive = IMS_ACTIVE;
@@ -2233,7 +2303,21 @@ status_t AudioHardwareALSA::startPlaybackOnExtOut_l(uint32_t activeUsecase) {
     }
     if (activeUsecase != USECASE_NONE && !mIsExtOutEnabled) {
         Mutex::Autolock autolock1(mExtOutMutex);
-        err = mALSADevice->openProxyDevice();
+         err = setProxyProperty(0);
+         if(err) {
+            ALOGE("Proxy Property Set Failedd");
+        }
+        int ProxyOpenRetryCount=PROXY_OPEN_RETRY_COUNT;
+        while(ProxyOpenRetryCount){
+            err = mALSADevice->openProxyDevice();
+            if(err) {
+                 ProxyOpenRetryCount --;
+                 usleep(PROXY_OPEN_WAIT_TIME * 1000);
+                 ALOGV("openProxyDevice failed retrying = %d", ProxyOpenRetryCount);
+            }
+            else
+               break;
+        }
         if(err) {
             ALOGE("openProxyDevice failed = %d", err);
         }
@@ -2264,6 +2348,20 @@ status_t AudioHardwareALSA::startPlaybackOnExtOut_l(uint32_t activeUsecase) {
     mExtOutCv.signal();
     return err;
 }
+
+status_t AudioHardwareALSA::setProxyProperty(uint32_t value) {
+     status_t err=NO_ERROR;
+     if(value){
+        //property_set("proxy.can.open", "true");
+        mCanOpenProxy = 1;
+     }
+     else{
+        //property_set("proxy.can.open", "false");
+        mCanOpenProxy = 0;
+     }
+     return err;
+}
+
 
 status_t AudioHardwareALSA::stopPlaybackOnExtOut(uint32_t activeUsecase) {
      Mutex::Autolock autoLock(mLock);
@@ -2303,7 +2401,7 @@ status_t AudioHardwareALSA::stopPlaybackOnExtOut_l(uint32_t activeUsecase) {
              if(err) {
                  ALOGE("closeProxyDevice failed = %d", err);
              }
-
+             err = setProxyProperty(1);
              mExtOutActiveUseCases = 0x0;
              mRouteAudioToExtOut = false;
 
@@ -2327,12 +2425,20 @@ status_t AudioHardwareALSA::openExtOutput(int device) {
             ALOGE("openA2DPOutput failed = %d",err);
             return err;
         }
-    } else if (device & AUDIO_DEVICE_OUT_ALL_USB) {
+        if(!mExtOutStream) {
+            mExtOutStream = mA2dpStream;
+        }
+#ifdef QCOM_USBAUDIO_ENABLED
+    } else if (device & AudioSystem::DEVICE_OUT_ALL_USB) {
         err= openUsbOutput();
         if(err) {
         ALOGE("openUsbPOutput failed = %d",err);
         return err;
         }
+        if(!mExtOutStream) {
+            mExtOutStream = mUsbStream;
+        }
+#endif
     }
     return err;
 }
@@ -2344,12 +2450,16 @@ status_t AudioHardwareALSA::closeExtOutput(int device) {
     Mutex::Autolock autolock1(mExtOutMutex);
     mExtOutStream = NULL;
     if (device & AudioSystem::DEVICE_OUT_ALL_A2DP) {
+        if(mExtOutStream == mA2dpStream)
+            mExtOutStream = NULL;
         err= closeA2dpOutput();
         if(err) {
             ALOGE("closeA2DPOutput failed = %d",err);
             return err;
         }
     } else if (device & AUDIO_DEVICE_OUT_ALL_USB) {
+        if(mExtOutStream == mUsbStream)
+            mExtOutStream = NULL;
         err= closeUsbOutput();
         if(err) {
             ALOGE("closeUsbPOutput failed = %d",err);
@@ -2485,6 +2595,7 @@ status_t AudioHardwareALSA::stopExtOutThread()
 void AudioHardwareALSA::switchExtOut(int device) {
 
     ALOGV("switchExtOut");
+    uint32_t sampleRate;
     Mutex::Autolock autolock1(mExtOutMutex);
     if (device & AudioSystem::DEVICE_OUT_ALL_A2DP) {
         mExtOutStream = mA2dpStream;
@@ -2492,6 +2603,37 @@ void AudioHardwareALSA::switchExtOut(int device) {
         mExtOutStream = mUsbStream;
     } else {
         mExtOutStream = NULL;
+    }
+    if ((mExtOutStream == mUsbStream) && mExtOutStream != NULL) {
+        sampleRate = mExtOutStream->common.get_sample_rate(&mExtOutStream->common);
+        if (sampleRate > AFE_PROXY_SAMPLE_RATE) {
+            ALOGW(" Requested samplerate %d is greater than supported so fall back to %d ",
+                  sampleRate,AFE_PROXY_SAMPLE_RATE);
+            sampleRate = AFE_PROXY_SAMPLE_RATE;
+        }
+        if (mResampler != NULL) {
+            release_resampler(mResampler);
+            mResampler = NULL;
+        }
+        if (sampleRate != AFE_PROXY_SAMPLE_RATE) {
+            mResampler = (struct resampler_itfe *)calloc(1, sizeof(struct resampler_itfe));
+            if (mResampler != NULL ) {
+                status_t err = create_resampler(AFE_PROXY_SAMPLE_RATE,
+                                                sampleRate,
+                                                2, //channel count
+                                                RESAMPLER_QUALITY_DEFAULT,
+                                                NULL,
+                                                &mResampler);
+                ALOGV(" sampleRate %d mResampler %p",sampleRate,mResampler);
+                if (err) {
+                    ALOGE(" Failed to create resampler");
+                    free(mResampler);
+                    mResampler = NULL;
+                }
+            } else{
+                ALOGE(" Failed to allocate memory for mResampler = %p",mResampler);
+            }
+        }
     }
 }
 
@@ -2527,6 +2669,7 @@ void AudioHardwareALSA::extOutThreadFunc() {
     void  *data;
     int err = NO_ERROR;
     ssize_t size = 0;
+    void * outbuffer= malloc(AFE_PROXY_PERIOD_SIZE);
 
     mALSADevice->resetProxyVariables();
 
@@ -2570,6 +2713,21 @@ void AudioHardwareALSA::extOutThreadFunc() {
         void *copyBuffer = data;
         numBytesRemaining = size;
         proxyBufferTime = mALSADevice->mProxyParams.mBufferTime;
+        {
+            Mutex::Autolock autolock1(mExtOutMutex);
+            if (mResampler != NULL) {
+                uint32_t inFrames = size/(AFE_PROXY_CHANNEL_COUNT*2);
+                uint32_t outFrames = inFrames;
+                mResampler->resample_from_input(mResampler,
+                                               (int16_t *)data,
+                                               &inFrames,
+                                               (int16_t *)outbuffer,
+                                               &outFrames);
+                copyBuffer = outbuffer;
+                numBytesRemaining = outFrames*(AFE_PROXY_CHANNEL_COUNT*2);
+                ALOGV("inFrames %d outFrames %d",inFrames,outFrames);
+            }
+        }
         while (err == OK && (numBytesRemaining  > 0) && !mKillExtOutThread
                 && mIsExtOutEnabled ) {
             {

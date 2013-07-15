@@ -70,6 +70,7 @@ LOCAL_SHARED_LIBRARIES := \
     libhardware \
     libc        \
     libpower    \
+    libaudioutils \
     libalsa-intf
 
 ifeq ($(TARGET_SIMULATOR),true)
@@ -89,6 +90,7 @@ LOCAL_C_INCLUDES += system/core/include
 LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
 LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
 
+LOCAL_C_INCLUDES += system/media/audio_utils/include
 ifeq ($(call is-board-platform,msm8974),true)
   LOCAL_MODULE := audio.primary.msm8974
 endif
