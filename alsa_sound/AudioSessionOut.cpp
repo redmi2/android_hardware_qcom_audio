@@ -114,15 +114,18 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
 
     if(devices == 0) {
         ALOGE("No output device specified");
+        mSessionStatus = -1;
         return;
     }
     if((format == AUDIO_FORMAT_PCM_16_BIT) && (channels == 0 || channels > 6)) {
         ALOGE("Invalid number of channels %d", channels);
+        mSessionStatus = -1;
         return;
     }
 
     if(mParent->isExtOutDevice(devices)) {
         ALOGE("Set Capture from proxy true");
+        mSessionStatus = -1;
         mParent->mRouteAudioToExtOut = true;
         if(mParent->mExtOutStream == NULL) {
             mParent->switchExtOut(devices);
@@ -135,6 +138,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
 
     if (*status != NO_ERROR) {
         ALOGE("Failed to open LPA/Tunnel Session");
+        mSessionStatus = -1;
         return;
     }
     //Creates the event thread to poll events from LPA/Compress Driver
@@ -148,7 +152,9 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
         *status = err;
     }
 
+    mSessionStatus = 0;
     *status = NO_ERROR;
+     return;
 }
 
 AudioSessionOutALSA::~AudioSessionOutALSA()
@@ -177,6 +183,10 @@ status_t AudioSessionOutALSA::setVolume(float left, float right)
     Mutex::Autolock autoLock(mLock);
     float volume;
     status_t status = NO_ERROR;
+
+    if(mSessionStatus != 0){
+        return INVALID_OPERATION;
+    }
 
     volume = (left + right) / 2;
     if (volume < 0.0) {
@@ -225,6 +235,7 @@ status_t AudioSessionOutALSA::openAudioSessionDevice(int type, int devices)
         } else {
             status = openDevice(SND_USE_CASE_MOD_PLAY_LPA, false, devices);
         }
+        ALOGD("openAudioSessionDevice - LPA status =%d", status);
     } else if (type == TUNNEL_MODE) {
         if ((use_case == NULL) || (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
                                             strlen(SND_USE_CASE_VERB_INACTIVE)))) {
@@ -234,16 +245,18 @@ status_t AudioSessionOutALSA::openAudioSessionDevice(int type, int devices)
             //for other than hifi use cases
             status = openDevice(mParent->getTunnel(false), false, devices);
         }
-        mOutputMetadataLength = sizeof(output_metadata_handle_t);
-        ALOGD("openAudioSessionDevice - mOutputMetadataLength = %d", mOutputMetadataLength);
         mTunnelMode = true;
     }
+
+    mOutputMetadataLength = sizeof(output_metadata_handle_t);
+    ALOGD("openAudioSessionDevice - mOutputMetadataLength = %d", mOutputMetadataLength);
 
     if(use_case) {
         free(use_case);
         use_case = NULL;
     }
     if(status != NO_ERROR) {
+        ALOGE("AudioSessionOut open error ");
         return status;
     }
 
@@ -258,14 +271,26 @@ status_t AudioSessionOutALSA::openAudioSessionDevice(int type, int devices)
     status_t err = mmap_buffer(mAlsaHandle->handle);
     if(err) {
         ALOGE("MMAP buffer failed - playback err = %d", err);
+        closeDevice(mAlsaHandle);
+        mAlsaHandle = NULL;
         return err;
     }
     ALOGV("buffer pointer %p ", mAlsaHandle->handle->addr);
+
+    //Set Meta data mode
+    if (type == LPA_MODE) {
+        status = setMetaDataMode();
+        if(status != NO_ERROR) {
+            return status;
+        }
+    }
 
     //4.) prepare the driver for playback and allocate the buffers
     status = pcm_prepare(mAlsaHandle->handle);
     if (status) {
         ALOGE("PCM Prepare failed - playback err = %d", err);
+        closeDevice(mAlsaHandle);
+        mAlsaHandle = NULL;
         return status;
     }
     bufferAlloc(mAlsaHandle);
@@ -276,7 +301,7 @@ status_t AudioSessionOutALSA::openAudioSessionDevice(int type, int devices)
 ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
 {
     Mutex::Autolock autoLock(mLock);
-    int err;
+    int err = 0;
 
     ALOGV("write Empty Queue size() = %d, Filled Queue size() = %d "
           "mReached EOS %d, mEosEventReceived %d bytes %d",
@@ -284,6 +309,10 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
 
     mEosEventReceived = false;
     mReachedEOS = false;
+
+    if(mSessionStatus != 0){
+        return INVALID_OPERATION;
+    }
 
     if (!bytes) {
         mReachedEOS = true;
@@ -311,46 +340,34 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
 
     mEmptyQueue.erase(it);
 
-    if (mTunnelMode) {
-        updateMetaData(bytes);
+    updateMetaData(bytes);
 
-        memcpy(buf.memBuf, &mOutputMetadataTunnel, mOutputMetadataLength);
-        ALOGD("Copy Metadata = %d, bytes = %d", mOutputMetadataLength, bytes);
+    memcpy(buf.memBuf, &mOutputMetadataTunnel, mOutputMetadataLength);
+    ALOGD("buf.memBuf  =%x , Copy Metadata = %d,  bytes = %d", buf.memBuf,mOutputMetadataLength, bytes);
 
-        if (bytes == 0) {
-            buf.bytesToWrite = 0;
-            err = pcm_write(mAlsaHandle->handle, buf.memBuf, mAlsaHandle->handle->period_size);
+    if (bytes == 0) {
+        buf.bytesToWrite = 0;
+        err = pcm_write(mAlsaHandle->handle, buf.memBuf, mAlsaHandle->handle->period_size);
 
-            //bad part is !err does not guarantee pcm_write succeeded!
-            if (!err) { //mReachedEOS is already set
-                /*
-                 * This workaround is needed to ensure EOS from the event thread
-                 * is posted when the first (only) buffer given to the driver
-                 * is a zero length buffer. Note that the compressed driver
-                 * does not interrupt the timer fd if the EOS buffer was queued
-                 * after a buffer with valid data (full or partial). So we
-                 * only need to do this in this special case.
-                 */
-                if (mFilledQueue.empty()) {
-                    mFilledQueue.push_back(buf);
-                }
+        //bad part is !err does not guarantee pcm_write succeeded!
+        if (!err) { //mReachedEOS is already set
+             /*
+              * This workaround is needed to ensure EOS from the event thread
+              * is posted when the first (only) buffer given to the driver
+              * is a zero length buffer. Note that the compressed driver
+              * does not interrupt the timer fd if the EOS buffer was queued
+              * after a buffer with valid data (full or partial). So we
+              * only need to do this in this special case.
+              */
+            if (mFilledQueue.empty()) {
+                mFilledQueue.push_back(buf);
             }
-
-            return err;
         }
+
+        return err;
     }
     ALOGV("PCM write before memcpy start");
     memcpy((buf.memBuf + mOutputMetadataLength), buffer, bytes);
-
-    //memset the remaining to 0, only for non-tunnel
-    if (!mTunnelMode) {
-        // zero out the remaining for silence
-        size_t freebytes = (mAlsaHandle->handle->period_size
-                                - (mOutputMetadataLength + bytes));
-        if ((ssize_t)freebytes > 0) { //this is a partial buffer
-            memset((buf.memBuf + mOutputMetadataLength + bytes), 0, freebytes);
-        }
-    }
 
     buf.bytesToWrite = bytes;
 
@@ -370,7 +387,8 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
 
         if (!mTunnelMode) mReachedEOS = true;
     }
-
+    int32_t * Buf = (int32_t *) buf.memBuf;
+    ALOGD(" buf.memBuf [0] = %x , buf.memBuf [1] = %x",  Buf[0], Buf[1]);
     mFilledQueue.push_back(buf);
     return err;
 }
@@ -550,6 +568,10 @@ status_t AudioSessionOutALSA::start()
     //mEosEventReceived = false;
     //mReachedEOS = false;
     //mSkipEOS = false;
+    if(mSessionStatus != 0){
+        return INVALID_OPERATION;
+    }
+
     if (mPaused) {
         ALOGD("AudioSessionOutALSA ::start mPaused true");
         status_t err = NO_ERROR;
@@ -724,8 +746,6 @@ status_t AudioSessionOutALSA::stop()
 status_t AudioSessionOutALSA::standby()
 {
     Mutex::Autolock autoLock(mParent->mLock);
-    // At this point, all the buffers with the driver should be
-    // flushed.
     status_t err = NO_ERROR;
     flush();
 
@@ -755,7 +775,19 @@ status_t AudioSessionOutALSA::standby()
         mParent->closeUsbPlaybackIfNothingActive();
     }
 #endif
+    /*
+    Acquire draining lock so that we can be sure drain is done
+    Flush will cause drain to complete, but we have to wait for it
+    */
+    // At this point, all the buffers with the driver should be
+    // flushed.
+    Mutex::Autolock autoLock1(mDrainingLock);
     mAlsaHandle->module->standby(mAlsaHandle);
+    /*
+        Since ALSA Handle is closed, make sure no operations on
+        ALSA handle happen after this
+    */
+    mSessionStatus = -1;
 
 
     if (mParent->mRouteAudioToExtOut) {
@@ -819,12 +851,12 @@ status_t AudioSessionOutALSA::getBufferInfo(buf_info **buf) {
     }
     buf_info *tempbuf = (buf_info *)malloc(sizeof(buf_info) + mInputBufferCount*sizeof(int *));
     ALOGV("Get buffer info");
-    tempbuf->bufsize = mAlsaHandle->handle->period_size;
+    tempbuf->bufsize = (mAlsaHandle->handle->period_size - mOutputMetadataLength);
     tempbuf->nBufs = mInputBufferCount;
     tempbuf->buffers = (int **)((char*)tempbuf + sizeof(buf_info));
     List<BuffersAllocated>::iterator it = mBufPool.begin();
     for (int i = 0; i < mInputBufferCount; i++) {
-        tempbuf->buffers[i] = (int *)it->memBuf;
+        tempbuf->buffers[i] = (int *)(((char *)it->memBuf) + mOutputMetadataLength);
         it++;
     }
     *buf = tempbuf;
@@ -976,7 +1008,7 @@ status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
         }
         param.remove(key);
     }
-    key = String8(AudioParameter::keyADSPStatus);
+    key = String8(AUDIO_PARAMETER_KEY_ADSP_STATUS);
     if (param.get(key, value) == NO_ERROR) {
        if (value == "ONLINE"){
            mReachedEOS = true;
@@ -1042,7 +1074,7 @@ void AudioSessionOutALSA::reset() {
 #endif
 
     if(mAlsaHandle) {
-        ALOGV("closeDevice mAlsaHandle");
+        ALOGD("closeDevice mAlsaHandle");
         closeDevice(mAlsaHandle);
         mAlsaHandle = NULL;
     }
@@ -1067,8 +1099,8 @@ void AudioSessionOutALSA::updateMetaData(size_t bytes) {
     mOutputMetadataTunnel.metadataLength = sizeof(mOutputMetadataTunnel);
     mOutputMetadataTunnel.timestamp = 0;
     mOutputMetadataTunnel.bufferLength =  bytes;
-    ALOGD("bytes = %d , mAlsaHandle->handle->period_size = %d ",
-            bytes, mAlsaHandle->handle->period_size);
+    ALOGD("bytes = %d , mAlsaHandle->handle->period_size = %d, metadata = %d ",
+            mOutputMetadataTunnel.bufferLength, mAlsaHandle->handle->period_size, mOutputMetadataTunnel.metadataLength);
 }
 
 status_t AudioSessionOutALSA::drainAndPostEOS_l()
@@ -1085,6 +1117,18 @@ status_t AudioSessionOutALSA::drainAndPostEOS_l()
 
     if (mEosEventReceived) {
         ALOGD("drainAndPostEOS called after mEosEventReceived");
+        return INVALID_OPERATION;
+    }
+
+    /*
+    To indicate to other threads that we are draining
+    and we have to wait till this is done. And take this
+    lock before unlocking mLock so that ::standby() will not
+    be able to acquire the mDrainingLock
+    */
+    Mutex::Autolock autoLock(mDrainingLock);
+    if (mSessionStatus != 0) {
+        ALOGE("ALSA Handle closed already");
         return INVALID_OPERATION;
     }
 
@@ -1129,5 +1173,22 @@ status_t AudioSessionOutALSA::drainAndPostEOS_l()
       ALOGD("Ignored EOS posting since mSkipEOS is false");
     }
     return OK;
+}
+
+status_t AudioSessionOutALSA::setMetaDataMode() {
+
+    status_t err = NO_ERROR;
+    //Call IOCTL
+    if(mAlsaHandle->handle && !mAlsaHandle->handle->start) {
+        err = ioctl(mAlsaHandle->handle->fd, SNDRV_COMPRESS_METADATA_MODE);
+        if(err < 0) {
+            ALOGE("ioctl Set metadata mode  failed = %d", err);
+        }
+    }
+    else {
+        ALOGE("ALSA pcm handle invalid / pcm driver already started");
+        err = INVALID_OPERATION;
+    }
+    return err;
 }
 }       // namespace android_audio_legacy
