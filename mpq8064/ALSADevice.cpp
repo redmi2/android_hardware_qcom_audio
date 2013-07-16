@@ -324,7 +324,15 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
         }
         handle->handle->flags &= ~(PCM_STEREO | PCM_MONO | PCM_QUAD | PCM_5POINT1 | PCM_TRIPLE | PCM_PENTA | PCM_7POINT );
         handle->handle->flags |= PCM_7POINT1;
-        handle->channels = 8;
+        if (handle->type == COMPRESSED_FORMAT &&
+            ((handle->devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL && hdmiChannels == 2) ||
+            !(handle->devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL))) {
+            handle->handle->flags &= ~PCM_7POINT1;
+            handle->handle->flags |= PCM_STEREO;
+            handle->channels = 2;
+        } else {
+            handle->channels = 8;
+        }
     } else if(handle->type & TRANSCODE_FORMAT) {
         struct snd_pcm_transcode_param transcode_param;
         property_get("ro.build.modelid",dtsModelId,"0");
