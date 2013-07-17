@@ -569,7 +569,7 @@ status_t AudioSessionOutALSA::getNextWriteTimestamp(int64_t *timeStamp)
            mRxHandleRouteFormat[i] != ROUTE_DSP_TRANSCODED_COMPRESSED) {
             if(ioctl(mRxHandle[i]->handle->fd, SNDRV_COMPRESS_TSTAMP, &tstamp)) {
                 ALOGE("Failed SNDRV_COMPRESS_TSTAMP\n");
-                return BAD_VALUE;
+                continue;
             } else {
                 ALOGV("Timestamp returned = %lld\n", tstamp.timestamp);
                 *timeStamp = tstamp.timestamp;
@@ -1220,10 +1220,20 @@ void AudioSessionOutALSA::updateStandByDevices(int device, int enable) {
         }
     } else {
         mStandByDevices &= ~device;
-        if(device & AudioSystem::DEVICE_OUT_SPDIF)
-           mStandByFormats &= ~(STANDBY_LPCM_SPDIF | STANDBY_COMPR_SPDIF);
-        if(device & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
-           mStandByFormats &= ~(STANDBY_LPCM_HDMI | STANDBY_COMPR_HDMI);
+        if(device & AudioSystem::DEVICE_OUT_SPDIF) {
+            if(mParent->mSpdifRenderFormat == COMPRESSED) {
+                mStandByFormats &= ~(STANDBY_LPCM_SPDIF | STANDBY_COMPR_SPDIF);
+            } else if(mParent->mSpdifRenderFormat == UNCOMPRESSED) {
+                mStandByFormats &= ~STANDBY_LPCM_SPDIF;
+            }
+        }
+        if(device & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+            if(mParent->mHdmiRenderFormat == COMPRESSED) {
+                mStandByFormats &= ~(STANDBY_LPCM_HDMI | STANDBY_COMPR_HDMI);
+            } else if(mParent->mHdmiRenderFormat == UNCOMPRESSED) {
+                mStandByFormats &= ~STANDBY_LPCM_HDMI;
+            }
+        }
     }
     ALOGD("updateStandByDevices device %d enable %d mStandByFormats %d mStandByDevices %d", device, enable, mStandByFormats, mStandByDevices);
 }
@@ -1816,6 +1826,15 @@ status_t AudioSessionOutALSA::closeDevice(alsa_handle_t *pHandle)
         ALOGV("useCase %s", pHandle->useCase);
         int devices = pHandle->activeDevice;
         status = mALSADevice->close(pHandle);
+        for(ALSAHandleList::iterator it = mParent->mDeviceList.begin();
+            it != mParent->mDeviceList.end(); ++it) {
+            alsa_handle_t *it_dup = &(*it);
+            if(!strcmp(it_dup->useCase, pHandle->useCase)) {
+                mALSADevice->freePlaybackUseCase(pHandle->useCase);
+                mParent->mDeviceList.erase(it);
+                break;
+            }
+        }
         if(!mConfiguringSessions) {
             if (devices & AudioSystem::DEVICE_OUT_SPDIF) {
                 mStandByDevices &= ~AudioSystem::DEVICE_OUT_SPDIF;
@@ -1829,15 +1848,6 @@ status_t AudioSessionOutALSA::closeDevice(alsa_handle_t *pHandle)
             {
                 Mutex::Autolock autolock(mParent->mDeviceStateLock);
                 updateDevicesInSessionList(devices, PLAY);
-            }
-        }
-        for(ALSAHandleList::iterator it = mParent->mDeviceList.begin();
-            it != mParent->mDeviceList.end(); ++it) {
-            alsa_handle_t *it_dup = &(*it);
-            if(!strcmp(it_dup->useCase, pHandle->useCase)) {
-                mALSADevice->freePlaybackUseCase(pHandle->useCase);
-                mParent->mDeviceList.erase(it);
-                break;
             }
         }
         if(status) {

@@ -1529,6 +1529,8 @@ private:
     void        clearA2DPActiveUseCases_l(uint32_t activeUsecase);
     uint32_t    useCaseStringToEnum(const char *usecase);
     void        standbySessionDevice(int device);
+    void        resumeComprDevice();
+    int         getPCMDevices(int devices);
 protected:
     virtual status_t    dump(int fd, const Vector<String16>& args);
     status_t            doRouting(int device);

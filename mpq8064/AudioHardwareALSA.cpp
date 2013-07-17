@@ -1069,6 +1069,7 @@ AudioHardwareALSA::closeOutputStream(AudioStreamOut* out)
         }
     }
     delete out;
+    resumeComprDevice();
 }
 #ifdef QCOM_TUNNEL_LPA_ENABLED
 AudioStreamOut *
@@ -1766,6 +1767,15 @@ uint32_t AudioHardwareALSA::useCaseStringToEnum(const char *usecase) {
     return activeUsecase;
 }
 
+int AudioHardwareALSA::getPCMDevices(int devices) {
+    for(ALSAHandleList::iterator it = mDeviceList.begin();
+        it != mDeviceList.end(); ++it) {
+        if(it->type & ROUTE_COMPRESSED)
+            devices &= ~it->activeDevice;
+    }
+    return devices;
+}
+
 void AudioHardwareALSA::standbySessionDevice(int device) {
     List <AudioStreamOut * >::iterator it;
     String8 key = String8(STANDBY_DEVICES_KEY);
@@ -1774,6 +1784,34 @@ void AudioHardwareALSA::standbySessionDevice(int device) {
     for(it = mSessions.begin(); it != mSessions.end(); ++it)
         (*it)->setParameters(param.toString());
 }
+
+void AudioHardwareALSA::resumeComprDevice() {
+    ALOGV("updateDevicesOfOtherSessions- device : %d, state: %d", device, state);
+    List <AudioStreamOut * >::iterator it;
+    String8 key;
+    int devices;
+    if(mSessions.size() > 0) {
+        it = mSessions.end();
+        it--;
+        /*Search for the compressed handle first. If match found then skip the others.*/
+        key = String8(COMPR_STANDBY_DEVICES_KEY);
+        AudioParameter param = AudioParameter((*it)->getParameters(key));
+        if(param.getInt(key, devices) == NO_ERROR) {
+            /*Standby other devices*/
+            standbySessionDevice(devices);
+            /*Resume other devices*/
+            if(devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
+                mHdmiRenderFormat = COMPRESSED;
+            if(devices & AudioSystem::DEVICE_OUT_SPDIF)
+                mSpdifRenderFormat = COMPRESSED;
+            key = String8(RESUME_DEVICES_KEY);
+            param = AudioParameter(key);
+            param.addInt(key, devices);
+            (*it)->setParameters(param.toString());
+        }
+    }
+}
+
 /**
 * device: Devices for which the state should be modified in other sessions
 * state: State of devices in the other sessions STANDBY/PLAY
@@ -1790,28 +1828,7 @@ void AudioHardwareALSA::updateDevicesOfOtherSessions(int device, int state)
     if(state == STANDBY) {
         standbySessionDevice(device);
     } else if(state == PLAY) {
-        /* FCFS for the compressed handles*/
-        for(it = mSessions.begin(); device && it != mSessions.end(); ++it) {
-            int devices;
-            /*Search for the compressed handle first. If match found then skip the others.*/
-            key = String8(COMPR_STANDBY_DEVICES_KEY);
-            AudioParameter param = AudioParameter((*it)->getParameters(key));
-            if(param.getInt(key, devices) == NO_ERROR && (devices & device)) {
-                devices = devices & device;
-                /*Standby other devices*/
-                standbySessionDevice(devices);
-                /*Resume other devices*/
-                if(devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
-                    mHdmiRenderFormat = COMPRESSED;
-                if(devices & AudioSystem::DEVICE_OUT_SPDIF)
-                    mSpdifRenderFormat = COMPRESSED;
-                key = String8(RESUME_DEVICES_KEY);
-                param = AudioParameter(key);
-                param.addInt(key, devices);
-                (*it)->setParameters(param.toString());
-                device &= ~devices;
-            }
-        }
+        int device = getPCMDevices(device);
         if(device & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
             mHdmiRenderFormat = UNCOMPRESSED;
         if(device & AudioSystem::DEVICE_OUT_SPDIF)
