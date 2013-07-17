@@ -52,6 +52,9 @@
 #define MIN_DRIFT_CORRECTION 21 // In Micorseconds
 #define BUFFERS_SAMPLED_FOR_DRIFT_MEASUREMENT 1000
 #define MAX_SUPPORTED_DRIFT_CORRECTION_PPM 105
+#define DIFF_BUFFERS 4 // Differenc between hw_ptr and appl_ptr after
+                       // overflow on the capture path.
+#define COMPRE_CAPTURE_NUM_PERIODS 16
 #define COMPRE_CAPTURE_HEADER_SIZE (sizeof(struct snd_compr_audio_info))
 #define PCM_CAPTURE_PATH_DELAY_US 15000 //In usec
 #define COMPRESS_CAPTURE_PATH_DELAY_US 30000 //In usec
@@ -2119,6 +2122,34 @@ ssize_t AudioBroadcastStreamALSA::readFromCapturePath(char *buffer)
 
             ALOGV("err_poll = %d",err_poll);
             continue;
+        } else if ( mAvail > (mFrames * COMPRE_CAPTURE_NUM_PERIODS)){
+             // The Read queue has overflown, make the appl_ptr
+             // in range.
+             // For this we drop samples by incrementing the appl_ptr and
+             // reducing the difference to DIFF_BUFFERS.
+             // This is to ensure that we have enough data buffered so that we dont hit
+             // underrun on the output side.
+             capture_handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN | SNDRV_PCM_SYNC_PTR_HWSYNC);
+             status = sync_ptr(capture_handle);
+             if(status == EPIPE) {
+                if(status != NO_ERROR ) {
+                   ALOGE("Error: Sync ptr end returned %d", status);
+                   return status;
+                }
+             }
+             ALOGE("Reduce the difference between appl_ptr %ld and hw_ptr %ld ",
+                    capture_handle->sync_ptr->c.control.appl_ptr, capture_handle->sync_ptr->s.status.hw_ptr);
+
+             capture_handle->sync_ptr->c.control.appl_ptr = capture_handle->sync_ptr->s.status.hw_ptr - (DIFF_BUFFERS * mFrames);
+             capture_handle->sync_ptr->flags = 0;
+             status = sync_ptr(capture_handle);
+             if(status == EPIPE) {
+                 if(status != NO_ERROR ) {
+                    ALOGE("Error: Sync ptr end returned %d", status);
+                    return status;
+                 }
+             }
+             continue;
         }
         break;
     }
