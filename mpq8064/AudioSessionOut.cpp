@@ -784,10 +784,15 @@ void AudioSessionOutALSA::updateDeviceSupportedFormats()
     } else {
         mHdmiFormat = mHdmiOutputFormat;
         /*
-        If MS11 supported formats, sample rate <= 24000 are not transcoded
+        If SPDIF is already compressed, force HDMI to uncompressed
         */
-        if(usecaseDecodeHdmiSpdif[NUM_STATES_FOR_EACH_DEVICE_FMT*index+ROUTE_FORMAT_IDX]
+        if (mSpdifFormat != UNCOMPRESSED && mSpdifFormat != INVALID_FORMAT) {
+           mHdmiFormat = UNCOMPRESSED;
+        } else if(usecaseDecodeHdmiSpdif[NUM_STATES_FOR_EACH_DEVICE_FMT*index+ROUTE_FORMAT_IDX]
                                  [mHdmiFormat] == FORMAT_COMPR) {
+            /*
+            If MS11 supported formats, sample rate <= 24000 are not transcoded
+            */
             if((isMS11SupportedFormats(mFormat) && (mSampleRate <= 24000))) {
                 ALOGD("fallback to uncompressed as sample rate is less than 24kHz");
                 mHdmiFormat = UNCOMPRESSED;
