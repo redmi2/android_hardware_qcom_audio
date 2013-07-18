@@ -303,7 +303,6 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
              return BAD_VALUE;
         }
         if (handle->type & TRANSCODE_FORMAT) {
-             handle->handle->flags |= PCM_TUNNEL;
              property_get("ro.build.modelid",dtsModelId,"0");
              ALOGD("from property modelId=%s,length=%d\n",
                 dtsModelId, strlen(dtsModelId));
@@ -334,6 +333,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
         } else {
             handle->channels = 8;
         }
+        handle->handle->flags |= PCM_TUNNEL;
     } else if(handle->type & TRANSCODE_FORMAT) {
         struct snd_pcm_transcode_param transcode_param;
         property_get("ro.build.modelid",dtsModelId,"0");
