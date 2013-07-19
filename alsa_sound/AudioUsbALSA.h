@@ -47,6 +47,8 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.*/
 #define SIGNAL_EVENT_TIMEOUT 1
 #define SIGNAL_EVENT_KILLTHREAD 2
 
+#define PROXY_OPEN_RETRY_COUNT 100
+#define PROXY_OPEN_WAIT_TIME 20
 #define BUFFSIZE 1000000
 
 extern "C" {
@@ -123,7 +125,7 @@ private:
 
     status_t closeDevice(pcm *handle);
 
-    status_t getCap(char * type, int &channels, int &sampleRate);
+    status_t getCap(char * type, int &channels, int &sampleRate, int cardId);
     int         getnumOfRates(char *rateStr);
     int         mchannelsPlayback;
     int         msampleRatePlayback;
@@ -145,6 +147,7 @@ public:
     }
 
     void setProxySoundCard(int soundCard);
+    status_t queryUSBSoundCards();
 
     //Playback
     void startPlayback();

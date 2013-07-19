@@ -26,6 +26,7 @@
 #include "AudioHardwareALSA.h"
 #include <media/AudioRecord.h>
 #include <dlfcn.h>
+#include <math.h>
 extern "C" {
 #ifdef QCOM_CSDCLIENT_ENABLED
 static int (*csd_disable_device)();
@@ -88,6 +89,8 @@ ALSADevice::ALSADevice() {
     mCallMode = AUDIO_MODE_NORMAL;
     mInChannels = 0;
     mIsFmEnabled = false;
+    //Initialize fm volume to value corresponding to unity volume
+    mFmVolume = lrint((0.0 * 0x2000) + 0.5);
     char value[128], platform[128], baseband[128];
 
     mStatus = OK;
@@ -246,6 +249,18 @@ static bool shouldUseHandsetAnc(int flags, int inChannels)
     return (flags & ANC_FLAG) && (inChannels == 1);
 }
 
+static bool shouldUseFBAnc(void)
+{
+  char prop_anc[128] = "feedforward";
+
+  property_get("persist.headset.anc.type", prop_anc, "0");
+  if (!strncmp("feedback", prop_anc, sizeof("feedback"))) {
+    ALOGD("FB ANC headset type enabled\n");
+    return true;
+  }
+  return false;
+}
+
 static int adjustFlagsForCsd(int flags, const char *rxDevice)
 {
     int adjustedFlags = flags;
@@ -381,6 +396,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
           codec_id = get_compressed_format("MP3");
           ALOGD("### MP3 CODEC codec_id %d",codec_id);
         }
+#ifdef QCOM_DS1_DOLBY_DDP
         else if (handle->format == AUDIO_FORMAT_EAC3) {
           int length;
           codec_id = get_compressed_format("EAC3");
@@ -394,7 +410,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
           } else {
               compr_params.codec.options.ddp.params_length = 0;
           }
-#ifndef DOLBY_DAP
+#ifndef QCOM_DS1_DOLBY_DAP
           setDMID();
 #endif
         }
@@ -411,10 +427,11 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
           } else {
               compr_params.codec.options.ddp.params_length = 0;
           }
-#ifndef DOLBY_DAP
+#ifndef QCOM_DS1_DOLBY_DAP
           setDMID();
 #endif
         }
+#endif
         else {
             return UNKNOWN_ERROR;
         }
@@ -1467,12 +1484,13 @@ Error:
 status_t ALSADevice::setFmVolume(int value)
 {
     status_t err = NO_ERROR;
+
+    mFmVolume = value;
     if (!mIsFmEnabled) {
         return INVALID_OPERATION;
     }
 
     setMixerControl("Internal FM RX Volume",value,0);
-    mFmVolume = value;
 
     return err;
 }
@@ -1597,7 +1615,7 @@ status_t ALSADevice::route(alsa_handle_t *handle, uint32_t devices, int mode)
 
     ALOGD("route: devices 0x%x in mode %d", devices, mode);
     mCallMode = mode;
-#ifdef DOLBY_DAP
+#ifdef QCOM_DS1_DOLBY_DAP
     if (devices) {
         setEndpDevice(devices);
         setDMID();
@@ -1769,6 +1787,8 @@ char *ALSADevice::getUCMDeviceFromAcdbId(int acdb_id)
              return strdup(SND_USE_CASE_DEV_TTY_HEADSET_RX);
         case DEVICE_ANC_HEADSET_STEREO_RX_ACDB_ID:
              return strdup(SND_USE_CASE_DEV_ANC_HEADSET);
+        case DEVICE_ANC_FB_HEADSET_STEREO_RX_ACDB_ID:
+             return strdup(SND_USE_CASE_DEV_ANC_FB_HEADSET);
         default:
              return NULL;
      }
@@ -1837,7 +1857,11 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
         } else if ((devices & AudioSystem::DEVICE_OUT_PROXY) &&
                    ((devices & AudioSystem::DEVICE_OUT_ANC_HEADSET)||
                     (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE)) ) {
-            return strdup(SND_USE_CASE_DEV_PROXY_RX_ANC_HEADSET);
+            if (shouldUseFBAnc()) {
+                return strdup(SND_USE_CASE_DEV_PROXY_RX_ANC_FB_HEADSET);
+            } else {
+                return strdup(SND_USE_CASE_DEV_PROXY_RX_ANC_HEADSET);
+            }
         } else if ((devices & AudioSystem::DEVICE_OUT_SPEAKER) &&
             ((devices & AudioSystem::DEVICE_OUT_ANC_HEADSET) ||
             (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE))) {
@@ -1878,9 +1902,17 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
             if (mDevSettingsFlag & ANC_FLAG) {
                 if (mCallMode == AUDIO_MODE_IN_CALL ||
                     mCallMode == AUDIO_MODE_IN_COMMUNICATION) {
-                    return strdup(SND_USE_CASE_DEV_VOC_ANC_HEADSET); /* Voice ANC HEADSET RX */
+                    if (shouldUseFBAnc()) {
+                        return strdup(SND_USE_CASE_DEV_VOC_ANC_FB_HEADSET); /* Voice ANC FB HEADSET RX */
+                    } else {
+                        return strdup(SND_USE_CASE_DEV_VOC_ANC_HEADSET); /* Voice ANC HEADSET RX */
+                    }
                 } else {
-                    return strdup(SND_USE_CASE_DEV_ANC_HEADSET); /* ANC HEADSET RX */
+                    if (shouldUseFBAnc()) {
+                        return strdup(SND_USE_CASE_DEV_ANC_FB_HEADSET); /* ANC FB HEADSET RX */
+                    } else {
+                        return strdup(SND_USE_CASE_DEV_ANC_HEADSET); /* ANC HEADSET RX */
+                    }
                 }
             } else {
                 if (mCallMode == AUDIO_MODE_IN_CALL ||
@@ -1895,7 +1927,11 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
                    ((devices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) ||
                     (devices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE))) {
             if (mDevSettingsFlag & ANC_FLAG) {
-                return strdup(SND_USE_CASE_DEV_PROXY_RX_ANC_HEADSET);
+                if (shouldUseFBAnc()) {
+                    return strdup(SND_USE_CASE_DEV_PROXY_RX_ANC_FB_HEADSET);
+                } else {
+                    return strdup(SND_USE_CASE_DEV_PROXY_RX_ANC_HEADSET);
+                }
             } else {
                 return strdup(SND_USE_CASE_DEV_PROXY_RX_HEADSET);
             }
@@ -1903,9 +1939,17 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
                    (devices & AudioSystem::DEVICE_OUT_ANC_HEADPHONE)) {
             if (mCallMode == AUDIO_MODE_IN_CALL ||
                 mCallMode == AUDIO_MODE_IN_COMMUNICATION) {
-                return strdup(SND_USE_CASE_DEV_VOC_ANC_HEADSET); /* Voice ANC HEADSET RX */
+                if (shouldUseFBAnc()) {
+                    return strdup(SND_USE_CASE_DEV_VOC_ANC_FB_HEADSET); /* Voice ANC FB HEADSET RX */
+                } else {
+                    return strdup(SND_USE_CASE_DEV_VOC_ANC_HEADSET); /* Voice ANC HEADSET RX */
+                }
             } else {
-                return strdup(SND_USE_CASE_DEV_ANC_HEADSET); /* ANC HEADSET RX */
+                if (shouldUseFBAnc()) {
+                    return strdup(SND_USE_CASE_DEV_ANC_FB_HEADSET); /* ANC FB HEADSET RX */
+                } else {
+                    return strdup(SND_USE_CASE_DEV_ANC_HEADSET); /* ANC HEADSET RX */
+                }
             }
 #endif
         } else if ((devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO) ||
@@ -2521,7 +2565,7 @@ status_t ALSADevice::setDMID()
     return (err < 0) ? BAD_VALUE : NO_ERROR;
 }
 
-#ifdef DOLBY_DAP
+#ifdef QCOM_DS1_DOLBY_DAP
 status_t ALSADevice::setEndpDevice(int value)
 {
     ALOGD("setEndpDevice: device %d", value);
@@ -3053,6 +3097,7 @@ status_t ALSADevice::getEDIDData(char *hdmiEDIDData)
     return err;
 }
 
+#ifdef QCOM_DS1_DOLBY_DDP
 status_t ALSADevice::updateDDPEndpTable(int device, int dev_ch_cap,
                                         int param_id, int param_val)
 {
@@ -3134,6 +3179,7 @@ status_t ALSADevice::setDDPEndpParams(alsa_handle_t *handle,
     }
     return NO_ERROR;
 }
+#endif
 
 #ifdef SEPERATED_AUDIO_INPUT
 void s_setInput(int input)
