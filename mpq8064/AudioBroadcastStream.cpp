@@ -2041,12 +2041,14 @@ status_t AudioBroadcastStreamALSA::doRoutingSetup()
     }
 
     //flush data
-    struct pcm * capture_handle = (struct pcm *)mCaptureHandle->handle;
-    ALOGV("Flush data after completing routing setup");
-    pcm_prepare(mCaptureHandle->handle);
-    if(!capture_handle->start) {
-        if(ioctl(capture_handle->fd, SNDRV_PCM_IOCTL_START))
-            ALOGV("IOCTL start failed");
+    if(mCaptureHandle != NULL){
+         struct pcm * capture_handle = (struct pcm *)mCaptureHandle->handle;
+         ALOGV("Flush data after completing routing setup");
+         pcm_prepare(mCaptureHandle->handle);
+         if(!capture_handle->start) {
+            if(ioctl(capture_handle->fd, SNDRV_PCM_IOCTL_START))
+               ALOGV("IOCTL start failed");
+         }
     }
     mRoutingSetupDone = true;
     if(avSyncDelayUS > 0) {
