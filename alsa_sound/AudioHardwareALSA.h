@@ -125,6 +125,7 @@ class AudioHardwareALSA;
 #define INCALLMUSIC_KEY     "incall_music_enabled"
 #define VSID_KEY            "vsid"
 #define CALL_STATE_KEY      "call_state"
+#define VOLUME_BOOST_KEY    "volume_boost"
 #define AUDIO_PARAMETER_KEY_FM_VOLUME "fm_volume"
 
 
@@ -347,6 +348,8 @@ static struct mDDPEndpParams {
 #define VOICE2_SESSION_VSID 0x10DC1000
 #define VOLTE_SESSION_VSID  0x10C02000
 #define ALL_SESSION_VSID    0xFFFFFFFF
+#define DEFAULT_MUTE_RAMP_DURATION      500
+#define DEFAULT_VOLUME_RAMP_DURATION_MS 20
 
 static uint32_t FLUENCE_MODE_ENDFIRE   = 0;
 static uint32_t FLUENCE_MODE_BROADSIDE = 1;
@@ -492,6 +495,8 @@ public:
 #endif
 #ifdef QCOM_ACDB_ENABLED
     void     setACDBHandle(void*);
+    int getTxACDBID();
+    int getRxACDBID();
 #endif
     void     setSpkrProtHandle(AudioSpeakerProtection*);
 
@@ -538,6 +543,8 @@ private:
     char mMicType[25];
     char mCurRxUCMDevice[50];
     char mCurTxUCMDevice[50];
+    int mTxACDBID;
+    int mRxACDBID;
     //fluence mode value: FLUENCE_MODE_BROADSIDE or FLUENCE_MODE_ENDFIRE
     uint32_t mFluenceMode;
     int mFmVolume;
@@ -1172,6 +1179,7 @@ protected:
     int mVoice2CallState;
     int mCallState;
     uint32_t mVSID;
+    int mVoiceVolFeatureSet;
     int mIsFmActive;
     bool mBluetoothVGS;
     bool mFusion3Platform;
@@ -1211,6 +1219,8 @@ protected:
       USECASE_HIFI_TUNNEL2 = 0x20,
       USECASE_HIFI_TUNNEL3 = 0x40,
       USECASE_HIFI_TUNNEL4 = 0x80,
+      USECASE_HIFI_INCALL_DELIVERY = 0x100,
+      USECASE_HIFI_INCALL_DELIVERY2 = 0x200,
     };
     uint32_t mExtOutActiveUseCases;
     status_t mStatus;
