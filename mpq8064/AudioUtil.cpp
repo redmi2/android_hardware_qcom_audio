@@ -278,31 +278,29 @@ bool AudioUtil::getSpeakerAllocation(EDID_AUDIO_INFO* pInfo) {
             ALOGV("pInfo->nSpeakerAllocation %x %x %x\n", data[0],data[1],data[2]);
 
 
-            if (pInfo->nSpeakerAllocation[0] & BIT(7)) {
+            if (pInfo->nSpeakerAllocation[0] & BIT(7))
                  ALOGV("FLW/FRW");
-            } else if (pInfo->nSpeakerAllocation[0] & BIT(6)) {
+            if (pInfo->nSpeakerAllocation[0] & BIT(6))
                  ALOGV("RLC/RRC");
-            } else if (pInfo->nSpeakerAllocation[0] & BIT(5)) {
+            if (pInfo->nSpeakerAllocation[0] & BIT(5))
                  ALOGV("FLC/FRC");
-            } else if (pInfo->nSpeakerAllocation[0] & BIT(4)) {
+            if (pInfo->nSpeakerAllocation[0] & BIT(4))
                 ALOGV("RC");
-            } else if (pInfo->nSpeakerAllocation[0] & BIT(3)) {
+            if (pInfo->nSpeakerAllocation[0] & BIT(3))
                 ALOGV("RL/RR");
-            } else if (pInfo->nSpeakerAllocation[0] & BIT(2)) {
+            if (pInfo->nSpeakerAllocation[0] & BIT(2))
                 ALOGV("FC");
-            } else if (pInfo->nSpeakerAllocation[0] & BIT(1)) {
+            if (pInfo->nSpeakerAllocation[0] & BIT(1))
                 ALOGV("LFE");
-            } else if (pInfo->nSpeakerAllocation[0] & BIT(0)) {
+            if (pInfo->nSpeakerAllocation[0] & BIT(0))
                 ALOGV("FL/FR");
-            }
 
-            if (pInfo->nSpeakerAllocation[1] & BIT(2)) {
+            if (pInfo->nSpeakerAllocation[1] & BIT(2))
                 ALOGV("FCH");
-            } else if (pInfo->nSpeakerAllocation[1] & BIT(1)) {
+            if (pInfo->nSpeakerAllocation[1] & BIT(1))
                 ALOGV("TC");
-            } else if (pInfo->nSpeakerAllocation[1] & BIT(0)) {
+            if (pInfo->nSpeakerAllocation[1] & BIT(0))
                 ALOGV("FLH/FRH");
-            }
         }
     }
     if (original_data_ptr)
@@ -353,6 +351,8 @@ void AudioUtil::updateChannelMap(EDID_AUDIO_INFO* pInfo)
             pInfo->channelMap[6] = PCM_CHANNEL_RLC;
             pInfo->channelMap[7] = PCM_CHANNEL_RRC;
         }
+        // higher channel are not defined by LPASS
+        pInfo->nSpeakerAllocation[0] &= 0x3f;
         if(pInfo->nSpeakerAllocation[0] & BIT(7)) {
             pInfo->channelMap[6] = 0; // PCM_CHANNEL_FLW; but not defined by LPASS
             pInfo->channelMap[7] = 0; // PCM_CHANNEL_FRW; but not defined by LPASS
