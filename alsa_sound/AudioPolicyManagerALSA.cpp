@@ -815,7 +815,8 @@ audio_io_handle_t AudioPolicyManager::getOutput(AudioSystem::stream_type stream,
                                                    (audio_output_flags_t)flags);
     if (profile != NULL) {
         AudioOutputDescriptor *outputDesc = NULL;
-        if(!((flags & AUDIO_OUTPUT_FLAG_LPA) || (flags & AUDIO_OUTPUT_FLAG_TUNNEL))) {
+        if(!((flags & AUDIO_OUTPUT_FLAG_LPA) || (flags & AUDIO_OUTPUT_FLAG_TUNNEL) ||
+             (flags & AUDIO_OUTPUT_FLAG_NU_DIRECT))) {
             for (size_t i = 0; i < mOutputs.size(); i++) {
                 AudioOutputDescriptor *desc = mOutputs.valueAt(i);
                 if (!desc->isDuplicated() && (profile == desc->mProfile)) {
@@ -1391,7 +1392,7 @@ status_t AudioPolicyManager::checkOutputsForDevice(audio_devices_t device,
             desc->mDevice = device;
             audio_io_handle_t output = 0;
             if (!(desc->mFlags & AUDIO_OUTPUT_FLAG_LPA || desc->mFlags & AUDIO_OUTPUT_FLAG_TUNNEL ||
-                desc->mFlags & AUDIO_OUTPUT_FLAG_VOIP_RX)) {
+                desc->mFlags & AUDIO_OUTPUT_FLAG_VOIP_RX || desc->mFlags & AUDIO_OUTPUT_FLAG_NU_DIRECT)) {
                 output =  mpClientInterface->openOutput(profile->mModule->mHandle,
                                                         &desc->mDevice,
                                                         &desc->mSamplingRate,
@@ -2330,6 +2331,7 @@ AudioPolicyManagerBase::IOProfile *AudioPolicyManager::getProfileForDirectOutput
 {
     if( !((flags & AUDIO_OUTPUT_FLAG_LPA)   ||
           (flags & AUDIO_OUTPUT_FLAG_TUNNEL)||
+          (flags & AUDIO_OUTPUT_FLAG_NU_DIRECT)||
           (flags & AUDIO_OUTPUT_FLAG_VOIP_RX)
 #ifdef QCOM_INCALL_MUSIC_ENABLED
           || (flags & AUDIO_OUTPUT_FLAG_INCALL_MUSIC)

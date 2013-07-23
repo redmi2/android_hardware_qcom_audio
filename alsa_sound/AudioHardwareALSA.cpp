@@ -1859,11 +1859,12 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
         && !(flags & AUDIO_OUTPUT_FLAG_INCALL_MUSIC)
 #endif
         && ((devices == AUDIO_DEVICE_OUT_AUX_DIGITAL)
+            || (*format == AUDIO_FORMAT_PCM_16_BIT)
 #ifdef QCOM_WFD_ENABLED
-        || (devices == AudioSystem::DEVICE_OUT_PROXY)
+            || (devices == AudioSystem::DEVICE_OUT_PROXY)
 #endif
         )) {
-        ALOGD("Multi channel PCM");
+        ALOGD("Direct Output - PCM format");
         alsa_handle_t alsa_handle;
         EDID_AUDIO_INFO info = { 0 };
 
