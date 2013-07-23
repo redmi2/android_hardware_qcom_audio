@@ -453,7 +453,7 @@ status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
     String8 keyStandby = String8(STANDBY_DEVICES_KEY);
     String8 keyResume = String8(RESUME_DEVICES_KEY);
     int device;
-    if (param.getInt(key, device) == NO_ERROR) {
+    if (param.getInt(key, device) == NO_ERROR && device) {
         // Ignore routing if device is 0.
         if(device) {
             Mutex::Autolock autoLock(mControlLock);
@@ -472,7 +472,7 @@ status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
             doRouting(device);
         }
         param.remove(key);
-    } else if(param.getInt(keyStandby, device) == NO_ERROR) {
+    } else if(param.getInt(keyStandby, device) == NO_ERROR && device) {
         if((device & mStandByDevices) == device || mConfiguringSessions)
             return NO_ERROR;
         Mutex::Autolock autoLock(mControlLock);
@@ -481,7 +481,7 @@ status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
         doRouting(mDevices & ~mStandByDevices);
         mConfiguringSessions = false;
         ALOGD("set mStandByFormats = %d", mStandByFormats);
-    } else if (param.getInt(keyResume, device) == NO_ERROR) {
+    } else if (param.getInt(keyResume, device) == NO_ERROR && device) {
         if (!isDeviceinStandByFormats(device) || mConfiguringSessions)
             return NO_ERROR;
         Mutex::Autolock autoLock(mControlLock);

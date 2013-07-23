@@ -108,7 +108,7 @@ status_t AudioStreamOutALSA::setParameters(const String8& keyValuePairs) {
     String8 keyStandby = String8(STANDBY_DEVICES_KEY);
     String8 keyResume = String8(RESUME_DEVICES_KEY);
     int device;
-    if(param.getInt(keyStandby, device) == NO_ERROR) {
+    if(param.getInt(keyStandby, device) == NO_ERROR && device) {
         if(mHandle->handle == NULL) {
            mHandle->activeDevice &= ~device;
            if(mHandle->activeDevice == 0)
@@ -121,7 +121,7 @@ status_t AudioStreamOutALSA::setParameters(const String8& keyValuePairs) {
                  mHandle->activeDevice & (~device),
                  mHandle->mode);
         }
-    } else if (param.getInt(keyResume, device) == NO_ERROR) {
+    } else if (param.getInt(keyResume, device) == NO_ERROR && device) {
         if(mHandle->devices & device) {
             int devices = mHandle->devices;
             if(mHandle->handle)

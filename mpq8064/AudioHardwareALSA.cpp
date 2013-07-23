@@ -1796,7 +1796,8 @@ void AudioHardwareALSA::resumeComprDevice() {
         /*Search for the compressed handle first. If match found then skip the others.*/
         key = String8(COMPR_STANDBY_DEVICES_KEY);
         AudioParameter param = AudioParameter((*it)->getParameters(key));
-        if(param.getInt(key, devices) == NO_ERROR) {
+        if(param.getInt(key, devices) == NO_ERROR &&
+           (devices & AudioSystem::DEVICE_OUT_ALL)) {
             /*Standby other devices*/
             standbySessionDevice(devices);
             /*Resume other devices*/
@@ -1828,7 +1829,7 @@ void AudioHardwareALSA::updateDevicesOfOtherSessions(int device, int state)
     if(state == STANDBY) {
         standbySessionDevice(device);
     } else if(state == PLAY) {
-        int device = getPCMDevices(device);
+        device = getPCMDevices(device);
         if(device & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
             mHdmiRenderFormat = UNCOMPRESSED;
         if(device & AudioSystem::DEVICE_OUT_SPDIF)
