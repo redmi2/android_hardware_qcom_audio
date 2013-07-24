@@ -2656,9 +2656,9 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
     return status;
 }
 
-status_t AudioBroadcastStreamALSA::pause_l()
+status_t AudioBroadcastStreamALSA::pause()
 {
-    ALOGE("pause");
+    ALOGD("pause");
     if(mPcmRxHandle) {
         if (ioctl(mPcmRxHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE,1) < 0) {
             ALOGE("PAUSE failed for use case %s", mPcmRxHandle->useCase);
@@ -2687,8 +2687,9 @@ status_t AudioBroadcastStreamALSA::pause_l()
     return NO_ERROR;
 }
 
-status_t AudioBroadcastStreamALSA::resume_l()
+status_t AudioBroadcastStreamALSA::resume()
 {
+  ALOGD("resume");
     if (mRouteAudioToA2dp) {
         ALOGD("startA2dpPlayback - resume - usecase %x", mA2dpUseCase);
         status_t status = mParent->startA2dpPlayback_l(mA2dpUseCase);
