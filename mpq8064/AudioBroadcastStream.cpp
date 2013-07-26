@@ -587,6 +587,7 @@ void AudioBroadcastStreamALSA::initialization()
     mWMAConfigDataSet        = false;
     mDDFirstFrameBuffered    = false;
     memset(&mReadMetaData, 0, sizeof(mReadMetaData));
+    mPaused                  = false;
 
     // Thread
     mCaptureThread           = NULL;
@@ -639,6 +640,7 @@ void AudioBroadcastStreamALSA::initialization()
     avSyncFlag                = 0;
     avSyncDelayUS             = 0;
     internalBufRendered       = 0;
+    mDevSwtReq                = 0;
     return;
 }
 
@@ -1856,6 +1858,7 @@ void AudioBroadcastStreamALSA::captureThreadEntry()
 //      prefixed to the buffer from driver to HAL. Hence, frame length is
 //      extracted to read valid data from the buffer. Framelength is of 32 bit.
                 if (mCaptureCompressedFromDSP) {
+                  if(!mDevSwtReq){
                     for(int i=0; i<MAX_NUM_FRAMES_PER_BUFFER; i++) {
                         updateCaptureMetaData(tempBuffer +
                                               i * META_DATA_LEN_BYTES);
@@ -1868,16 +1871,19 @@ void AudioBroadcastStreamALSA::captureThreadEntry()
                         if ((avSyncDelayUS > 0) && !internalBufRendered) captureBuffers(bufPtr, frameSize);
                         else write_l(bufPtr, frameSize);
                     }
+                  }
+                  else ALOGD("Device switch requested, stop rendering data");
                 } else {
                     updatePCMCaptureMetaData(tempBuffer);
                     bufPtr = tempBuffer + COMPRE_CAPTURE_HEADER_SIZE +
                                  mReadMetaData.dataOffset;
                     frameSize = mReadMetaData.frameSize;
-                    if (avSyncDelayUS > 0)
+                    if (avSyncDelayUS > 0 && (!mDevSwtReq))
                          captureBuffers(bufPtr, frameSize);
                     else {
                          ALOGD("frameSize: %d BufferCount %d", frameSize, mBufferCount);
-                         write_l(bufPtr, frameSize);
+                         if(!mDevSwtReq) write_l(bufPtr, frameSize);
+                         else ALOGD("Device switch requested, stop rendering data");
                          mBufferCount ++;
                          if(mBufferCount == 1){
                              mStartTimeStamp = (( (uint64_t)mReadMetaData.timestampMsw << 32) |
@@ -1922,9 +1928,9 @@ void AudioBroadcastStreamALSA::captureBuffers(char *bufPtr, uint32_t frameSize)
                 mCapturePool.push_back(buf);
             }
 
-            if(avSyncFlag && (!(mCaptureFilledQueue.empty()))) {
-                List<BuffersAllocated>::iterator it = mCaptureFilledQueue.begin();
-                if(mCaptureCompressedFromDSP) {
+            List<BuffersAllocated>::iterator it = mCaptureFilledQueue.begin();
+            if(mCaptureCompressedFromDSP) {
+                if(avSyncFlag && (!(mCaptureFilledQueue.empty()))) {
                     for(;it != mCaptureFilledQueue.end(); it++) {
                         BuffersAllocated buf = *it;
                         mCaptureFilledQueue.erase(mCaptureFilledQueue.begin());
@@ -1934,11 +1940,16 @@ void AudioBroadcastStreamALSA::captureBuffers(char *bufPtr, uint32_t frameSize)
                     }
                     internalBufRendered = 1;
                 }
-                else {
+            }
+            else {
+                if(avSyncFlag && (!(mCaptureFilledQueue.empty()))) {
                     BuffersAllocated buf = *it;
                     mCaptureFilledQueue.erase(mCaptureFilledQueue.begin());
-                    ALOGD("frameSize: %d BufferCount %d", frameSize, mBufferCount);
+                    ALOGD("Writing buffer %x with framesize %d", buf.memBuf, buf.bytesToWrite);
                     write_l((char *)buf.memBuf, buf.bytesToWrite);
+                    free(buf.memBuf);
+                }
+                    ALOGD("frameSize: %d BufferCount %d", frameSize, mBufferCount);
                     mBufferCount ++;
                     if(mBufferCount == 1){
                         mStartTimeStamp = (( (uint64_t)mReadMetaData.timestampMsw << 32) |
@@ -1949,8 +1960,6 @@ void AudioBroadcastStreamALSA::captureBuffers(char *bufPtr, uint32_t frameSize)
                         mAdjustClockCv.signal();
                         mBufferCount = 0;
                     }
-                    free(buf.memBuf);
-                }
             }
         }
         else
@@ -2378,7 +2387,13 @@ void AudioBroadcastStreamALSA::timerThreadEntry()
             usleep(avSyncDelayUS);
             ALOGV("av sync timer expired");
             avSyncFlag = 1;
-            mKillTimerThread = true;
+            mTimerMutex.lock();
+            mTimerCv.wait(mTimerMutex);
+            mTimerMutex.unlock();
+            if(mDevSwtReq) {
+                mDevSwtReq = 0;
+                avSyncFlag = 0;
+            }
         }
     }
 }
@@ -2440,6 +2455,7 @@ void AudioBroadcastStreamALSA::exitFromTimerThread()
         uint64_t writeValue = KILL_TIMER_THREAD;
         sys_broadcast::lib_write(mTimerfd, &writeValue, sizeof(uint64_t));
     }
+    mTimerCv.signal();
     mTimerMutex.unlock();
     pthread_join(mTimerThread,NULL);
     ALOGD("Timer thread killed");
@@ -2803,6 +2819,7 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
 
     mDevices = devices;
     setRoutingFlagsBasedOnConfig();
+    mDevSwtReq = 1;
 
     if(mUseTunnelDecoder) {
         if(mCompreRxHandle || mSecCompreRxHandle) {
@@ -2821,36 +2838,9 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
                         ALOGE("Tunnel device open failure in do routing");
                         return BAD_VALUE;
                     }
-                    if(mSecCompreRxHandle != NULL) {
-                        ALOGV("Copy buffers from passth to decode session: E");
-                        bufferDeAlloc(DECODEQUEUEINDEX);
-                        {
-                            Mutex::Autolock autoLock(mInputMemMutex);
-                            copyBuffers(mCompreRxHandle, mInputMemFilledQueue[1]);
-                            initFilledQueue(mCompreRxHandle, DECODEQUEUEINDEX, mInputMemFilledQueue[1].size());
-                        }
                         mPlaybackPfd[0].fd = mCompreRxHandle->handle->timer_fd;
                         mPlaybackPfd[0].events = (POLLIN | POLLERR | POLLNVAL);
                         mPlaybackPfd[0].revents = 0;
-                        //Init the appl pointer and sync it
-                        mCompreRxHandle->handle->sync_ptr->c.control.appl_ptr =
-                                    (mInputMemFilledQueue[1].size() * mCompreRxHandle->bufferSize)/
-                                        (2*mSecCompreRxHandle->channels);
-                        mCompreRxHandle->handle->sync_ptr->flags = 0;
-                        sync_ptr(mCompreRxHandle->handle);
-                        if(!isSessionPaused) {
-                            if (ioctl(mCompreRxHandle->handle->fd, SNDRV_PCM_IOCTL_START) < 0)
-                                ALOGE("AUDIO Start failed");
-                            else
-                                mCompreRxHandle->handle->start = 1;
-                        }
-                        ALOGV("Copy buffers from passth to decode session: X");
-                    }
-                    else {
-                        mPlaybackPfd[0].fd = mCompreRxHandle->handle->timer_fd;
-                        mPlaybackPfd[0].events = (POLLIN | POLLERR | POLLNVAL);
-                        mPlaybackPfd[0].revents = 0;
-                    }
                 } else {
                     mALSADevice->switchDeviceUseCase(mCompreRxHandle, devices & ~mSecDevices & ~mTranscodeDevices,
                                     mParent->mode());
@@ -2868,35 +2858,9 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
                         ALOGE("Tunnel device open failure in do routing");
                         return BAD_VALUE;
                     }
-                    if(mCompreRxHandle != NULL) {
-                        ALOGV("Copy buffers from decode to passth session: E");
-                        bufferDeAlloc(PASSTHRUQUEUEINDEX);
-                        {
-                            Mutex::Autolock autoLock(mInputMemMutex);
-                            copyBuffers(mSecCompreRxHandle, mInputMemFilledQueue[0]);
-                            initFilledQueue(mSecCompreRxHandle, PASSTHRUQUEUEINDEX, mInputMemFilledQueue[0].size());
-                        }
                         mPlaybackPfd[2].fd = mSecCompreRxHandle->handle->timer_fd;
                         mPlaybackPfd[2].events = (POLLIN | POLLERR | POLLNVAL);
                         mPlaybackPfd[2].revents = 0;
-                        mSecCompreRxHandle->handle->sync_ptr->c.control.appl_ptr =
-                                        (mInputMemFilledQueue[0].size() * mSecCompreRxHandle->bufferSize)/
-                                        (2*mCompreRxHandle->channels);
-                        mSecCompreRxHandle->handle->sync_ptr->flags = 0;
-                        sync_ptr(mSecCompreRxHandle->handle);
-                        if(!isSessionPaused) {
-                            if (ioctl(mSecCompreRxHandle->handle->fd, SNDRV_PCM_IOCTL_START) < 0)
-                            ALOGE("AUDIO Start failed");
-                            else
-                            mSecCompreRxHandle->handle->start = 1;
-                        }
-                        ALOGV("Copy buffers from decode to passth session: X");
-                    }
-                    else {
-                        mPlaybackPfd[2].fd = mSecCompreRxHandle->handle->timer_fd;
-                        mPlaybackPfd[2].events = (POLLIN | POLLERR | POLLNVAL);
-                        mPlaybackPfd[2].revents = 0;
-                    }
                 }
                 else {
                 if(PrevSecDevices != mSecDevices) {
@@ -3137,6 +3101,25 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
     }
     if(status)
         mCurDevice = mDevices;
+
+    ALOGV("Flush data after completing routing setup");
+    flush();
+    mCapturePool.clear();
+    mCaptureFilledQueue.clear();
+    mCaptureEmptyQueue.clear();
+    struct pcm * capture_handle = (struct pcm *)mCaptureHandle->handle;
+    pcm_prepare(mCaptureHandle->handle);
+    if(!capture_handle->start) {
+        if(ioctl(capture_handle->fd, SNDRV_PCM_IOCTL_START))
+            ALOGV("IOCTL start failed");
+    }
+    if(mCaptureCompressedFromDSP)
+        internalBufRendered = 0;
+    if(avSyncDelayUS)
+        mTimerCv.signal();
+    else
+        mDevSwtReq = 0;
+
     ALOGD("doRouting status = %d ",status);
     return status;
 }
@@ -3201,6 +3184,176 @@ status_t AudioBroadcastStreamALSA::resume_l()
             mWriteCv.signal();
         }
     }
+    return NO_ERROR;
+}
+
+status_t AudioBroadcastStreamALSA::flush()
+{
+    Mutex::Autolock autoLock(mLock);
+    Mutex::Autolock autoLock1(mRoutingLock);
+    ALOGD("AudioBroadcastStreamALSA::flush E");
+    int err = 0;
+
+    if (mCompreRxHandle || mSecCompreRxHandle) {
+        ALOGV("Paused case, %d",isSessionPaused);
+        if ((mCompreRxHandle && (mCompreRxHandle->handle->start == 1)) || (mSecCompreRxHandle && (mSecCompreRxHandle->handle->start == 1))) {
+            if (!isSessionPaused) {
+               if (mCompreRxHandle) {
+                    if ((err = ioctl(mCompreRxHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE,1)) < 0) {
+                        ALOGE("Audio Pause failed");
+                        return err;
+                    }
+                }
+                if (mSecCompreRxHandle) {
+                    if ((err = ioctl(mSecCompreRxHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE, 1)) < 0) {
+                        ALOGE("Audio Pause failed");
+                        return err;
+                    }
+                }
+            }
+            if ((err = drainTunnel()) != OK)
+                return err;
+       } else {
+             ALOGW("Audio is not started yet, clearing Queue without drain");
+             if (mCompreRxHandle)
+                 mCompreRxHandle->handle->sync_ptr->c.control.appl_ptr = 0;
+             if (mSecCompreRxHandle)
+                 mSecCompreRxHandle->handle->sync_ptr->c.control.appl_ptr = 0;
+             {
+                 Mutex::Autolock autoLock(mSyncLock);
+                 if (mCompreRxHandle) {
+                     mCompreRxHandle->handle->sync_ptr->flags = 0;
+                     sync_ptr(mCompreRxHandle->handle);
+                 }
+                 if (mSecCompreRxHandle) {
+                     mSecCompreRxHandle->handle->sync_ptr->flags = 0;
+                     sync_ptr(mSecCompreRxHandle->handle);
+                 }
+             }
+             resetBufferQueue();
+        }
+        mSkipWrite = true;
+        mWriteCv.signal();
+    }
+    if(mPcmRxHandle) {
+        if(!mPaused) {
+            ALOGE("flush(): Move to pause state if flush without pause");
+            if (ioctl(mPcmRxHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE,1) < 0)
+                ALOGE("flush(): Audio Pause failed");
+        }
+        pcm_prepare(mPcmRxHandle->handle);
+        ALOGV("flush(): prepare completed");
+    }
+
+    if(mBitstreamSM)
+       mBitstreamSM->resetBitstreamPtr();
+     if(mUseMS11Decoder == true) {
+      mMS11Decoder->flush();
+      if (mFormat == AUDIO_FORMAT_AC3 || mFormat == AUDIO_FORMAT_EAC3 ||
+            mFormat == AUDIO_FORMAT_AAC || mFormat == AUDIO_FORMAT_AAC_ADIF){
+         delete mMS11Decoder;
+         mMS11Decoder = new SoftMS11;
+         int32_t format_ms11;
+         if(mMS11Decoder->initializeMS11FunctionPointers() == false){
+            ALOGE("Could not resolve all symbols Required for MS11");
+            delete mMS11Decoder;
+            return -1;
+         }
+         if(mFormat == AUDIO_FORMAT_AAC || mFormat == AUDIO_FORMAT_AAC_ADIF){
+            format_ms11 = FORMAT_DOLBY_PULSE_MAIN;
+         } else {
+            format_ms11 = FORMAT_DOLBY_DIGITAL_PLUS_MAIN;
+         }
+         if(mMS11Decoder->setUseCaseAndOpenStream(format_ms11,mChannels, mSampleRate)){
+             ALOGE("SetUseCaseAndOpen MS11 failed");
+             delete mMS11Decoder;
+             return -1;
+         }
+      }
+    }
+    ALOGD("AudioSessionOutALSA::flush X");
+    return NO_ERROR;
+}
+
+status_t AudioBroadcastStreamALSA::drainTunnel()
+{
+    status_t err = OK;
+
+    if (mCompreRxHandle) {
+        mCompreRxHandle->handle->start = 0;
+
+      err = pcm_prepare(mCompreRxHandle->handle);
+        if(err != OK)
+            ALOGE("pcm_prepare failed for mCompreRxHandle = %d",err);
+
+        ALOGV("drainTunnel Empty Queue1 size() = %d,"
+              " Filled Queue1 size() = %d ",\
+              mInputMemEmptyQueue[0].size(),\
+              mInputMemFilledQueue[0].size());
+        {
+            Mutex::Autolock autoLock(mSyncLock);
+            mCompreRxHandle->handle->sync_ptr->flags =
+                       SNDRV_PCM_SYNC_PTR_APPL | SNDRV_PCM_SYNC_PTR_AVAIL_MIN;
+            sync_ptr(mCompreRxHandle->handle);
+        }
+        hw_ptr[0] = 0;
+        ALOGV("appl_ptr1= %d",\
+            (int)mCompreRxHandle->handle->sync_ptr->c.control.appl_ptr);
+    }
+    if (mSecCompreRxHandle)
+    {
+        mSecCompreRxHandle->handle->start = 0;
+
+       err = pcm_prepare(mSecCompreRxHandle->handle);
+       if(err != OK)
+           ALOGE("pcm_prepare failed for mSecCompreRxHandle = %d",err);
+
+        ALOGV("drainTunnel Empty Queue2 size() = %d,"
+              " Filled Queue2 size() = %d ",\
+              mInputMemEmptyQueue[1].size(),\
+              mInputMemFilledQueue[1].size());
+        {
+            Mutex::Autolock autoLock(mSyncLock);
+            mSecCompreRxHandle->handle->sync_ptr->flags =
+                       SNDRV_PCM_SYNC_PTR_APPL | SNDRV_PCM_SYNC_PTR_AVAIL_MIN;
+            sync_ptr(mSecCompreRxHandle->handle);
+        }
+        hw_ptr[1] = 0;
+        ALOGV("appl_ptr2= %d",\
+              (int)mSecCompreRxHandle->handle->sync_ptr->c.control.appl_ptr);
+    }
+    resetBufferQueue();
+    ALOGV("Reset, drain and prepare completed");
+    return err;
+}
+
+status_t AudioBroadcastStreamALSA::resetBufferQueue()
+{
+    mInputMemMutex.lock();
+    List<BuffersAllocated>::iterator it;
+    if (mCompreRxHandle) {
+        mInputMemFilledQueue[0].clear();
+        mInputMemEmptyQueue[0].clear();
+        it = mInputBufPool[0].begin();
+        for (;it!=mInputBufPool[0].end();++it) {
+            memset((*it).memBuf, 0x0, (*it).memBufsize);
+            mInputMemEmptyQueue[0].push_back(*it);
+        }
+        ALOGV("Transferred all the buffers from response queue1 to\
+            request queue1");
+    }
+    if (mSecCompreRxHandle) {
+        mInputMemFilledQueue[1].clear();
+        mInputMemEmptyQueue[1].clear();
+        it = mInputBufPool[1].begin();
+        for (;it!=mInputBufPool[1].end();++it) {
+            memset((*it).memBuf, 0x0, (*it).memBufsize);
+            mInputMemEmptyQueue[1].push_back(*it);
+        }
+        ALOGV("Transferred all the buffers from response queue2 to\
+               request queue2");
+    }
+    mInputMemMutex.unlock();
     return NO_ERROR;
 }
 
