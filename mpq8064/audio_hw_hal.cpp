@@ -270,6 +270,19 @@ static ssize_t broadcast_write(struct audio_broadcast_stream *stream, const void
     return out->qcom_out->write(buffer, bytes, timestamp, audiotype);
 }
 
+static int broadcast_pause(struct audio_broadcast_stream *stream)
+{
+  struct qcom_broadcast_stream *out =
+      reinterpret_cast<struct qcom_broadcast_stream *>(stream);
+  return out->qcom_out->pause();
+}
+static int broadcast_resume(struct audio_broadcast_stream *stream)
+{
+  struct qcom_broadcast_stream *out =
+      reinterpret_cast<struct qcom_broadcast_stream *>(stream);
+  return out->qcom_out->resume();
+}
+
 /** audio_stream_in implementation **/
 static uint32_t in_get_sample_rate(const struct audio_stream *stream)
 {
@@ -664,6 +677,8 @@ static int adev_open_broadcast_stream(struct audio_hw_device *dev,
     out->stream.write = broadcast_write;
     out->stream.start = broadcast_start;
     out->stream.mute  = broadcast_mute;
+    out->stream.pause  = broadcast_pause;
+    out->stream.resume  = broadcast_resume;
 
     *stream_out = &out->stream;
     return 0;

@@ -876,8 +876,8 @@ private:
     status_t            openCapturingAndRoutingDevices();
     status_t            closeDevice(alsa_handle_t *pHandle);
     status_t            doRouting(int devices);
-    status_t            pause_l();
-    status_t            resume_l();
+    status_t            pause();
+    status_t            resume();
     //Capture
     void                setCaptureFlagsBasedOnConfig();
     status_t            openPCMCapturePath();
