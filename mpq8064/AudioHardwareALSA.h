@@ -249,7 +249,7 @@ The value needs to be modified when the period size is modified*/
 #define PCM_16_BITS_PER_SAMPLE   2
 #define PCM_24_BITS_PER_SAMPLE   3
 #define AC3_PERIOD_SIZE          1536 * PCM_16_BITS_PER_SAMPLE
-#define TIME_PER_BUFFER          40 //Time duration in ms
+#define TIME_PER_BUFFER          20 //Time duration in ms
 /*
 List of indexes of the supported formats
 Redundant formats such as (AAC-LC, HEAAC) are removed from the indexes as they
@@ -1503,7 +1503,7 @@ public:
     status_t    stopA2dpPlayback_l(uint32_t activeUsecase);
     bool        suspendA2dpPlayback_l(uint32_t activeUsecase);
     int         buffer_data(struct pcm *pcm, void *data, unsigned count);
-    int         is_buffer_available(struct pcm *pcm, void *data, int count, int format);
+    int         is_buffer_available(struct pcm *pcm, void *data, int count);
     int         hw_pcm_write(struct pcm *pcm, void *data, unsigned count);
     void        updateDevicesOfOtherSessions(int device, int state);
     int         getUnComprDeviceInCurrDevices(int devices);

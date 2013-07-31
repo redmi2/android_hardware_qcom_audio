@@ -572,9 +572,11 @@ int AudioHardwareALSA::buffer_data(struct pcm *pcm, void *data, unsigned count)
 }
 
 
-int AudioHardwareALSA::is_buffer_available(struct pcm *pcm, void *data, int count, int format)
+int AudioHardwareALSA::is_buffer_available(struct pcm *pcm, void *data, int count)
 {
-    int i, j, copy;
+    int i, j, copy, format;
+    format = pcm->format;
+
     if (format != SNDRV_PCM_FORMAT_S24_LE || (pcm->flags & PCM_TUNNEL))
        return 0;
     copy = (count/4)*3;
@@ -594,8 +596,13 @@ int AudioHardwareALSA::is_buffer_available(struct pcm *pcm, void *data, int coun
 
 int AudioHardwareALSA::hw_pcm_write(struct pcm *pcm, void *data, unsigned count)
 {
-    int ret = 0;
-    ret = buffer_data(pcm, data, count);
+    int ret = 0, size, metadata_size;
+    output_metadata_handle_t outputMetadata;
+    metadata_size = sizeof(outputMetadata);
+    memcpy(&outputMetadata, data, metadata_size);
+    size = outputMetadata.bufferLength;
+
+    ret = buffer_data(pcm, data + metadata_size, size);
     if (ret)
         return ret;
     do {
@@ -604,7 +611,7 @@ int AudioHardwareALSA::hw_pcm_write(struct pcm *pcm, void *data, unsigned count)
            ALOGE("error pcm_write returned %d", ret);
            break;
         }
-    } while (is_buffer_available(pcm, data, pcm->period_size, pcm->format));
+    } while (is_buffer_available(pcm, data + metadata_size, size));
     return ret;
 }
 
@@ -1786,7 +1793,6 @@ void AudioHardwareALSA::standbySessionDevice(int device) {
 }
 
 void AudioHardwareALSA::resumeComprDevice() {
-    ALOGV("updateDevicesOfOtherSessions- device : %d, state: %d", device, state);
     List <AudioStreamOut * >::iterator it;
     String8 key;
     int devices;
