@@ -103,7 +103,7 @@ status_t AudioStreamOutALSA::setVolume(float left, float right)
 
 status_t AudioStreamOutALSA::setParameters(const String8& keyValuePairs) {
     ALOGV("AudioStreamOut: setParameters %s device = %d activeDevice = %d",
-                keyValuePairs.string(), mHandle->device, mHandle->activeDevice);
+                keyValuePairs.string(), mHandle->devices, mHandle->activeDevice);
     AudioParameter param = AudioParameter(keyValuePairs);
     String8 keyStandby = String8(STANDBY_DEVICES_KEY);
     String8 keyResume = String8(RESUME_DEVICES_KEY);
