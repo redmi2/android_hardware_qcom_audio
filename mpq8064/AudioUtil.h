@@ -32,8 +32,15 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.*/
 #define ALSA_SOUND_AUDIO_UTIL_H
 
 #define BIT(nr)     (1UL << (nr))
-#define MAX_EDID_BLOCKS 10
-#define MAX_SHORT_AUDIO_DESC_CNT        30
+
+/* maximum number of audio descriptors supported
+ * is as per hdmi core support for
+ * MAX_AUDIO_DATA_BLOCK_SIZE in file
+ * kernel/drivers/video/msm/external_common.h
+ * please set MAX_SHORT_AUDIO_DESC_CNT accordingly
+ */
+#define MAX_SHORT_AUDIO_DESC_CNT        128
+#define MAX_EDID_BLOCKS MAX_SHORT_AUDIO_DESC_CNT
 #define MIN_AUDIO_DESC_LENGTH           3
 #define MIN_SPKR_ALLOCATION_DATA_LENGTH 3
 #define MAX_CHANNELS_SUPPORTED          8
