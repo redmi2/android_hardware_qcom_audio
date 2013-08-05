@@ -952,7 +952,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         if (param.getInt(key, (int &)call_state) == NO_ERROR) {
             param.remove(key);
             mCallState = call_state;
-            ALOGV("%s() vsid:%x, callstate:%x", __func__, mVSID, call_state);
+            ALOGD("%s() vsid:%x, callstate:%x", __func__, mVSID, call_state);
 
             if(isAnyCallActive())
                 doRouting(0);
@@ -2313,36 +2313,14 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
             {
             route_devices = devices | mCurDevice;
             }
-            mALSADevice->route(&(*it), route_devices, mode());
         } else {
 #ifdef QCOM_USBAUDIO_ENABLED
             if(devices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET ||
                devices & AudioSystem::DEVICE_IN_PROXY) {
                 devices |= AudioSystem::DEVICE_IN_PROXY;
                 ALOGD("routing everything from proxy");
-            mALSADevice->route(&(*it), devices, mode());
-            } else
-#endif
-            {
-                mALSADevice->route(&(*it), devices, mode());
             }
-        }
-
-        if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC) ||
-           !strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_LOWLATENCY_REC) ||
-           !strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED) ||
-#ifdef QCOM_FM_ENABLED
-           !strcmp(it->useCase, SND_USE_CASE_VERB_FM_REC) ||
-           !strcmp(it->useCase, SND_USE_CASE_VERB_FM_A2DP_REC) ||
 #endif
-           !strcmp(it->useCase, SND_USE_CASE_VERB_DL_REC) ||
-           !strcmp(it->useCase, SND_USE_CASE_VERB_UL_DL_REC) ||
-           !strcmp(it->useCase, SND_USE_CASE_VERB_CAPTURE_COMPRESSED_VOICE_DL) ||
-           !strcmp(it->useCase, SND_USE_CASE_VERB_CAPTURE_COMPRESSED_VOICE_UL_DL) ||
-           !strcmp(it->useCase, SND_USE_CASE_VERB_INCALL_REC)) {
-            snd_use_case_set(mUcMgr, "_verb", it->useCase);
-        } else {
-            snd_use_case_set(mUcMgr, "_enamod", it->useCase);
         }
         if(sampleRate) {
             it->sampleRate = *sampleRate;
@@ -2369,20 +2347,15 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
             }
         }
 #endif
-        err = mALSADevice->open(&(*it));
+        in = new AudioStreamInALSA(this, &(*it), acoustics);
+        err = in->set(format, channels, sampleRate, devices);
         if (err) {
-           mDeviceList.erase(it);
-           ALOGE("Error opening pcm input device");
-        #ifdef QCOM_LISTEN_FEATURE_ENABLE
+#ifdef QCOM_LISTEN_FEATURE_ENABLE
             //Notify to listen HAL that Audio capture is inactive
             if (mListenHw) {
                 mListenHw->notifyEvent(AUDIO_CAPTURE_INACTIVE);
             }
-        #endif
-
-        } else {
-           in = new AudioStreamInALSA(this, &(*it), acoustics);
-           err = in->set(format, channels, sampleRate, devices);
+#endif
         }
         if (status) *status = err;
         return in;
@@ -2806,14 +2779,14 @@ bool AudioHardwareALSA::routeCall(int device, int newMode, uint32_t vsid)
         return isRouted;
     }
 
-    ALOGV("%s: CurCallState=%x newCallState=%x, vsid =%x",
+    ALOGD("%s: CurCallState=%x newCallState=%x, vsid =%x",
           __func__, *curCallState, newCallState, vsid);
 
 
     switch (newCallState) {
     case CALL_INACTIVE:
         if (*curCallState != CALL_INACTIVE) {
-            ALOGV("%s: Disabling call for vsid:%x", __func__, vsid);
+            ALOGD("%s: Disabling call for vsid:%x", __func__, vsid);
 
             disableVoiceCall(newMode, device, vsid);
             isRouted = true;
@@ -2825,20 +2798,20 @@ bool AudioHardwareALSA::routeCall(int device, int newMode, uint32_t vsid)
 
     case CALL_ACTIVE:
         if (*curCallState == CALL_INACTIVE) {
-            ALOGV("%s(): Start call for vsid:%x ",__func__, vsid);
+            ALOGD("%s(): Start call for vsid:%x ",__func__, vsid);
 
             enableVoiceCall(newMode, device, vsid);
             isRouted = true;
             *curCallState = CALL_ACTIVE;
 
         } else if (*curCallState == CALL_HOLD) {
-            ALOGV("%s(): Resume call from hold state for vsid:%x",
+            ALOGD("%s(): Resume call from hold state for vsid:%x",
                   __func__, vsid);
 
             *curCallState = CALL_ACTIVE;
             isRouted = true;
         } else if(*curCallState == CALL_LOCAL_HOLD) {
-            ALOGV("%s: Resume call from local call hold state \
+            ALOGD("%s: Resume call from local call hold state \
                    for vsid:%x",__func__, vsid);
 
             handle = getALSADeviceHandleForVSID(vsid);
@@ -2862,7 +2835,7 @@ bool AudioHardwareALSA::routeCall(int device, int newMode, uint32_t vsid)
     case CALL_HOLD:
         if (*curCallState == CALL_ACTIVE ||
             *curCallState == CALL_LOCAL_HOLD) {
-            ALOGV("%s(): Call going to Hold for vsid:%x",__func__, vsid);
+            ALOGD("%s(): Call going to Hold for vsid:%x",__func__, vsid);
 
             handle = getALSADeviceHandleForVSID(vsid);
             if (handle) {
@@ -2890,7 +2863,7 @@ bool AudioHardwareALSA::routeCall(int device, int newMode, uint32_t vsid)
 
     case CALL_LOCAL_HOLD:
         if (*curCallState == CALL_ACTIVE || *curCallState == CALL_HOLD) {
-            ALOGV("%s(): Call going to local Hold for vsid:%x", __func__, vsid);
+            ALOGD("%s(): Call going to local Hold for vsid:%x", __func__, vsid);
 
             handle = getALSADeviceHandleForVSID(vsid);
             if (handle) {
