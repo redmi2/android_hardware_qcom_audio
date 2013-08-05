@@ -649,6 +649,23 @@ struct pcm * AudioUsbALSA::configureDevice(unsigned flags, char* hw, int sampleR
         return NULL;
     }
 
+    if(handle->flags & PCM_MONO)
+        handle->channels = 1;
+    else if(handle->flags & PCM_TRIPLE)
+        handle->channels = 3;
+    else if(handle->flags & PCM_QUAD)
+        handle->channels = 4;
+    else if(handle->flags & PCM_PENTA)
+        handle->channels = 5;
+    else if(handle->flags & PCM_5POINT1)
+        handle->channels = 6;
+    else if(handle->flags & PCM_7POINT)
+        handle->channels = 7;
+    else if(handle->flags & PCM_7POINT1)
+        handle->channels = 8;
+    else
+        handle->channels = 2;
+
     ALOGD("Setting hardware params: sampleRate:%d, channels: %d",sampleRate, channelCount);
     err = setHardwareParams(handle, sampleRate, channelCount,periodSize);
     if (err != NO_ERROR) {
