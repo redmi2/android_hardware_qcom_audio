@@ -132,7 +132,7 @@ BIT STREAM STATEMACHINE
 #define MAX_INPUT_CHANNELS_SUPPORTED    8
 #define FACTOR_FOR_BUFFERING            2
 #define STEREO_CHANNELS                 2
-#define MAX_OUTPUT_CHANNELS_SUPPORTED   6
+#define MAX_OUTPUT_CHANNELS_SUPPORTED   8
 #define PCM_BLOCK_PER_CHANNEL_MS11      1536*2
 #define AAC_BLOCK_PER_CHANNEL_MS11      768
 #define NUMBER_BITS_IN_A_BYTE           8
@@ -771,6 +771,7 @@ private:
     int         btsco_samplerate;
     int         callMode;
     int         mWMA_params[8];
+    int         mChannelAllocation;
 
     struct mixer*  mMixer;
     ALSAUseCaseList mUseCaseList;

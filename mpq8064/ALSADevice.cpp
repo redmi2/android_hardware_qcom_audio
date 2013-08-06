@@ -85,8 +85,9 @@ ALSADevice::ALSADevice() {
     mDriverInstancesUsed = 0;
     mHdmiFormat = UNCOMPRESSED;
     mSpdifFormat = UNCOMPRESSED;
-    mHdmiOutputChannels = MAX_INPUT_CHANNELS_SUPPORTED;
+    mHdmiOutputChannels = STEREO_CHANNELS;
     mSpdifOutputChannels = STEREO_CHANNELS;
+    mChannelAllocation = 0;
     ALOGD("ALSA Device opened");
 };
 
@@ -142,11 +143,8 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     int hdmiChannels = 8;
 
     if (handle->activeDevice & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
-        int channel_count = 0;
-        channel_count = getHDMIMaxChannelForEDIDFormat(LPCM);
-        hdmiChannels = channel_count;
-        pcm_set_channel_map(NULL, mMixer, MAX_HDMI_CHANNEL_CNT, mEDIDInfo.channelMap);
-        setChannelAlloc(mEDIDInfo.channelAllocation);
+        hdmiChannels = getHDMIMaxChannelForEDIDFormat(LPCM);
+        setHdmiOutputProperties(ROUTE_UNCOMPRESSED);
     }
     property_get("mpq.audio.spdif.format",spdifFormat,"0");
     property_get("mpq.audio.hdmi.format",hdmiFormat,"0");
@@ -2593,6 +2591,7 @@ status_t ALSADevice::setCaptureSoftwareParams(alsa_handle_t *handle,
 void ALSADevice::updateHDMIEDIDInfo()
 {
     AudioUtil::getHDMIAudioSinkCaps(&mEDIDInfo);
+    mChannelAllocation = mEDIDInfo.channelAllocation;
 }
 
 int ALSADevice::getFormatHDMIIndexEDIDInfo(EDID_AUDIO_FORMAT_ID formatId)
@@ -2615,6 +2614,15 @@ int ALSADevice::getHDMIMaxChannelForEDIDFormat(EDID_AUDIO_FORMAT_ID formatId)
             hdmiChannels = mEDIDInfo.AudioBlocksArray[i].nChannels;
             ALOGV("hdmiChannels form edid: %d", hdmiChannels);
         }
+    }
+    if(hdmiChannels > mHdmiOutputChannels) {
+        hdmiChannels = mHdmiOutputChannels;
+        // hardcoding the chanel alloc to 0x0b as all the configuration of
+        // 8 channels boils to 0x0b for the 6 channels
+        if(mHdmiOutputChannels == 6)
+            mChannelAllocation = 0x0B;
+        else if(mHdmiOutputChannels == 2)
+            mChannelAllocation = 0x0;
     }
     return hdmiChannels;
 }
@@ -2943,16 +2951,14 @@ void ALSADevice::setHdmiOutputProperties(int type)
     int hdmiChannels = 2;
     char channelMap[MAX_HDMI_CHANNEL_CNT] = {PCM_CHANNEL_FL, PCM_CHANNEL_FR,
                                              0, 0, 0, 0, 0 , 0};
-    int channelAllocation = 0;
     if(type & ROUTE_UNCOMPRESSED) {
         hdmiChannels = getHDMIMaxChannelForEDIDFormat(LPCM);
-        memcpy(channelMap, mEDIDInfo.channelMap, MAX_HDMI_CHANNEL_CNT);
-        channelAllocation = mEDIDInfo.channelAllocation;
+        memcpy(channelMap, mEDIDInfo.channelMap, hdmiChannels);
     }
     setHDMIChannelCount(hdmiChannels);
     pcm_set_channel_map(NULL, mMixer, MAX_HDMI_CHANNEL_CNT,
                         channelMap);
-    setChannelAlloc(channelAllocation);
+    setChannelAlloc(mChannelAllocation);
 }
 
 status_t ALSADevice::setPlaybackSoftwareParams(alsa_handle_t *handle)
