@@ -1044,6 +1044,10 @@ status_t ALSADevice::open(alsa_handle_t *handle)
 
     if (deviceName(handle, flags, &devName) < 0) {
         ALOGE("Failed to get pcm device node: %s", devName);
+        if (devName) {
+            free(devName);
+            devName = NULL;
+        }
         return NO_INIT;
     }
     if (devName != NULL) {
@@ -1108,6 +1112,10 @@ status_t ALSADevice::startVoipCall(alsa_handle_t *handle)
 
     if (deviceName(handle, flags, &devName) < 0) {
          ALOGE("Failed to get pcm device node");
+         if (devName) {
+            free(devName);
+            devName = NULL;
+         }
          return NO_INIT;
     }
 
@@ -1158,6 +1166,10 @@ status_t ALSADevice::startVoipCall(alsa_handle_t *handle)
 
      if (deviceName(handle, flags, &devName) < 0) {
         ALOGE("Failed to get pcm device node");
+        if (devName) {
+            free(devName);
+            devName = NULL;
+        }
         return NO_INIT;
      }
     if (devName != NULL) {
@@ -1217,6 +1229,10 @@ status_t ALSADevice::startVoiceCall(alsa_handle_t *handle, uint32_t vsid)
     flags = PCM_OUT | PCM_MONO;
     if (deviceName(handle, flags, &devName) < 0) {
         ALOGE("Failed to get pcm device node");
+        if (devName) {
+            free(devName);
+            devName = NULL;
+        }
         return NO_INIT;
     }
     if (devName != NULL) {
@@ -1561,6 +1577,8 @@ status_t ALSADevice::close(alsa_handle_t *handle, uint32_t vsid)
              !strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOICE)) ||
             (!strcmp(handle->useCase, SND_USE_CASE_VERB_VOLTE) ||
              !strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOLTE)) ||
+            (!strcmp(handle->useCase, SND_USE_CASE_VERB_QCHAT) ||
+             !strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_QCHAT)) ||
             (!strcmp(handle->useCase, SND_USE_CASE_VERB_VOICE2) ||
              !strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOICE2)) &&
             isPlatformFusion3()) {
@@ -1747,7 +1765,11 @@ int ALSADevice::getUseCaseType(const char *useCase)
         !strncmp(useCase, SND_USE_CASE_VERB_VOLTE,
             MAX_LEN(useCase,SND_USE_CASE_VERB_VOLTE)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_VOLTE,
-            MAX_LEN(useCase, SND_USE_CASE_MOD_PLAY_VOLTE))) {
+            MAX_LEN(useCase, SND_USE_CASE_MOD_PLAY_VOLTE)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_QCHAT,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_QCHAT)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_QCHAT,
+            MAX_LEN(useCase, SND_USE_CASE_MOD_PLAY_QCHAT))) {
         return (USECASE_TYPE_RX | USECASE_TYPE_TX);
     } else {
         ALOGE("unknown use case %s\n", useCase);
