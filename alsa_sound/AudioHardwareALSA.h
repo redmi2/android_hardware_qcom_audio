@@ -1227,6 +1227,7 @@ protected:
     uint32_t mVSID;
     int mVoiceVolFeatureSet;
     int mIsFmActive;
+    bool mInputStreamInstanceAlive;
     bool mBluetoothVGS;
     bool mExternalModem;
 #ifdef QCOM_USBAUDIO_ENABLED
