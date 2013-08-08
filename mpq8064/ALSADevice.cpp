@@ -1433,7 +1433,7 @@ void ALSADevice::disableDevice(alsa_handle_t *handle)
 
 void ALSADevice::enableDevice(alsa_handle_t *handle, bool bIsUseCaseSet)
 {
-    char *rxDevice = NULL, *txDevice = NULL;
+    char *rxDevice = NULL, *txDevice = NULL, *tempRxDevice;
     uint64_t devices = handle->activeDevice;
     int64_t deviceToEnable;
     unsigned usecase_type = 0;
@@ -1451,6 +1451,8 @@ void ALSADevice::enableDevice(alsa_handle_t *handle, bool bIsUseCaseSet)
 
         ALOGV("%s: device %llx, to enable %llx", __FUNCTION__, devices, deviceToEnable);
         getDevices(deviceToEnable, &rxDevice, &txDevice);
+        tempRxDevice = strdup(rxDevice);
+
         if(rxDevice != NULL) {
             usecase_type = getUseCaseType(handle->useCase);
             if (usecase_type & USECASE_TYPE_RX) {
@@ -1466,6 +1468,14 @@ void ALSADevice::enableDevice(alsa_handle_t *handle, bool bIsUseCaseSet)
         if(txDevice != NULL) {
             usecase_type = getUseCaseType(handle->useCase);
             if (usecase_type & USECASE_TYPE_TX) {
+                 ALOGE("tempRxDevice %s", tempRxDevice);
+                 if(!(strncmp(tempRxDevice, SND_USE_CASE_DEV_SPDIF, sizeof(SND_USE_CASE_DEV_SPDIF))))
+                    setMixerControl("EC_REF_RX", "SEC_RX");
+                 if(!(strncmp(tempRxDevice, SND_USE_CASE_DEV_SPEAKER, sizeof(SND_USE_CASE_DEV_SPEAKER))))
+                    setMixerControl("EC_REF_RX", "SLIM_RX");
+                 if(!(strncmp(tempRxDevice, SND_USE_CASE_DEV_HDMI, sizeof(SND_USE_CASE_DEV_HDMI))))
+                    setMixerControl("EC_REF_RX", "HDMI_RX");
+
                 if(bIsUseCaseSet) {
                     snd_use_case_set_case(handle->ucMgr, "_verb", handle->useCase, txDevice);
                 } else {
@@ -1475,6 +1485,7 @@ void ALSADevice::enableDevice(alsa_handle_t *handle, bool bIsUseCaseSet)
             free(txDevice);
             txDevice = NULL;
         }
+        free(tempRxDevice);
         devices = devices & (~deviceToEnable);
     }
 }
@@ -2114,7 +2125,8 @@ int64_t ALSADevice::getDevices(uint64_t devices, char **rxDevice, char **txDevic
               (devices & AudioSystem::DEVICE_IN_BUILTIN_MIC)) {
         devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
                   AudioSystem::DEVICE_OUT_EARPIECE);
-    } else if (devices & AudioSystem::DEVICE_OUT_SPEAKER) {
+    } else if (devices & AudioSystem::DEVICE_OUT_SPEAKER &&
+                         (mHardwarePlatform != DTV_PLATFORM)) {
         devices = devices | (AudioSystem::DEVICE_IN_DEFAULT |
                    AudioSystem::DEVICE_OUT_SPEAKER);
     } else if ((devices & AudioSystem::DEVICE_OUT_BLUETOOTH_SCO) ||
