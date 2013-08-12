@@ -1223,11 +1223,11 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
             if (mPhoneState != AudioSystem::MODE_IN_CALL) {
                 device = mAvailableOutputDevices & AUDIO_DEVICE_OUT_USB_ACCESSORY;
                 if (device) break;
-                device = mAvailableOutputDevices & AUDIO_DEVICE_OUT_USB_DEVICE;
-                if (device) break;
                 device = mAvailableOutputDevices & AUDIO_DEVICE_OUT_DGTL_DOCK_HEADSET;
                 if (device) break;
                 device = mAvailableOutputDevices & AUDIO_DEVICE_OUT_AUX_DIGITAL;
+                if (device) break;
+                device = mAvailableOutputDevices & AUDIO_DEVICE_OUT_USB_DEVICE;
                 if (device) break;
             }
             device = mAvailableOutputDevices & AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET;
@@ -1252,11 +1252,11 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
             if (mPhoneState != AudioSystem::MODE_IN_CALL) {
                 device = mAvailableOutputDevices & AUDIO_DEVICE_OUT_USB_ACCESSORY;
                 if (device) break;
-                device = mAvailableOutputDevices & AUDIO_DEVICE_OUT_USB_DEVICE;
-                if (device) break;
                 device = mAvailableOutputDevices & AUDIO_DEVICE_OUT_DGTL_DOCK_HEADSET;
                 if (device) break;
                 device = mAvailableOutputDevices & AUDIO_DEVICE_OUT_AUX_DIGITAL;
+                if (device) break;
+                device = mAvailableOutputDevices & AUDIO_DEVICE_OUT_USB_DEVICE;
                 if (device) break;
             }
             device = mAvailableOutputDevices & AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET;
@@ -1340,9 +1340,6 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
                 device2 = mAvailableOutputDevices & AUDIO_DEVICE_OUT_USB_ACCESSORY;
             }
             if (device2 == AUDIO_DEVICE_NONE) {
-                device2 = mAvailableOutputDevices & AUDIO_DEVICE_OUT_USB_DEVICE;
-            }
-            if (device2 == AUDIO_DEVICE_NONE) {
                 device2 = mAvailableOutputDevices & AUDIO_DEVICE_OUT_DGTL_DOCK_HEADSET;
             }
             if ((device2 == AUDIO_DEVICE_NONE) ) {
@@ -1358,6 +1355,9 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
 #endif
             if (device2 == AUDIO_DEVICE_NONE) {
                 device2 = mAvailableOutputDevices & AUDIO_DEVICE_OUT_SPEAKER;
+            }
+            if (device2 == AUDIO_DEVICE_NONE) {
+                device2 = mAvailableOutputDevices & AUDIO_DEVICE_OUT_USB_DEVICE;
             }
             if (device2 & (AudioSystem::DEVICE_OUT_WIRED_HEADPHONE | AudioSystem::DEVICE_OUT_WIRED_HEADSET |
                           AudioSystem::DEVICE_OUT_ANC_HEADPHONE | AudioSystem::DEVICE_OUT_ANC_HEADSET |
