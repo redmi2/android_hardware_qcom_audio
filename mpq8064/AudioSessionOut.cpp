@@ -1727,10 +1727,12 @@ void AudioSessionOutALSA::getPeriodSizeCountAndFormat(int routeFormat, int *peri
         if(routeFormat == ROUTE_UNCOMPRESSED_MCH) {
             frameSize = PCM_16_BITS_PER_SAMPLE * mChannels;
             *periodSize = nextMultiple(AC3_PERIOD_SIZE * mChannels + MIN_SIZE_FOR_METADATA, frameSize * 32);
+            *periodCount = MAX_NUM_OF_PERIODS;
             *format = AUDIO_FORMAT_PCM_16_BIT;
         } else if(routeFormat == ROUTE_UNCOMPRESSED) {
             frameSize = PCM_16_BITS_PER_SAMPLE * 2;
             *periodSize = nextMultiple(AC3_PERIOD_SIZE * 2 + MIN_SIZE_FOR_METADATA, frameSize * 32);
+            *periodCount = MAX_NUM_OF_PERIODS;
             *format = AUDIO_FORMAT_PCM_16_BIT;
         } else {
             *periodSize = PERIOD_SIZE_COMPR;
