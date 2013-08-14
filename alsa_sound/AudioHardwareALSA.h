@@ -370,11 +370,11 @@ enum {
     INCALL_REC_STEREO,
 };
 
-/* ADSP States */
+/* Sound card States */
 enum {
-    ADSP_UP = 0x0,
-    ADSP_DOWN = 0x1,
-    ADSP_UP_AFTER_SSR = 0x2,
+    SND_CARD_UP = 0x0,
+    SND_CARD_DOWN = 0x1,
+    SND_CARD_UP_AFTER_SSR = 0x2,
 };
 
 /* Call States */
@@ -403,8 +403,8 @@ enum call_state {
 /* Query if a2dp  is supported */
 #define AUDIO_PARAMETER_KEY_HANDLE_A2DP_DEVICE "isA2dpDeviceSupported"
 
-/* Query ADSP Status */
-#define AUDIO_PARAMETER_KEY_ADSP_STATUS "ADSP_STATUS"
+/* Query sound card status */
+#define AUDIO_PARAMETER_KEY_SND_CARD_STATUS "SND_CARD_STATUS"
 
 /* Query if Proxy can be Opend */
 #define AUDIO_CAN_OPEN_PROXY "can_open_proxy"
@@ -513,7 +513,7 @@ public:
 #endif
     void     setSpkrProtHandle(AudioSpeakerProtection*);
 
-    int mADSPState;
+    int mSndCardState;
     int mCurDevice;
 public:
 #ifdef QCOM_WFD_ENABLED
@@ -580,6 +580,7 @@ private:
 #endif
 
     struct snd_ctl_card_info mSndCardInfo;
+    int mSndCardNumber;
     status_t mStatus;
 
 //   ALSAHandleList  *mDeviceList;

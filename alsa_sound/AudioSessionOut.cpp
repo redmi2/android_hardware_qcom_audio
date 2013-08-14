@@ -132,11 +132,11 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
         }
     }
 
-    if (mParent->mALSADevice->mADSPState == ADSP_UP_AFTER_SSR) {
+    if (mParent->mALSADevice->mSndCardState == SND_CARD_UP_AFTER_SSR) {
            // In-case of multiple streams only one stream will be resumed
            // after resetting mADSPState to ADSP_UP with output device routed
-           ALOGV("We are restarting after SSR - Reset ADSP state to ADSP_UP");
-           mParent->mALSADevice->mADSPState = ADSP_UP;
+           ALOGV("We are restarting after SSR - Reset card state to UP");
+           mParent->mALSADevice->mSndCardState = SND_CARD_UP;
     }
 
     //open device based on the type (LPA or Tunnel) and devices
@@ -1042,15 +1042,27 @@ status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
         }
         param.remove(key);
     }
-    key = String8(AUDIO_PARAMETER_KEY_ADSP_STATUS);
+    key = String8(AUDIO_PARAMETER_KEY_SND_CARD_STATUS);
     if (param.get(key, value) == NO_ERROR) {
-       if (value == "ONLINE"){
+       ssize_t pos;
+       int cardNumber;
+       String8 cardStatus;
+
+       pos = value.find(",");
+       if (pos <= 0) {
+           ALOGE("%s(), invalid format %s", __func__,keyValuePairs.string());
+           return BAD_VALUE;
+       }
+
+       cardStatus.setTo(value.string(), pos);
+       cardStatus = value.string() + pos + 1;
+       if (cardStatus == "ONLINE"){
            mReachedEOS = true;
            mSkipWrite = true;
            mWriteCv.signal();
            mObserver->postEOS(1);
        }
-       else if (value == "OFFLINE") {
+       else if (cardStatus == "OFFLINE") {
            mParent->mLock.lock();
            requestAndWaitForEventThreadExit();
            mParent->mLock.unlock();

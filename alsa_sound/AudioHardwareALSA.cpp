@@ -717,27 +717,41 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
     enum call_state  call_state = CALL_INVALID;
     uint32_t vsid = 0;
     float fm_volume;
+    ssize_t pos;
+    int cardNumber;
+    String8 cardStatus;
 
     ALOGV("%s() ,%s", __func__, keyValuePairs.string());
 
 #ifdef QCOM_ADSP_SSR_ENABLED
-    key = String8(AUDIO_PARAMETER_KEY_ADSP_STATUS);
+    key = String8(AUDIO_PARAMETER_KEY_SND_CARD_STATUS);
     if (param.get(key, value) == NO_ERROR) {
     #ifdef QCOM_LISTEN_FEATURE_ENABLE
         if (mListenHw) {
             status = mListenHw->setParameters(keyValuePairs);
         }
     #endif
-       if (value == "ONLINE") {
-           ALOGV("ADSP online set SSRcomplete");
-           mALSADevice->mADSPState = ADSP_UP_AFTER_SSR;
-           return status;
+       pos = value.find(",");
+       if (pos <= 0) {
+           ALOGE("%s(), invalid format %s", __func__, keyValuePairs.string());
+           return BAD_VALUE;
        }
-       else if (value == "OFFLINE") {
-           ALOGV("ADSP online re-set SSRcomplete");
-           mALSADevice->mADSPState = ADSP_DOWN;
+       cardStatus.setTo(value.string(), pos);
+       cardNumber = atoi(cardStatus.string());
+       cardStatus = value.string() + pos + 1;
+
+       if (cardNumber != mALSADevice->mSndCardNumber) {
+           ALOGV("Ignore status change for card number %d mSndCardNumber %d",
+                 cardNumber, mSndCardNumber);
+       } else if (cardStatus == "ONLINE") {
+           ALOGV("Sound card online set SSRcomplete");
+           mALSADevice->mSndCardState = SND_CARD_UP_AFTER_SSR;
+           return status;
+       } else if (cardStatus == "OFFLINE") {
+           ALOGV("Sound card online re-set SSRcomplete");
+           mALSADevice->mSndCardState = SND_CARD_DOWN;
            if ( mRouteAudioToExtOut==true) {
-               ALOGV("ADSP offline close EXT output");
+               ALOGV("Sound card offline close EXT output");
                uint32_t activeUsecase = getExtOutActiveUseCases_l();
                stopPlaybackOnExtOut_l(activeUsecase);
            }
