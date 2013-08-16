@@ -516,6 +516,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
             || handle->format == AUDIO_FORMAT_EVRC
             || handle->format == AUDIO_FORMAT_EVRCB
             || handle->format == AUDIO_FORMAT_EVRCWB
+            || handle->format == AUDIO_FORMAT_EVRCNW
 #endif
             ) {
             if ((strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL)) &&
@@ -905,6 +906,7 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
                     setEcrxDevice(ec_rx_dev);
                     free(ec_rx_dev);
                 }
+                free(ec_dev);
             }
         } else {
             ALOGE("acdb_loader_get_ecrx_device is NULL");
