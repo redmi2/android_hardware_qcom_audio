@@ -81,8 +81,8 @@ AudioHardwareInterface *AudioHardwareALSA::create() {
 }
 
 AudioHardwareALSA::AudioHardwareALSA() :
-    mALSADevice(0),mVoipStreamCount(0),mVoipMicMute(false),mVoipBitRate(0)
-    ,mCallState(0)
+    mALSADevice(0),mVoipInStreamCount(0),mVoipOutStreamCount(0),mVoipMicMute(false)
+    ,mVoipBitRate(0),mCallState(0)
 {
     FILE *fp;
     char soundCardInfo[200];
@@ -972,7 +972,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
                 }
         }
       if(voipstream_active == false) {
-         mVoipStreamCount = 0;
+         mVoipOutStreamCount = 0;
          mVoipMicMute = false;
          alsa_handle_t alsa_handle;
          unsigned long bufferSize;
@@ -1012,7 +1012,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
           mDeviceList.push_back(alsa_handle);
           it = mDeviceList.end();
           it--;
-          ALOGV("openoutput: mALSADevice->route useCase %s mCurDevice %d mVoipStreamCount %d mode %d", it->useCase,mCurDevice,mVoipStreamCount, mode());
+          ALOGV("openoutput: mALSADevice->route useCase %s mCurDevice %d mVoipOutStreamCount %d mode %d", it->useCase,mCurDevice,mVoipOutStreamCount, mode());
           if((mCurDevice & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
              (mCurDevice & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)||
              (mCurDevice & AudioSystem::DEVICE_OUT_PROXY)){
@@ -1040,11 +1040,21 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
               return NULL;
           }
       }
+      if(mVoipOutStreamCount>=1) {
+          ALOGE("Trying to OPen Multiple Output streams: Not Supported %d",mVoipOutStreamCount);
+          return out;
+      }
       out = new AudioStreamOutALSA(this, &(*it));
       err = out->set(format, channels, sampleRate, devices);
       if(err == NO_ERROR) {
-          mVoipStreamCount++;   //increment VoipstreamCount only if success
-          ALOGD("openoutput mVoipStreamCount %d",mVoipStreamCount);
+          mVoipOutStreamCount++;   //increment VoipOutputstreamCount only if success
+          ALOGD("openoutput mVoipOutStreamCount %d",mVoipOutStreamCount);
+      } else {
+          mLock.unlock();
+          delete out;
+          out = NULL;
+          ALOGE("AudioStreamOutALSA->set() failed, return NULL");
+          mLock.lock();
       }
       if (status) *status = err;
       return out;
@@ -1255,7 +1265,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                 }
         }
         if(voipstream_active == false) {
-           mVoipStreamCount = 0;
+           mVoipInStreamCount = 0;
            mVoipMicMute = false;
            alsa_handle_t alsa_handle;
            unsigned long bufferSize;
@@ -1329,11 +1339,21 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                return NULL;
            }
         }
+        if(mVoipInStreamCount>=1){
+            ALOGE("Trying to Open Multiple inpust Stream: Not supported %d",mVoipInStreamCount);
+            return in;
+        }
         in = new AudioStreamInALSA(this, &(*it), acoustics);
         err = in->set(format, channels, sampleRate, devices);
         if(err == NO_ERROR) {
-            mVoipStreamCount++;   //increment VoipstreamCount only if success
-            ALOGD("OpenInput mVoipStreamCount %d",mVoipStreamCount);
+            mVoipInStreamCount++;   //increment VoipInputstreamCount only if success
+            ALOGD("OpenInput mVoipInStreamCount %d",mVoipInStreamCount);
+        } else {
+            mLock.unlock();
+            delete in;
+            in = NULL;
+            ALOGE("AudioStreamInALSA->set() failed, return NULL");
+            mLock.lock();
         }
         ALOGE("openInput: After Get alsahandle");
         if (status) *status = err;
