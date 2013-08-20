@@ -603,6 +603,8 @@ struct alsa_handle_t {
     snd_use_case_mgr_t  *ucMgr;
 };
 typedef List<alsa_handle_t> ALSAHandleList;
+typedef List<alsa_handle_t *> ALSAHandleListRef;
+
 /*
 Meta data structure for handling compressed read and input path
 */
@@ -719,6 +721,7 @@ public:
     char*       getPlaybackUseCase(int type, bool isModifier);
     void        freePlaybackUseCase(const char *useCase);
     void        setHdmiOutputProperties(int type);
+    void        setOuputChannels(int channels, int device);
     int         mSpdifFormat;
     int         mHdmiFormat;
     int         mSpdifOutputChannels;
@@ -874,6 +877,8 @@ public:
 
     virtual status_t    standby();
 
+    status_t            standby_l();
+
     virtual status_t    setParameters(const String8& keyValuePairs);
 
     virtual String8     getParameters(const String8& keys);
@@ -891,7 +896,8 @@ private:
     alsa_handle_t *     mSpdifRxHandle;
     alsa_handle_t *     mCompreRxHandle;
     uint32_t            mA2dpUseCase;
-
+    uint32_t            mStandbyDevices;
+    bool                mCanStandby;
 protected:
     AudioHardwareALSA *     mParent;
 };
@@ -1570,6 +1576,7 @@ protected:
     int                 mHdmiOutputChannels;
     int                 mSpdifRenderFormat;
     int                 mHdmiRenderFormat;
+    bool                mScreenState;
 
     //A2DP variables
     audio_stream_out   *mA2dpStream;

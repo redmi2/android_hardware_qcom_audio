@@ -1903,6 +1903,35 @@ int snd_use_case_set_case(snd_use_case_mgr_t *uc_mgr,
                          1, CTRL_LIST_VERB);
             }
         }
+    } else if (!strncmp(identifier, "_disverb", 8)) {
+        /* Check if value is valid verb */
+        while (strncmp(uc_mgr->card_ctxt_ptr->verb_list[index],
+                    SND_UCM_END_OF_LIST, MAX_STR_LEN)) {
+            if (!strncmp(uc_mgr->card_ctxt_ptr->verb_list[index],
+                        value, MAX_STR_LEN)) {
+                ret = 0;
+                break;
+            }
+            index++;
+        }
+        if ((ret < 0) && (strncmp(value, SND_USE_CASE_VERB_INACTIVE,
+                        MAX_STR_LEN))) {
+            ALOGE("Invalid verb identifier value");
+        } else {
+            ALOGV("Index:%d Verb:%s", index,
+                    uc_mgr->card_ctxt_ptr->verb_list[index]);
+            /* Disable the mixer controls for current use case
+             * for specified device */
+            if (strncmp(uc_mgr->card_ctxt_ptr->current_verb,
+                        SND_USE_CASE_VERB_INACTIVE, MAX_STR_LEN)) {
+                ret = set_controls_of_usecase_for_device(uc_mgr,
+                        uc_mgr->card_ctxt_ptr->current_verb, usecase,
+                        0, CTRL_LIST_VERB);
+                if (ret != 0)
+                    ALOGE("Failed to disable controls for use case: %s",
+                            uc_mgr->card_ctxt_ptr->current_verb);
+            }
+        }
     } else if (!strncmp(identifier, "_enadev", 7)) {
         index = 0; ret = 0;
         list_size =
