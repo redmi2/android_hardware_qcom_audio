@@ -26,6 +26,7 @@
 #include "AudioHardwareALSA.h"
 #include <media/AudioRecord.h>
 #include <dlfcn.h>
+#include <math.h>
 #ifdef QCOM_CSDCLIENT_ENABLED
 extern "C" {
 static int (*csd_disable_device)();
@@ -73,6 +74,9 @@ ALSADevice::ALSADevice() {
     mBtscoSamplerate = 8000;
     mCallMode = AUDIO_MODE_NORMAL;
     mInChannels = 0;
+    mIsFmEnabled = false;
+    //Initialize fm volume to value corresponding to unity volume	92
+    mFmVolume = lrint((0.0 * 0x2000) + 0.5);
     char value[128], platform[128], baseband[128];
 
     property_get("persist.audio.handset.mic",value,"0");
@@ -97,6 +101,7 @@ ALSADevice::ALSADevice() {
     mMixer = mixer_open("/dev/snd/controlC0");
 
     mProxyParams.mExitRead = false;
+    mProxyParams.mPfdProxy[1].fd = -1;
     resetProxyVariables();
     mProxyParams.mCaptureBufferSize = AFE_PROXY_PERIOD_SIZE;
     mProxyParams.mCaptureBuffer = NULL;
@@ -118,7 +123,7 @@ ALSADevice::~ALSADevice()
 
 }
 
-bool ALSADevice::platform_is_Fusion3()
+static bool platform_is_Fusion3()
 {
     char platform[128], baseband[128];
     property_get("ro.board.platform", platform, "");
@@ -436,9 +441,28 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
             devices = devices | (AudioSystem::DEVICE_OUT_WIRED_HEADPHONE |
                       AudioSystem::DEVICE_IN_BUILTIN_MIC);
         } else if ((devices & AudioSystem::DEVICE_OUT_EARPIECE) ||
-                  (devices & AudioSystem::DEVICE_IN_BUILTIN_MIC)) {
-            devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
-                      AudioSystem::DEVICE_OUT_EARPIECE);
+                   (devices & AudioSystem::DEVICE_IN_BUILTIN_MIC)) {
+            if ((mode == AudioSystem::MODE_IN_COMMUNICATION) &&
+                 (devices & AudioSystem::DEVICE_IN_BUILTIN_MIC)) {
+                 if (!strncmp(mCurRxUCMDevice, SND_USE_CASE_DEV_SPEAKER,
+                              strlen(SND_USE_CASE_DEV_SPEAKER))) {
+                     devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
+                               AudioSystem::DEVICE_OUT_SPEAKER);
+                 }
+                 else if (!strncmp(mCurRxUCMDevice, SND_USE_CASE_DEV_HDMI,
+                                   strlen(SND_USE_CASE_DEV_HDMI))) {
+                           devices = devices | (AudioSystem::DEVICE_OUT_AUX_DIGITAL |
+                                     AudioSystem::DEVICE_IN_AUX_DIGITAL);
+                 }
+                 else {
+                     devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
+                               AudioSystem::DEVICE_OUT_EARPIECE);
+                 }
+            }
+            else {
+                devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
+                AudioSystem::DEVICE_OUT_EARPIECE);
+            }
         } else if (devices & AudioSystem::DEVICE_OUT_SPEAKER) {
             devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
                        AudioSystem::DEVICE_OUT_SPEAKER);
@@ -462,7 +486,8 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
             devices = devices | (AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET |
                       AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET);
 #endif
-        } else if (devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+        } else if ((devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) ||
+                  (devices & AudioSystem::DEVICE_IN_AUX_DIGITAL)) {
             devices = devices | (AudioSystem::DEVICE_OUT_AUX_DIGITAL |
                       AudioSystem::DEVICE_IN_AUX_DIGITAL);
 #ifdef QCOM_PROXY_DEVICE_ENABLED
@@ -600,8 +625,7 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
     }
 #ifdef QCOM_FM_ENABLED
     if (rxDevice != NULL) {
-        if (devices & AudioSystem::DEVICE_OUT_FM)
-            setFmVolume(mFmVolume);
+        setFmVolume(mFmVolume);
     }
 #endif
     ALOGD("switchDevice: mCurTxUCMDevivce %s mCurRxDevDevice %s", mCurTxUCMDevice, mCurRxUCMDevice);
@@ -666,7 +690,7 @@ status_t ALSADevice::open(alsa_handle_t *handle)
     unsigned flags = 0;
     int err = NO_ERROR;
 
-    if(handle->devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+    if(mCurDevice & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
         err = setHDMIChannelCount();
         if(err != OK) {
             ALOGE("setHDMIChannelCount err = %d", err);
@@ -1107,7 +1131,7 @@ status_t ALSADevice::startFm(alsa_handle_t *handle)
         goto Error;
     }
 
-
+    mIsFmEnabled = true;
     setFmVolume(mFmVolume);
     if (devName) {
         free(devName);
@@ -1128,8 +1152,12 @@ status_t ALSADevice::setFmVolume(int value)
 {
     status_t err = NO_ERROR;
 
-    setMixerControl("Internal FM RX Volume",value,0);
     mFmVolume = value;
+    if (!mIsFmEnabled) {
+        return INVALID_OPERATION;
+    }
+
+    setMixerControl("Internal FM RX Volume",value,0);
 
     return err;
 }
@@ -1379,6 +1407,7 @@ char *ALSADevice::getUCMDeviceFromAcdbId(int acdb_id)
      switch(acdb_id) {
         case DEVICE_HANDSET_RX_ACDB_ID:
              return strdup(SND_USE_CASE_DEV_HANDSET);
+        case DEVICE_SPEAKER_MONO_RX_ACDB_ID:
         case DEVICE_SPEAKER_RX_ACDB_ID:
              return strdup(SND_USE_CASE_DEV_SPEAKER);
         case DEVICE_HEADSET_RX_ACDB_ID:
@@ -1477,7 +1506,7 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
         } else if (devices & AudioSystem::DEVICE_OUT_EARPIECE) {
             if (mCallMode == AUDIO_MODE_IN_CALL ||
                 mCallMode == AUDIO_MODE_IN_COMMUNICATION) {
-                return strdup(SND_USE_CASE_DEV_VOC_EARPIECE); /* Voice HANDSET RX */
+                   return strdup(SND_USE_CASE_DEV_VOC_EARPIECE); /* Voice HANDSET RX */
             } else {
                 return strdup(SND_USE_CASE_DEV_EARPIECE); /* HANDSET RX */
             }
@@ -2288,7 +2317,7 @@ status_t ALSADevice::openProxyDevice()
            mProxyParams.mProxyPcmHandle->period_size/2
            : mProxyParams.mProxyPcmHandle->period_size/4;
    sparams->start_threshold = 1;
-   sparams->stop_threshold = mProxyParams.mProxyPcmHandle->buffer_size;
+   sparams->stop_threshold = INT_MAX;
    sparams->xfer_align = (mProxyParams.mProxyPcmHandle->flags & PCM_MONO) ?
            mProxyParams.mProxyPcmHandle->period_size/2
            : mProxyParams.mProxyPcmHandle->period_size/4; /* needed for old kernels */

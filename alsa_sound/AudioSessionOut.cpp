@@ -110,6 +110,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     mObserver           = NULL;
     mOutputMetadataLength = 0;
     mSkipEOS            = false;
+    mTunnelMode         = false;
 
     if(devices == 0) {
         ALOGE("No output device specified");
@@ -185,7 +186,7 @@ status_t AudioSessionOutALSA::setVolume(float left, float right)
         ALOGW("AudioSessionOutALSA::setVolume(%f) over 1.0, assuming 1.0\n", volume);
         volume = 1.0;
     }
-    mStreamVol = lrint((volume * 0x2000)+0.5);
+    mStreamVol = (lrint((left * 0x2000)+0.5)) << 16 | (lrint((right * 0x2000)+0.5));
 
     ALOGV("Setting stream volume to %d (available range is 0 to 0x2000)\n", mStreamVol);
     if(mAlsaHandle) {
@@ -232,6 +233,10 @@ status_t AudioSessionOutALSA::openAudioSessionDevice(int type, int devices)
         mOutputMetadataLength = sizeof(output_metadata_handle_t);
         ALOGD("openAudioSessionDevice - mOutputMetadataLength = %d", mOutputMetadataLength);
     }
+
+  /*  mOutputMetadataLength = sizeof(output_metadata_handle_t);
+    ALOGD("openAudioSessionDevice - mOutputMetadataLength = %d", mOutputMetadataLength);*/
+
     if(use_case) {
         free(use_case);
         use_case = NULL;
@@ -269,13 +274,16 @@ status_t AudioSessionOutALSA::openAudioSessionDevice(int type, int devices)
 ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
 {
     Mutex::Autolock autoLock(mLock);
-    int err;
-    int *lbuffer = (int*) buffer;
-    int lbuflength = TUNNEL_BUFFER_SIZE - TUNNEL_METADATA_SIZE;
-    ALOGV("write Empty Queue size() = %d, Filled Queue size() = %d mReached EOS %d, mEosEventReceived %d bytes %d",
-         mEmptyQueue.size(),mFilledQueue.size(), mReachedEOS, mEosEventReceived, bytes);
+    int err = 0;
 
-    if(mFilledQueue.empty() && !bytes) {
+    ALOGV("write Empty Queue size() = %d, Filled Queue size() = %d "
+          "mReached EOS %d, mEosEventReceived %d bytes %d",
+          mEmptyQueue.size(),mFilledQueue.size(), mReachedEOS, mEosEventReceived, bytes);
+
+    mEosEventReceived = false;
+    mReachedEOS = false;
+
+    if (!bytes) {
         mReachedEOS = true;
 //        mEosEventReceived = true;
         ALOGV("mObserver: posting EOS ignored");
@@ -285,57 +293,50 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
     //1.) Dequeue the buffer from empty buffer queue. Copy the data to be
     //    written into the buffer. Then Enqueue the buffer to the filled
     //    buffer queue
-    mEmptyQueueMutex.lock();
 
-   if (mSkipWrite && (mEmptyQueue.size() == BUFFER_COUNT)) {
-       ALOGV("reducing mSkipWrite by 1 in write");
-       mSkipWrite = false;
-       if(mSkipWrite == false){
-            ALOGV("mSkipWrite is false now write bytes %d", bytes);
-            if( bytes && lbuffer[(lbuflength/sizeof(int))] == 0){
-                 mEmptyQueueMutex.unlock();
-                 ALOGV("skipping buffer in write %d", lbuffer[(lbuflength/sizeof(int))]);
-                 return 0;
-            } else {
-
-            }
-        } else {
-            //we have not skipped as many buffers as seeks
-             mEmptyQueueMutex.unlock();
-             ALOGV("returning from write since we have not skipped enough mSkipWrite %d",
-                 mSkipWrite);
-             return 0;
-        }
+    if (mSkipWrite) {
+        LOG_ALWAYS_FATAL_IF((mEmptyQueue.size() != BUFFER_COUNT),
+                            "::write, mSkipwrite is true but empty queue isnt full");
+        ALOGD("reset mSkipWrite in write");
+        mSkipWrite = false;
+        ALOGD("mSkipWrite is false now write bytes %d", bytes);
+        ALOGD("skipping buffer in write");
+        return 0;
     }
 
-    if(bytes != 0) {
-        ALOGV("not skipping buffer in write since mSkipWrite = %d, mEmptyQueuesize %d, skip flag %d", mSkipWrite, \
-            mEmptyQueue.size(), lbuffer[(lbuflength/sizeof(int))]);
-    } else {
-        ALOGV("not skipping buffer in write since mSkipWrite = %d, mEmptyQueuesize %d ", mSkipWrite, mEmptyQueue.size());
-    }
+    ALOGV("not skipping buffer in write since mSkipWrite = %d, "
+              "mEmptyQueuesize %d ", mSkipWrite, mEmptyQueue.size());
 
     List<BuffersAllocated>::iterator it = mEmptyQueue.begin();
     BuffersAllocated buf = *it;
 
     mEmptyQueue.erase(it);
-    mEmptyQueueMutex.unlock();
 
-    memset(buf.memBuf, 0, mAlsaHandle->handle->period_size);
-    if((!strncmp(mAlsaHandle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
-            strlen(SND_USE_CASE_VERB_HIFI_TUNNEL))) ||
-            (!strncmp(mAlsaHandle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL,
-            strlen(SND_USE_CASE_MOD_PLAY_TUNNEL)))) {
-        updateMetaData(bytes);
+    updateMetaData(bytes);
 
         memcpy(buf.memBuf, &mOutputMetadataTunnel, mOutputMetadataLength);
         ALOGD("Copy Metadata = %d, bytes = %d", mOutputMetadataLength, bytes);
 
-        if(bytes == 0) {
-          err = pcm_write(mAlsaHandle->handle, buf.memBuf, mAlsaHandle->handle->period_size);
-          buf.bytesToWrite = bytes;
-          return err;
+    if (bytes == 0) {
+        buf.bytesToWrite = 0;
+        err = pcm_write(mAlsaHandle->handle, buf.memBuf, mAlsaHandle->handle->period_size);
+
+        //bad part is !err does not guarantee pcm_write succeeded!
+        if (!err) { //mReachedEOS is already set
+             /*
+              * This workaround is needed to ensure EOS from the event thread
+              * is posted when the first (only) buffer given to the driver
+              * is a zero length buffer. Note that the compressed driver
+              * does not interrupt the timer fd if the EOS buffer was queued
+              * after a buffer with valid data (full or partial). So we
+              * only need to do this in this special case.
+              */
+            if (mFilledQueue.empty()) {
+                mFilledQueue.push_back(buf);
+            }
         }
+
+        return err;
     }
     ALOGV("PCM write before memcpy start");
     memcpy((buf.memBuf + mOutputMetadataLength), buffer, bytes);
@@ -354,12 +355,12 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
                 mAlsaHandle->handle->start = 1;
             }
         }
-        mReachedEOS = true;
-    }
 
-    mFilledQueueMutex.lock();
+        if (!mTunnelMode) mReachedEOS = true;
+    }
+    int32_t * Buf = (int32_t *) buf.memBuf;
+    ALOGD(" buf.memBuf [0] = %x , buf.memBuf [1] = %x",  Buf[0], Buf[1]);
     mFilledQueue.push_back(buf);
-    mFilledQueueMutex.unlock();
     return err;
 }
 
@@ -480,70 +481,29 @@ void  AudioSessionOutALSA::eventThreadEntry() {
             pfd[0].revents = 0;
             ALOGV("After an event occurs");
 
-            mFilledQueueMutex.lock();
-            if (mFilledQueue.empty()) {
-                ALOGV("Filled queue is empty");
-                mFilledQueueMutex.unlock();
-                continue;
-            }
-            // Transfer a buffer that was consumed by the driver from filled queue
-            // to empty queue
-
-            BuffersAllocated buf = *(mFilledQueue.begin());
-            mFilledQueue.erase(mFilledQueue.begin());
-            ALOGV("mFilledQueue %d", mFilledQueue.size());
-            mLock.lock();
-            bool lReachedEOS = mReachedEOS;
-            mLock.unlock();
-
-            //Post EOS in case the filled queue is empty and EOS is reached.
-            if (mFilledQueue.empty() && lReachedEOS) {
-                 mSkipEOS = false;
-                 mFilledQueueMutex.unlock();
-                 if (mObserver != NULL) {
-                     if((!strncmp(mAlsaHandle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
-                             strlen(SND_USE_CASE_VERB_HIFI_TUNNEL))) ||
-                             (!strncmp(mAlsaHandle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL,
-                             strlen(SND_USE_CASE_MOD_PLAY_TUNNEL)))) {
-                         ALOGD("Audio Drain DONE ++");
-                         if ( ioctl(mAlsaHandle->handle->fd, SNDRV_COMPRESS_DRAIN) < 0 ) {
-                             ALOGE("Audio Drain failed");
-                             mSkipEOS = true;
-                         }
-                         ALOGD("Audio Drain DONE --");
-                     }
-                     if(mSkipEOS == false) {
-
-                         mLock.lock();
-                         lReachedEOS = mReachedEOS;
-                         mLock.unlock();
-
-                         ALOGV("Posting the EOS to the observer player %p depending on mReachedEOS %d", \
-                             mObserver, lReachedEOS);
-
-                         if(lReachedEOS) {
-                             ALOGV("mObserver: posting EOS from eventcallback");
-                             //TODO: potential issue here since flush can reset this
-                             mEosEventReceived = true;
-                             mObserver->postEOS(0);
-                         } else {
-                             ALOGV("Ignored EOS posting since Reached EOS was reset");
-                         }
-                     }
+            {
+                Mutex::Autolock _l(mLock);
+                if (mFilledQueue.empty()) {
+                    ALOGV("Filled queue is empty"); //only time this would be valid is after a flush?
+                    continue;
                 }
-            } else {
-                mFilledQueueMutex.unlock();
-            }
+                // Transfer a buffer that was consumed by the driver from filled queue
+                // to empty queue
 
-            mEmptyQueueMutex.lock();
-            mEmptyQueue.push_back(buf);
+                BuffersAllocated buf = *(mFilledQueue.begin());
+                mFilledQueue.erase(mFilledQueue.begin());
+                ALOGV("mFilledQueue %d", mFilledQueue.size());
 
-            if (mSkipWrite) {
+                mEmptyQueue.push_back(buf);
+                mWriteCv.signal();
                 ALOGV("Reset mSkipwrite in eventthread entry");
                 mSkipWrite = false;
+
+                //Post EOS in case the filled queue is empty and EOS is reached.
+                if (mFilledQueue.empty() && mReachedEOS) {
+                    drainAndPostEOS_l();
+                }
             }
-            mEmptyQueueMutex.unlock();
-            mWriteCv.signal();
         }
     }
 
@@ -678,8 +638,6 @@ status_t AudioSessionOutALSA::flush()
     ALOGV("AudioSessionOutALSA flush");
     int err;
     {
-        Mutex::Autolock autoLockEmptyQueue(mEmptyQueueMutex);
-        Mutex::Autolock autoLockFilledQueue(mFilledQueueMutex);
         // 1.) Clear the Empty and Filled buffer queue
         mEmptyQueue.clear();
         mFilledQueue.clear();
@@ -757,12 +715,7 @@ status_t AudioSessionOutALSA::standby()
     // At this point, all the buffers with the driver should be
     // flushed.
     status_t err = NO_ERROR;
-    mLock.lock();
-    if( !mAlsaHandle->handle->start) {
-        ALOGV("drain from destructor which will flush the buffers");
-        drain();
-    }
-    mLock.unlock();
+    flush();
     mAlsaHandle->module->standby(mAlsaHandle);
     if (mParent->mRouteAudioToExtOut) {
          ALOGD("Standby - stopPlaybackOnExtOut_l - mUseCase = %d",mUseCase);
@@ -1031,4 +984,66 @@ void AudioSessionOutALSA::updateMetaData(size_t bytes) {
             bytes, mAlsaHandle->handle->period_size);
 }
 
+status_t AudioSessionOutALSA::drainAndPostEOS_l()
+{
+    if (!mFilledQueue.empty()) {
+        ALOGD("drainAndPostEOS called without empty mFilledQueue");
+        return INVALID_OPERATION;
+    }
+
+    if (!mReachedEOS) {
+        ALOGD("drainAndPostEOS called without mReachedEOS set");
+        return INVALID_OPERATION;
+    }
+
+    if (mEosEventReceived) {
+        ALOGD("drainAndPostEOS called after mEosEventReceived");
+        return INVALID_OPERATION;
+    }
+
+    mSkipEOS = false;
+    if ((!strncmp(mAlsaHandle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
+                  strlen(SND_USE_CASE_VERB_HIFI_TUNNEL))) ||
+       (!strncmp(mAlsaHandle->useCase, SND_USE_CASE_MOD_PLAY_TUNNEL,
+                  strlen(SND_USE_CASE_MOD_PLAY_TUNNEL)))) {
+        ALOGD("Audio Drain DONE ++");
+        mLock.unlock(); //to allow flush()
+        int ret = ioctl(mAlsaHandle->handle->fd, SNDRV_COMPRESS_DRAIN);
+        mLock.lock();
+
+        if (ret < 0) {
+            ret = -errno;
+            ALOGE("Audio Drain failed with errno %s", strerror(errno));
+            switch (ret) {
+            case -EINTR: //interrupted by flush
+              mSkipEOS = true;
+              break;
+            case -EWOULDBLOCK: //no writes given, drain would block indefintely
+              //mReachedEOS might have been cleared in the meantime
+              //by a flush. Do not send a false EOS in that case
+              mSkipEOS = mReachedEOS ? false : true;
+              break;
+            default:
+              mSkipEOS = false;
+              break;
+            }
+        }
+        ALOGD("Audio Drain DONE --");
+    }
+
+    if (mSkipEOS == false) {
+        ALOGV("Posting the EOS to the observer player %p depending on mReachedEOS %d", \
+              mObserver, mReachedEOS);
+        mEosEventReceived = true;
+        if (mObserver != NULL) {
+          ALOGV("mObserver: posting EOS from eventcallback");
+          mLock.unlock();
+          mObserver->postEOS(0);
+          mLock.lock();
+        };
+    } else {
+      ALOGD("Ignored EOS posting since mSkipEOS is false");
+    }
+    return OK;
+}
 }       // namespace android_audio_legacy

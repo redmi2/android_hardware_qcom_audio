@@ -41,6 +41,19 @@ public:
         virtual status_t setDeviceConnectionState(audio_devices_t device,
                                                           AudioSystem::device_connection_state state,
                                                           const char *device_address);
+        uint32_t checkDeviceMuteStrategies(AudioOutputDescriptor *outputDesc,
+                                           audio_devices_t prevDevice,
+                                           uint32_t delayMs);
+
+        void setStrategyMute(routing_strategy strategy,
+                             bool on,
+                             audio_io_handle_t output,
+                             int delayMs = 0,
+                             audio_devices_t device = (audio_devices_t)0);
+        void setStreamMute(int stream, bool on, audio_io_handle_t output,
+                           int delayMs = 0,
+                           audio_devices_t device = (audio_devices_t)0);
+
         virtual AudioSystem::device_connection_state getDeviceConnectionState(audio_devices_t device,
                                                                               const char *device_address);
         virtual void setPhoneState(int state);
@@ -57,6 +70,7 @@ public:
         virtual status_t stopOutput(audio_io_handle_t output,
                                     AudioSystem::stream_type stream,
                                     int session = 0);
+        virtual void releaseOutput(audio_io_handle_t output);
         virtual audio_io_handle_t getInput(int inputSource,
                                             uint32_t samplingRate,
                                             uint32_t format,

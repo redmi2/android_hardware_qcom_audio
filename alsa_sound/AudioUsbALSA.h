@@ -47,6 +47,8 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.*/
 #define SIGNAL_EVENT_TIMEOUT 1
 #define SIGNAL_EVENT_KILLTHREAD 2
 
+#define PROXY_OPEN_RETRY_COUNT 100
+#define PROXY_OPEN_WAIT_TIME 20
 #define BUFFSIZE 1000000
 
 #define PATH "/proc/asound/card1/stream0"
@@ -68,8 +70,11 @@ class AudioUsbALSA;
 class AudioUsbALSA
 {
 private:
+    int mProxySoundCard;
     int mproxypfdPlayback;
     int musbpfdPlayback;
+    int musbpfdRecording;
+    int mProxypfdRecording;
     int mnfdsPlayback;
     int mnfdsRecording;
     int mtimeOut;
@@ -86,9 +91,17 @@ private:
     pthread_t mRecordingUsb;
     snd_use_case_mgr_t *mUcMgr;
     Mutex    mLock;
+    Mutex mRecordLock;
+
+    enum UsbAudioPCMModes {
+        USB_PLAYBACK = 0,
+        USB_RECORDING,
+        PROXY_PLAYBACK,
+        PROXY_RECORDING,
+    };
 
     //Helper functions
-    struct pcm * configureDevice(unsigned flags, char* hw, int sampleRate, int channelCount, int periodSize, bool playback);
+    struct pcm * configureDevice(unsigned flags, char* hw, int sampleRate, int channelCount, int periodSize, UsbAudioPCMModes usbAudioPCMModes);
     status_t syncPtr(struct pcm *handle, bool *killThread);
 
     //playback
@@ -107,9 +120,9 @@ private:
     void RecordingThreadEntry();
     static void *RecordingThreadWrapper(void *me);
 
-    status_t setHardwareParams(pcm *local_handle, uint32_t sampleRate, uint32_t channels, int periodSize);
+    status_t setHardwareParams(pcm *local_handle, uint32_t sampleRate, uint32_t channels, int periodSize, UsbAudioPCMModes usbAudioPCMModes);
 
-    status_t setSoftwareParams(pcm *pcm, bool playback);
+    status_t setSoftwareParams(pcm *pcm, UsbAudioPCMModes usbAudioPCMModes);
 
     status_t closeDevice(pcm *handle);
 
