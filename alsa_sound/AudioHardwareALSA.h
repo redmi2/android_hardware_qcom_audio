@@ -110,6 +110,7 @@ class AudioHardwareALSA;
 #define MODE_AMR                0x5
 #define MODE_AMR_WB             0xD
 #define MODE_PCM                0xC
+#define MODE_4GV_NW             0xE
 
 #define DUALMIC_KEY         "dualmic_enabled"
 #define FLUENCE_KEY         "fluence"
@@ -127,7 +128,8 @@ class AudioHardwareALSA;
 #define CALL_STATE_KEY      "call_state"
 #define VOLUME_BOOST_KEY    "volume_boost"
 #define AUDIO_PARAMETER_KEY_FM_VOLUME "fm_volume"
-
+#define ECHO_SUPRESSION     "ec_supported"
+#define ALL_CALL_STATES_KEY "all_call_states"
 
 #define ANC_FLAG        0x00000001
 #define DMIC_FLAG       0x00000002
@@ -347,6 +349,7 @@ static struct mDDPEndpParams {
 #define VOICE_SESSION_VSID  0x10C01000
 #define VOICE2_SESSION_VSID 0x10DC1000
 #define VOLTE_SESSION_VSID  0x10C02000
+#define QCHAT_SESSION_VSID  0x10803000
 #define ALL_SESSION_VSID    0xFFFFFFFF
 #define DEFAULT_MUTE_RAMP_DURATION      500
 #define DEFAULT_VOLUME_RAMP_DURATION_MS 20
@@ -454,6 +457,7 @@ public:
     status_t startFm(alsa_handle_t *handle);
     status_t startSpkProtRxTx(alsa_handle_t *handle, bool is_rx);
     bool     isSpeakerinUse(unsigned long &secs);
+    status_t     setVocSessionId(uint32_t sessionId);
     void     setVoiceVolume(int volume);
     void     setVoipVolume(int volume);
     void     setMicMute(int state);
@@ -487,6 +491,8 @@ public:
                                 int param_id, int param_val);
     status_t setDDPEndpParams(alsa_handle_t *handle, int device, int dev_ch_cap,
                                char *ddpEndpParams, int *length, bool send_params);
+
+    status_t getRMS(int *valp);
 #ifdef SEPERATED_AUDIO_INPUT
     void     setInput(int);
 #endif
@@ -949,6 +955,7 @@ private:
     int                 mSurroundOutputBufferIdx;
 #endif
 
+    uint8_t             *mAmrwbInputBuffer;
 protected:
     AudioHardwareALSA *     mParent;
 };
@@ -1091,6 +1098,7 @@ public:
 
     void pauseIfUseCaseTunnelOrLPA();
     void resumeIfUseCaseTunnelOrLPA();
+    uint32_t getActiveSessionVSID();
 private:
     AudioSpeakerProtection mspkrProtection;
     status_t     openExtOutput(int device);
@@ -1177,6 +1185,7 @@ protected:
     int mVoiceCallState;
     int mVolteCallState;
     int mVoice2CallState;
+    int mQchatCallState;
     int mCallState;
     uint32_t mVSID;
     int mVoiceVolFeatureSet;

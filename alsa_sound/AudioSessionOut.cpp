@@ -755,9 +755,9 @@ status_t AudioSessionOutALSA::stop()
 
 status_t AudioSessionOutALSA::standby()
 {
-    Mutex::Autolock autoLock(mParent->mLock);
     status_t err = NO_ERROR;
     flush();
+    Mutex::Autolock autoLock(mParent->mLock);
 
 #ifdef QCOM_USBAUDIO_ENABLED
     if (mParent->musbPlaybackState) {
@@ -941,12 +941,12 @@ SNDRV_PCM_FORMAT_S16_LE : mFormat);
     alsa_handle.session     = this;
     strlcpy(alsa_handle.useCase, useCase, sizeof(alsa_handle.useCase));
 
-    mAlsaDevice->route(&alsa_handle, devices, mParent->mode());
     if (bIsUseCase) {
-        snd_use_case_set(mUcMgr, "_verb", useCase);
+       snd_use_case_set(mUcMgr, "_verb", useCase);
     } else {
-        snd_use_case_set(mUcMgr, "_enamod", useCase);
+       snd_use_case_set(mUcMgr, "_enamod", useCase);
     }
+    mAlsaDevice->route(&alsa_handle, devices, mParent->mode());
 
     //Set Tunnel or LPA bit if the playback over usb is tunnel or Lpa
     if((devices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
@@ -1088,25 +1088,22 @@ void AudioSessionOutALSA::reset() {
     }
 #endif
 
-    if(mAlsaHandle) {
-        ALOGD("closeDevice mAlsaHandle");
-        closeDevice(mAlsaHandle);
-        mAlsaHandle = NULL;
-    }
 #ifdef QCOM_USBAUDIO_ENABLED
     mParent->closeUsbPlaybackIfNothingActive();
 #endif
     ALOGV("Erase device list");
     for(ALSAHandleList::iterator it = mParent->mDeviceList.begin();
             it != mParent->mDeviceList.end(); ++it) {
-        if( isTunnelUseCase(it->useCase) ||
-           (!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER,
-                            strlen(SND_USE_CASE_VERB_HIFI_LOW_POWER))) ||
-           (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_LPA,
-                            strlen(SND_USE_CASE_MOD_PLAY_LPA)))) {
+        if (&(*it) == mAlsaHandle) {
             mParent->mDeviceList.erase(it);
             break;
         }
+    }
+
+    if(mAlsaHandle) {
+        ALOGD("closeDevice mAlsaHandle");
+        closeDevice(mAlsaHandle);
+        mAlsaHandle = NULL;
     }
     mParent->mLock.unlock();
 }

@@ -79,7 +79,8 @@ AudioStreamInALSA::AudioStreamInALSA(AudioHardwareALSA *parent,
     mSurroundOutputBuffer(NULL),
     mSurroundInputBuffer(NULL),
     mSurroundOutputBufferIdx(0),
-    mSurroundInputBufferIdx(0)
+    mSurroundInputBufferIdx(0),
+    mAmrwbInputBuffer(NULL)
 #endif
 {
 #ifdef QCOM_SSR_ENABLED
@@ -153,6 +154,8 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
             if ((mHandle->devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
                 (newMode == AUDIO_MODE_IN_CALL)) {
                 ALOGD("read:: mParent->mIncallMode=%d", mParent->mIncallMode);
+
+                uint32_t sessionVsid = mParent->getActiveSessionVSID();
                 if ((mParent->mIncallMode & AUDIO_CHANNEL_IN_VOICE_UPLINK) &&
                     (mParent->mIncallMode & AUDIO_CHANNEL_IN_VOICE_DNLINK)) {
 #ifdef QCOM_CSDCLIENT_ENABLED
@@ -172,8 +175,10 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                             strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_COMPRESSED_VOICE_UL_DL,
                                     sizeof(mHandle->useCase));
                         } else {
-                            strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL,
-                                    sizeof(mHandle->useCase));
+                            mParent->mALSADevice->setVocSessionId(sessionVsid);
+                            strlcpy(mHandle->useCase,
+                                    SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL,
+                                    sizeof(SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL));
                         }
                     }
                 } else if (mParent->mIncallMode & AUDIO_CHANNEL_IN_VOICE_DNLINK) {
@@ -194,12 +199,15 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                             strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_COMPRESSED_VOICE_DL,
                                     sizeof(mHandle->useCase));
                         } else {
-                            strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_DL,
-                                    sizeof(mHandle->useCase));
+                            mParent->mALSADevice->setVocSessionId(sessionVsid);
+                            strlcpy(mHandle->useCase,
+                                    SND_USE_CASE_MOD_CAPTURE_VOICE_DL,
+                                    sizeof(SND_USE_CASE_MOD_CAPTURE_VOICE_DL));
                         }
                     }
                 } else if (mParent->mIncallMode & AUDIO_CHANNEL_IN_VOICE_UPLINK) {
                     if (mParent->mFusion3Platform == false) {
+                        mParent->mALSADevice->setVocSessionId(sessionVsid);
                         strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL,
                                 sizeof(SND_USE_CASE_MOD_CAPTURE_VOICE_UL));
                     } else {
@@ -216,8 +224,6 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
             } else if (mHandle->devices == AudioSystem::DEVICE_IN_FM_RX_A2DP) {
                 strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_A2DP_FM, sizeof(mHandle->useCase));
 #endif
-            } else if(!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP)) {
-                strlcpy(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP, sizeof(mHandle->useCase));
             } else if(!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED) &&
                             mHandle->format == AUDIO_FORMAT_AMR_WB) {
                     strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED, sizeof(SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED));
@@ -236,6 +242,8 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
             if ((mHandle->devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
                 (newMode == AUDIO_MODE_IN_CALL)) {
                 ALOGD("read:: ---- mParent->mIncallMode=%d", mParent->mIncallMode);
+
+                uint32_t sessionVsid = mParent->getActiveSessionVSID();
                 if ((mParent->mIncallMode & AUDIO_CHANNEL_IN_VOICE_UPLINK) &&
                     (mParent->mIncallMode & AUDIO_CHANNEL_IN_VOICE_DNLINK)) {
 #ifdef QCOM_CSDCLIENT_ENABLED
@@ -257,8 +265,9 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                             strlcpy(mHandle->useCase, SND_USE_CASE_VERB_CAPTURE_COMPRESSED_VOICE_UL_DL,
                                     sizeof(mHandle->useCase));
                         } else {
+                            mParent->mALSADevice->setVocSessionId(sessionVsid);
                             strlcpy(mHandle->useCase, SND_USE_CASE_VERB_UL_DL_REC,
-                                    sizeof(mHandle->useCase));
+                                    sizeof(SND_USE_CASE_VERB_UL_DL_REC));
                         }
                     }
                 } else if (mParent->mIncallMode & AUDIO_CHANNEL_IN_VOICE_DNLINK) {
@@ -281,12 +290,14 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                                     sizeof(mHandle->useCase));
                         }
                         else {
+                            mParent->mALSADevice->setVocSessionId(sessionVsid);
                             strlcpy(mHandle->useCase, SND_USE_CASE_VERB_DL_REC,
-                                    sizeof(mHandle->useCase));
+                                    sizeof(SND_USE_CASE_VERB_DL_REC));
                         }
                    }
                 } else if (mParent->mIncallMode & AUDIO_CHANNEL_IN_VOICE_UPLINK) {
                     if (mParent->mFusion3Platform == false) {
+                        mParent->mALSADevice->setVocSessionId(sessionVsid);
                         strlcpy(mHandle->useCase, SND_USE_CASE_VERB_UL_REC,
                                 sizeof(SND_USE_CASE_VERB_UL_REC));
                     } else {
@@ -300,8 +311,6 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
         } else if (mHandle->devices == AudioSystem::DEVICE_IN_FM_RX_A2DP) {
                 strlcpy(mHandle->useCase, SND_USE_CASE_VERB_FM_A2DP_REC, sizeof(mHandle->useCase));
 #endif
-            } else if(!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)){
-                    strlcpy(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL, sizeof(mHandle->useCase));
             } else if(!strcmp(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED) &&
                        mHandle->format == AUDIO_FORMAT_AMR_WB) {
                 strlcpy(mHandle->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED, sizeof(SND_USE_CASE_VERB_HIFI_REC_COMPRESSED));
@@ -365,6 +374,21 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
             mParent->mLock.unlock();
 
             return 0;
+        }
+
+        if (mHandle->format == AUDIO_FORMAT_AMR_WB &&
+            (strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,
+                        strlen(SND_USE_CASE_VERB_IP_VOICECALL))) &&
+            (strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP,
+                        strlen(SND_USE_CASE_MOD_PLAY_VOIP)))) {
+            ALOGD("read:: Allocate mAmrwbInputBuffer size %d", mHandle->periodSize);
+            mAmrwbInputBuffer = (uint8_t*) calloc(1, mHandle->periodSize);
+            if (mAmrwbInputBuffer == NULL) {
+                ALOGE("read:: mAmrwbInputBuffer allocation failed");
+                pcm_close(mHandle->handle);
+                mHandle->handle = NULL;
+                return 0;
+            }
         }
 #ifdef QCOM_USBAUDIO_ENABLED
         if((mHandle->devices == AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET)||
@@ -500,12 +524,12 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                 read_pending = AMR_WB_FRAMESIZE;
             }
             //We should pcm_read period_size to get complete data from driver
-            n = pcm_read(mHandle->handle, buffer, period_size);
+            n = pcm_read(mHandle->handle, mAmrwbInputBuffer, period_size);
             if (n < 0) {
                 ALOGE("pcm_read() returned failure: %d", n);
                 return 0;
             } else {
-                struct snd_compr_audio_info *header = (struct snd_compr_audio_info *) buffer;
+                struct snd_compr_audio_info *header = (struct snd_compr_audio_info *) mAmrwbInputBuffer;
                 if (header->frame_size > 0) {
                     if (sizeof(*header) + header->reserved[0] + header->frame_size > period_size) {
                         ALOGE("AMR WB read buffer overflow. Assign bigger buffer size");
@@ -513,10 +537,10 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                     }
                     read += header->frame_size;
                     read_pending -= header->frame_size;
-                    ALOGV("buffer: %p, data offset: %p, header size: %u, reserved[0]: %u",
-                            buffer, ((uint8_t*)buffer) + sizeof(*header) + header->reserved[0],
+                    ALOGV("mAmrwbInputBuffer: %p, data offset: %p, header size: %u, reserved[0]: %u",
+                            mAmrwbInputBuffer, mAmrwbInputBuffer + sizeof(*header) + header->reserved[0],
                             sizeof(*header), header->reserved[0]);
-                    memmove(buffer, ((uint8_t*)buffer) + sizeof(*header) + header->reserved[0], header->frame_size);
+                    memcpy(buffer, mAmrwbInputBuffer + sizeof(*header) + header->reserved[0], header->frame_size);
                     buffer += header->frame_size;
                 } else {
                     ALOGW("pcm_read() with zero frame size");
@@ -573,6 +597,9 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
             else {
                 read += static_cast<ssize_t>((period_size));
                 read_pending -= period_size;
+                if (mParent->mMicMute || mParent->mVoipMicMute) {
+                    memset(buffer, 0, period_size);
+                }
                 buffer += period_size;
             }
 
@@ -721,6 +748,11 @@ status_t AudioStreamInALSA::standby()
 #endif
     mHandle->module->standby(mHandle);
 
+    if (mHandle->format == AUDIO_FORMAT_AMR_WB &&
+        mAmrwbInputBuffer) {
+        free(mAmrwbInputBuffer);
+        mAmrwbInputBuffer = NULL;
+    }
 
     return NO_ERROR;
 }
