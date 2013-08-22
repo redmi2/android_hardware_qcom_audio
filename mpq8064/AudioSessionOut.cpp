@@ -447,7 +447,8 @@ status_t AudioSessionOutALSA::setVolume(float left, float right)
         }
     }
     if(mCompreRxHandle) {
-        if (mSpdifFormat != COMPRESSED_FORMAT && !(mHdmiFormat & COMPRESSED_FORMAT)) {
+        if ((mSpdifFormat != COMPRESSED_FORMAT || (mTranscodeDevices & AudioSystem::DEVICE_OUT_SPDIF))
+             && (!(mHdmiFormat & COMPRESSED_FORMAT) || mTranscodeDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)) {
             ALOGD("set compressed Volume(%f) handle->type %d\n", volume, mCompreRxHandle->type);
             ALOGD("Setting Compressed volume to %d (available range is 0 to 0x2000)\n", mStreamVol);
             status = mCompreRxHandle->module->setPlaybackVolume(mStreamVol,

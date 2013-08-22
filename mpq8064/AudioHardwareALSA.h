@@ -211,7 +211,7 @@ static int USBRECBIT_FM = (1 << 3);
 #define TIME_DURATION_OF_ONE_PERIOD 8 // In msec
 #define FRAME_WIDTH                   2  // Audio bytes per frame.
 #define PLAYBACK_MAX_PERIOD_SIZE    12288 // Refered it from Multi Channel Driver
-#define BYTE_ALIGNMENT_32BYTES     0xFFFFFF10
+#define BYTE_ALIGNMENT_32BYTES     0xFFFFFFE0
 
 #define DECODEQUEUEINDEX     0
 #define PASSTHRUQUEUEINDEX   1
