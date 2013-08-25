@@ -516,6 +516,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
             || handle->format == AUDIO_FORMAT_EVRC
             || handle->format == AUDIO_FORMAT_EVRCB
             || handle->format == AUDIO_FORMAT_EVRCWB
+            || handle->format == AUDIO_FORMAT_EVRCNW
 #endif
             ) {
             if ((strcmp(handle->useCase, SND_USE_CASE_VERB_HIFI_TUNNEL)) &&
@@ -654,8 +655,25 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
                       AudioSystem::DEVICE_IN_BUILTIN_MIC);
         } else if ((devices & AudioSystem::DEVICE_OUT_EARPIECE) ||
                   (devices & AudioSystem::DEVICE_IN_BUILTIN_MIC)) {
-            devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
-                      AudioSystem::DEVICE_OUT_EARPIECE);
+            if((mode == AudioSystem::MODE_IN_COMMUNICATION)
+                    && devices & AudioSystem::DEVICE_IN_BUILTIN_MIC) {
+                ALOGV("Current Rx device %s",mCurRxUCMDevice);
+                if(!strncmp(mCurRxUCMDevice, SND_USE_CASE_DEV_SPEAKER ,
+                        strlen(SND_USE_CASE_DEV_SPEAKER))) {
+                    devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
+                    AudioSystem::DEVICE_OUT_SPEAKER);
+                    ALOGV("Selecting Speaker: device %d",devices);
+                }
+                else{
+                    ALOGV("Selecting earpiece: device %d",devices);
+                    devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
+                    AudioSystem::DEVICE_OUT_EARPIECE);
+                }
+            }
+            else{
+                devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
+                AudioSystem::DEVICE_OUT_EARPIECE);
+            }
         } else if (devices & AudioSystem::DEVICE_OUT_SPEAKER) {
             devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
                        AudioSystem::DEVICE_OUT_SPEAKER);
@@ -888,6 +906,7 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
                     setEcrxDevice(ec_rx_dev);
                     free(ec_rx_dev);
                 }
+                free(ec_dev);
             }
         } else {
             ALOGE("acdb_loader_get_ecrx_device is NULL");
@@ -1027,6 +1046,10 @@ status_t ALSADevice::open(alsa_handle_t *handle)
 
     if (deviceName(handle, flags, &devName) < 0) {
         ALOGE("Failed to get pcm device node: %s", devName);
+        if (devName) {
+            free(devName);
+            devName = NULL;
+        }
         return NO_INIT;
     }
     if (devName != NULL) {
@@ -1091,6 +1114,10 @@ status_t ALSADevice::startVoipCall(alsa_handle_t *handle)
 
     if (deviceName(handle, flags, &devName) < 0) {
          ALOGE("Failed to get pcm device node");
+         if (devName) {
+            free(devName);
+            devName = NULL;
+         }
          return NO_INIT;
     }
 
@@ -1141,6 +1168,10 @@ status_t ALSADevice::startVoipCall(alsa_handle_t *handle)
 
      if (deviceName(handle, flags, &devName) < 0) {
         ALOGE("Failed to get pcm device node");
+        if (devName) {
+            free(devName);
+            devName = NULL;
+        }
         return NO_INIT;
      }
     if (devName != NULL) {
@@ -1200,6 +1231,10 @@ status_t ALSADevice::startVoiceCall(alsa_handle_t *handle, uint32_t vsid)
     flags = PCM_OUT | PCM_MONO;
     if (deviceName(handle, flags, &devName) < 0) {
         ALOGE("Failed to get pcm device node");
+        if (devName) {
+            free(devName);
+            devName = NULL;
+        }
         return NO_INIT;
     }
     if (devName != NULL) {
@@ -1544,6 +1579,8 @@ status_t ALSADevice::close(alsa_handle_t *handle, uint32_t vsid)
              !strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOICE)) ||
             (!strcmp(handle->useCase, SND_USE_CASE_VERB_VOLTE) ||
              !strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOLTE)) ||
+            (!strcmp(handle->useCase, SND_USE_CASE_VERB_QCHAT) ||
+             !strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_QCHAT)) ||
             (!strcmp(handle->useCase, SND_USE_CASE_VERB_VOICE2) ||
              !strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOICE2)) &&
             isPlatformFusion3()) {
@@ -1730,7 +1767,11 @@ int ALSADevice::getUseCaseType(const char *useCase)
         !strncmp(useCase, SND_USE_CASE_VERB_VOLTE,
             MAX_LEN(useCase,SND_USE_CASE_VERB_VOLTE)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_VOLTE,
-            MAX_LEN(useCase, SND_USE_CASE_MOD_PLAY_VOLTE))) {
+            MAX_LEN(useCase, SND_USE_CASE_MOD_PLAY_VOLTE)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_QCHAT,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_QCHAT)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_QCHAT,
+            MAX_LEN(useCase, SND_USE_CASE_MOD_PLAY_QCHAT))) {
         return (USECASE_TYPE_RX | USECASE_TYPE_TX);
     } else {
         ALOGE("unknown use case %s\n", useCase);
@@ -2440,6 +2481,33 @@ void ALSADevice::setVoipConfig(int mode, int rate)
     return;
 }
 
+status_t ALSADevice::setVocSessionId(uint32_t sessionId)
+{
+    status_t err = NO_ERROR;
+    char** setValues;
+
+    setValues = (char**)malloc(sizeof(char*));
+    if (setValues == NULL) {
+        return BAD_VALUE;
+    }
+    setValues[0] = (char*)malloc(12*sizeof(char));
+    if (setValues[0] == NULL) {
+        free(setValues);
+        return BAD_VALUE;
+    }
+    ALOGD("setVocSessionId: sessionId %d", sessionId);
+    sprintf(setValues[0], "%d", sessionId);
+
+    err = setMixerControlExt("Voc VSID", 1, setValues);
+    if (err != NO_ERROR)
+        ALOGE("set Session ID failed");
+
+    free(setValues[0]);
+    free(setValues);
+
+    return (err < 0) ? BAD_VALUE : NO_ERROR;
+}
+
 void ALSADevice::setBtscoRate(int rate)
 {
     mBtscoSamplerate = rate;
@@ -2504,13 +2572,35 @@ void ALSADevice::enableFENS(bool flag, uint32_t vsid)
 void ALSADevice::enableSlowTalk(bool flag, uint32_t vsid)
 {
     int err = 0;
+    char** setValues;
+    int state = 0;
 
-    ALOGD("enableSlowTalk: flag %d", flag);
-    if(flag == true) {
-        setMixerControl("Slowtalk Enable", 1, 0);
-    } else {
-        setMixerControl("Slowtalk Enable", 0, 0);
+    ALOGD("enableSlowTalk: flag %d session_id=%#x", flag, vsid);
+    setValues = (char**)malloc(2*sizeof(char*));
+    if (setValues == NULL) {
+          return;
     }
+    setValues[0] = (char*)malloc(4*sizeof(char));
+    if (setValues[0] == NULL) {
+          free(setValues);
+          return;
+    }
+
+    setValues[1] = (char*)malloc(4*sizeof(char));
+    if (setValues[1] == NULL) {
+          free(setValues[0]);
+          free(setValues);
+          return;
+    }
+
+    state = ((flag == true) ? 1 : 0);
+    snprintf(setValues[0], 4*sizeof(char), "%d", state);
+    snprintf(setValues[1], 4*sizeof(char), "%u", ALL_SESSION_VSID);
+
+    setMixerControlExt("Slowtalk Enable", 2, setValues);
+    free(setValues[1]);
+    free(setValues[0]);
+    free(setValues);
 
 #ifdef QCOM_CSDCLIENT_ENABLED
     if (isPlatformFusion3()) {
@@ -3358,4 +3448,17 @@ void ALSADevice::setSpkrProtHandle(AudioSpeakerProtection *handle)
         mSpkrProt = handle;
     }
 }
+
+status_t ALSADevice::getRMS(int *valp) {
+    status_t err = NO_ERROR;
+    unsigned data = 0;
+    if(err == NO_ERROR) {
+        err = getMixerControl("Get RMS", data, 0);
+        if(err == NO_ERROR) {
+            *valp = data;
+        }
+    }
+    return err;
+}
+
 }

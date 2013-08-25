@@ -106,6 +106,7 @@ AudioHardwareALSA::AudioHardwareALSA() :
     mVoiceCallState = CALL_INACTIVE;
     mVolteCallState = CALL_INACTIVE;
     mVoice2CallState = CALL_INACTIVE;
+    mQchatCallState = CALL_INACTIVE;
     mVSID = 0;
     mVoiceVolFeatureSet = 0;
     mIsFmActive = 0;
@@ -518,6 +519,25 @@ status_t AudioHardwareALSA::setVoiceVolume(float v)
     return NO_ERROR;
 }
 
+uint32_t AudioHardwareALSA::getActiveSessionVSID()
+{
+    uint32_t sessionVsid = 0;
+
+    if (mVoiceCallState == CALL_ACTIVE) {
+        sessionVsid = VOICE_SESSION_VSID;
+    } else if (mVoice2CallState == CALL_ACTIVE) {
+        sessionVsid = VOICE2_SESSION_VSID;
+    } else if (mVolteCallState == CALL_ACTIVE) {
+        sessionVsid = VOLTE_SESSION_VSID;
+    } else if (mQchatCallState == CALL_ACTIVE) {
+        sessionVsid = QCHAT_SESSION_VSID;
+    } else {
+        ALOGD("There is no Voice/Volte session in ACTIVE state");
+    }
+
+    return sessionVsid;
+}
+
 #ifdef QCOM_FM_ENABLED
 #ifndef QCOM_FM_V2_ENABLED
 status_t  AudioHardwareALSA::setFmVolume(float value)
@@ -642,7 +662,10 @@ bool AudioHardwareALSA::isAnyCallActive() {
         (mVolteCallState == CALL_LOCAL_HOLD) ||
         (mVoice2CallState == CALL_ACTIVE) ||
         (mVoice2CallState == CALL_HOLD) ||
-        (mVoice2CallState == CALL_LOCAL_HOLD)) {
+        (mVoice2CallState == CALL_LOCAL_HOLD) ||
+        (mQchatCallState == CALL_ACTIVE) ||
+        (mQchatCallState == CALL_HOLD) ||
+        (mQchatCallState == CALL_LOCAL_HOLD)) {
         ret = true;
     }
     ALOGV("%s() ret=%d", __func__, ret);
@@ -935,7 +958,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         if (param.getInt(key, (int &)call_state) == NO_ERROR) {
             param.remove(key);
             mCallState = call_state;
-            ALOGV("%s() vsid:%x, callstate:%x", __func__, mVSID, call_state);
+            ALOGD("%s() vsid:%x, callstate:%x", __func__, mVSID, call_state);
 
             if(isAnyCallActive())
                 doRouting(0);
@@ -986,6 +1009,21 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         status = BAD_VALUE;
     }
     return status;
+}
+
+// Returns a string in the format: "vsid:CallState"
+String8 makeVsidCallStatePair(uint32_t vsid, int callState)
+{
+       char str[11];
+       String8 pair = String8("");
+
+       snprintf(str, 11, "%u", vsid);
+       pair += String8(str);
+       pair += ":";
+       snprintf(str, 2, "%d", callState);
+       pair += String8(str);
+
+       return pair;
 }
 
 String8 AudioHardwareALSA::getParameters(const String8& keys)
@@ -1108,11 +1146,57 @@ String8 AudioHardwareALSA::getParameters(const String8& keys)
         param.addInt(key, cardInfo->card);
     }
 
+    key = String8("RMS");
+    if (param.get(key, value) == NO_ERROR) {
+        int val = 0;
+        int err = 0;
+        err = mALSADevice->getRMS(&val);
+        if (NO_ERROR != err) {
+            val = 0;
+            ALOGE("error querying RMS");
+        }
+        ALOGE("RMS value = %d", val);
+        param.addInt(key, val);
+    }
+
+    key = String8("VOIP_STREAM");
+    if (param.get(key, value) == NO_ERROR) {
+        param.addInt(key, mVoipOutStreamCount);
+    }
+
+     /* Returns a value in the format:
+     "all_call_states=281022464:1,282857472:1,281026560:1,276836352:1"
+     */
+    key = String8(ALL_CALL_STATES_KEY);
+    if (param.get(key, value) == NO_ERROR)
+    {
+       String8 value = String8("");
+
+       value += makeVsidCallStatePair(VOICE_SESSION_VSID, mVoiceCallState);
+       value += ",";
+
+       value += makeVsidCallStatePair(VOICE2_SESSION_VSID, mVoice2CallState);
+       value += ",";
+
+       value += makeVsidCallStatePair(VOLTE_SESSION_VSID, mVolteCallState);
+       value += ",";
+
+       value += makeVsidCallStatePair(QCHAT_SESSION_VSID, mQchatCallState);
+
+       param.add(key, value);
+    }
+
 #ifdef QCOM_LISTEN_FEATURE_ENABLE
     if (mListenHw) {
         mListenHw->getParameters(keys);
     }
 #endif
+
+    key = String8(ECHO_SUPRESSION);
+    if (param.get(key, value) == NO_ERROR) {
+        value = String8("yes");
+        param.add(key, value);
+    }
 
     ALOGV("AudioHardwareALSA::getParameters() %s", param.toString().string());
     return param.toString();
@@ -1210,9 +1294,9 @@ status_t AudioHardwareALSA::doRouting(int device)
 #endif
 
     ALOGV("doRouting: device %#x newMode %d mVoiceCallState %x \
-           mVolteCallActive %x mVoice2CallActive %x mIsFmActive %x",
-          device, newMode, mVoiceCallState,
-          mVolteCallState, mVoice2CallState, mIsFmActive);
+           mVolteCallActive %x mVoice2CallActive %x mIsFmActive %x \
+           mQchatCallState %x", device, newMode, mVoiceCallState,
+          mVolteCallState, mVoice2CallState, mIsFmActive, mQchatCallState);
 
     isRouted = routeCall(device, newMode, mVSID);
 
@@ -1423,6 +1507,9 @@ uint32_t AudioHardwareALSA::getVoipMode(int format)
          break;
     case AUDIO_FORMAT_EVRCWB:
                return MODE_4GV_WB;
+         break;
+    case AUDIO_FORMAT_EVRCNW:
+               return MODE_4GV_NW;
          break;
 #endif
     default:
@@ -1765,6 +1852,9 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
                } else {
                     strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_INCALL_DELIVERY2, sizeof(alsa_handle.useCase));
                }
+          } else {
+              ALOGV("Invalid incall music usecase, return NULL");
+              return NULL;
           }
 #endif
       } else
@@ -1800,8 +1890,12 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
           } else if(!strncmp(it->useCase, SND_USE_CASE_VERB_INCALL_DELIVERY2,
              MAX_LEN(it->useCase, SND_USE_CASE_VERB_INCALL_DELIVERY2))) {
              snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_INCALL_DELIVERY2);
-          } else {
+          } else if(!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_INCALL_DELIVERY2,
+             MAX_LEN(it->useCase, SND_USE_CASE_MOD_PLAY_INCALL_DELIVERY2))) {
              snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_INCALL_DELIVERY2);
+          } else {
+             ALOGV("Incall music delivery is not enabled on any session");
+             return NULL;
           }
 #endif
       } else
@@ -1950,7 +2044,6 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
     char *use_case;
     int newMode = mode();
     uint32_t route_devices;
-
     status_t err = BAD_VALUE;
     AudioStreamInALSA *in = 0;
     ALSAHandleList::iterator it;
@@ -2086,6 +2179,10 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         alsa_handle.bufferSize = bufferSize;
         alsa_handle.devices = devices;
         alsa_handle.handle = 0;
+        uint32_t sessionVsid = getActiveSessionVSID();
+
+        ALOGD("Active voice sessionVsid: %d", sessionVsid);
+
         if(*format == AUDIO_FORMAT_PCM_16_BIT)
             alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
         else
@@ -2100,6 +2197,10 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
             if ((devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
                 (newMode == AUDIO_MODE_IN_CALL)) {
                 ALOGD("openInputStream: into incall recording, channels %d", *channels);
+
+                if ((!sessionVsid) && (mFusion3Platform == false)) {
+                    return NULL;
+                }
                 mIncallMode = *channels;
                 if ((*channels & AUDIO_CHANNEL_IN_VOICE_UPLINK) &&
                     (*channels & AUDIO_CHANNEL_IN_VOICE_DNLINK)) {
@@ -2112,8 +2213,10 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                             strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_COMPRESSED_VOICE_UL_DL,
                                     sizeof(alsa_handle.useCase));
                         } else {
-                            strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL,
-                                    sizeof(alsa_handle.useCase));
+                            mALSADevice->setVocSessionId(sessionVsid);
+                            strlcpy(alsa_handle.useCase,
+                                    SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL,
+                                    sizeof(SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL));
                         }
                     }
                 } else if (*channels & AUDIO_CHANNEL_IN_VOICE_DNLINK) {
@@ -2126,13 +2229,17 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                             strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_COMPRESSED_VOICE_DL,
                                     sizeof(alsa_handle.useCase));
                         } else {
-                            strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_DL,
-                                    sizeof(alsa_handle.useCase));
-                        }
-                    }
+                            mALSADevice->setVocSessionId(sessionVsid);
+                            strlcpy(alsa_handle.useCase,
+                                    SND_USE_CASE_MOD_CAPTURE_VOICE_DL,
+                                    sizeof(SND_USE_CASE_MOD_CAPTURE_VOICE_DL));
+                       }
+                   }
                 } else if (*channels & AUDIO_CHANNEL_IN_VOICE_UPLINK) {
                    if (mFusion3Platform == false) {
-                       strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL,
+                       mALSADevice->setVocSessionId(sessionVsid);
+                       strlcpy(alsa_handle.useCase,
+                               SND_USE_CASE_MOD_CAPTURE_VOICE_UL,
                                sizeof(SND_USE_CASE_MOD_CAPTURE_VOICE_UL));
                    } else {
                        /* Use normal audio recording for Fusion3 target, this behavior
@@ -2164,6 +2271,9 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
             if ((devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
                 (newMode == AUDIO_MODE_IN_CALL)) {
                 ALOGD("openInputStream: incall recording, channels %d", *channels);
+                if ((!sessionVsid) && (mFusion3Platform == false)) {
+                    return NULL;
+                }
                 mIncallMode = *channels;
                 if ((*channels & AUDIO_CHANNEL_IN_VOICE_UPLINK) &&
                     (*channels & AUDIO_CHANNEL_IN_VOICE_DNLINK)) {
@@ -2176,8 +2286,9 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                             strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_CAPTURE_COMPRESSED_VOICE_UL_DL,
                                     sizeof(alsa_handle.useCase));
                         } else {
+                            mALSADevice->setVocSessionId(sessionVsid);
                             strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_UL_DL_REC,
-                                    sizeof(alsa_handle.useCase));
+                                    sizeof(SND_USE_CASE_VERB_UL_DL_REC));
                         }
                     }
                 } else if (*channels & AUDIO_CHANNEL_IN_VOICE_DNLINK) {
@@ -2190,12 +2301,14 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                             strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_CAPTURE_COMPRESSED_VOICE_DL,
                                     sizeof(alsa_handle.useCase));
                         } else {
+                            mALSADevice->setVocSessionId(sessionVsid);
                             strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_DL_REC,
                                     sizeof(alsa_handle.useCase));
                         }
                     }
                 } else if (*channels & AUDIO_CHANNEL_IN_VOICE_UPLINK) {
                    if (mFusion3Platform == false) {
+                       mALSADevice->setVocSessionId(sessionVsid);
                        strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_UL_REC,
                                sizeof(SND_USE_CASE_VERB_UL_REC));
                    } else {
@@ -2249,36 +2362,14 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
             {
             route_devices = devices | mCurDevice;
             }
-            mALSADevice->route(&(*it), route_devices, mode());
         } else {
 #ifdef QCOM_USBAUDIO_ENABLED
             if(devices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET ||
                devices & AudioSystem::DEVICE_IN_PROXY) {
                 devices |= AudioSystem::DEVICE_IN_PROXY;
                 ALOGD("routing everything from proxy");
-            mALSADevice->route(&(*it), devices, mode());
-            } else
-#endif
-            {
-                mALSADevice->route(&(*it), devices, mode());
             }
-        }
-
-        if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC) ||
-           !strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_LOWLATENCY_REC) ||
-           !strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED) ||
-#ifdef QCOM_FM_ENABLED
-           !strcmp(it->useCase, SND_USE_CASE_VERB_FM_REC) ||
-           !strcmp(it->useCase, SND_USE_CASE_VERB_FM_A2DP_REC) ||
 #endif
-           !strcmp(it->useCase, SND_USE_CASE_VERB_DL_REC) ||
-           !strcmp(it->useCase, SND_USE_CASE_VERB_UL_DL_REC) ||
-           !strcmp(it->useCase, SND_USE_CASE_VERB_CAPTURE_COMPRESSED_VOICE_DL) ||
-           !strcmp(it->useCase, SND_USE_CASE_VERB_CAPTURE_COMPRESSED_VOICE_UL_DL) ||
-           !strcmp(it->useCase, SND_USE_CASE_VERB_INCALL_REC)) {
-            snd_use_case_set(mUcMgr, "_verb", it->useCase);
-        } else {
-            snd_use_case_set(mUcMgr, "_enamod", it->useCase);
         }
         if(sampleRate) {
             it->sampleRate = *sampleRate;
@@ -2305,20 +2396,15 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
             }
         }
 #endif
-        err = mALSADevice->open(&(*it));
+        in = new AudioStreamInALSA(this, &(*it), acoustics);
+        err = in->set(format, channels, sampleRate, devices);
         if (err) {
-           mDeviceList.erase(it);
-           ALOGE("Error opening pcm input device");
-        #ifdef QCOM_LISTEN_FEATURE_ENABLE
+#ifdef QCOM_LISTEN_FEATURE_ENABLE
             //Notify to listen HAL that Audio capture is inactive
             if (mListenHw) {
                 mListenHw->notifyEvent(AUDIO_CAPTURE_INACTIVE);
             }
-        #endif
-
-        } else {
-           in = new AudioStreamInALSA(this, &(*it), acoustics);
-           err = in->set(format, channels, sampleRate, devices);
+#endif
         }
         if (status) *status = err;
         return in;
@@ -2405,6 +2491,7 @@ size_t AudioHardwareALSA::getInputBufferSize(uint32_t sampleRate, int format, in
         || format == AUDIO_FORMAT_EVRC
         || format == AUDIO_FORMAT_EVRCB
         || format == AUDIO_FORMAT_EVRCWB
+        || format == AUDIO_FORMAT_EVRCNW
 #endif
     ) {
         bufferSize = (sampleRate * channelCount * 20 * sizeof(int16_t)) / 1000;
@@ -2642,6 +2729,10 @@ char *AudioHardwareALSA::getUcmVerbForVSID(uint32_t vsid)
            verb = SND_USE_CASE_VERB_VOICECALL;
            break;
 
+       case QCHAT_SESSION_VSID:
+           verb = SND_USE_CASE_VERB_QCHAT;
+           break;
+
         default:
             ALOGE("%s: Invalid vsid:%x", __func__, vsid);
     }
@@ -2666,6 +2757,10 @@ char *AudioHardwareALSA::getUcmModForVSID(uint32_t vsid)
         mod = SND_USE_CASE_MOD_PLAY_VOICE;
         break;
 
+    case QCHAT_SESSION_VSID:
+        mod = SND_USE_CASE_MOD_PLAY_QCHAT;
+        break;
+
     default:
         ALOGE("%s: Invalid vsid:%x", __func__, vsid);
     }
@@ -2688,6 +2783,10 @@ int *AudioHardwareALSA::getCallStateForVSID(uint32_t vsid)
 
     case VOICE_SESSION_VSID:
         callState = &mVoiceCallState;
+        break;
+
+    case QCHAT_SESSION_VSID:
+        callState = &mQchatCallState;
         break;
 
     default:
@@ -2742,14 +2841,14 @@ bool AudioHardwareALSA::routeCall(int device, int newMode, uint32_t vsid)
         return isRouted;
     }
 
-    ALOGV("%s: CurCallState=%x newCallState=%x, vsid =%x",
+    ALOGD("%s: CurCallState=%x newCallState=%x, vsid =%x",
           __func__, *curCallState, newCallState, vsid);
 
 
     switch (newCallState) {
     case CALL_INACTIVE:
         if (*curCallState != CALL_INACTIVE) {
-            ALOGV("%s: Disabling call for vsid:%x", __func__, vsid);
+            ALOGD("%s: Disabling call for vsid:%x", __func__, vsid);
 
             disableVoiceCall(newMode, device, vsid);
             isRouted = true;
@@ -2761,20 +2860,20 @@ bool AudioHardwareALSA::routeCall(int device, int newMode, uint32_t vsid)
 
     case CALL_ACTIVE:
         if (*curCallState == CALL_INACTIVE) {
-            ALOGV("%s(): Start call for vsid:%x ",__func__, vsid);
+            ALOGD("%s(): Start call for vsid:%x ",__func__, vsid);
 
             enableVoiceCall(newMode, device, vsid);
             isRouted = true;
             *curCallState = CALL_ACTIVE;
 
         } else if (*curCallState == CALL_HOLD) {
-            ALOGV("%s(): Resume call from hold state for vsid:%x",
+            ALOGD("%s(): Resume call from hold state for vsid:%x",
                   __func__, vsid);
 
             *curCallState = CALL_ACTIVE;
             isRouted = true;
         } else if(*curCallState == CALL_LOCAL_HOLD) {
-            ALOGV("%s: Resume call from local call hold state \
+            ALOGD("%s: Resume call from local call hold state \
                    for vsid:%x",__func__, vsid);
 
             handle = getALSADeviceHandleForVSID(vsid);
@@ -2798,7 +2897,7 @@ bool AudioHardwareALSA::routeCall(int device, int newMode, uint32_t vsid)
     case CALL_HOLD:
         if (*curCallState == CALL_ACTIVE ||
             *curCallState == CALL_LOCAL_HOLD) {
-            ALOGV("%s(): Call going to Hold for vsid:%x",__func__, vsid);
+            ALOGD("%s(): Call going to Hold for vsid:%x",__func__, vsid);
 
             handle = getALSADeviceHandleForVSID(vsid);
             if (handle) {
@@ -2826,7 +2925,7 @@ bool AudioHardwareALSA::routeCall(int device, int newMode, uint32_t vsid)
 
     case CALL_LOCAL_HOLD:
         if (*curCallState == CALL_ACTIVE || *curCallState == CALL_HOLD) {
-            ALOGV("%s(): Call going to local Hold for vsid:%x", __func__, vsid);
+            ALOGD("%s(): Call going to local Hold for vsid:%x", __func__, vsid);
 
             handle = getALSADeviceHandleForVSID(vsid);
             if (handle) {
