@@ -1038,6 +1038,7 @@ private:
     alsa_handle_t       *mRxHandle[NUM_DEVICES_SUPPORT_COMPR_DATA];
     int                 mRxHandleRouteFormat[NUM_DEVICES_SUPPORT_COMPR_DATA];
     int                 mRxHandleDevices[NUM_DEVICES_SUPPORT_COMPR_DATA];
+    uint64_t            mRxHandleBaseTime[NUM_DEVICES_SUPPORT_COMPR_DATA];
     output_metadata_handle_t  mOutputMetadata;
 
     uint32_t            channelMapToChannels(uint32_t channelMap);
