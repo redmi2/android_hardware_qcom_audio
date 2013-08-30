@@ -171,11 +171,13 @@ static int USBPLAYBACKBIT_TUNNEL3 = (1 << 7);
 static int USBPLAYBACKBIT_TUNNEL4 = (1 << 8);
 static int USBPLAYBACKBIT_MULTICHANNEL = (1 << 9);
 static int USBPLAYBACKBIT_LOWLATENCY = (1 << 10);
+static int USBPLAYBACKBIT_VOIP2CALL = (1 << 11);
 
 static int USBRECBIT_REC = (1 << 0);
 static int USBRECBIT_VOICECALL = (1 << 1);
 static int USBRECBIT_VOIPCALL = (1 << 2);
 static int USBRECBIT_FM = (1 << 3);
+static int USBRECBIT_VOIP2CALL = (1 << 4);
 #endif
 
 #define DEVICE_SPEAKER_HEADSET "Speaker Headset"
@@ -361,6 +363,8 @@ static struct mDDPEndpParams {
 #define VOICE2_SESSION_VSID 0x10DC1000
 #define VOLTE_SESSION_VSID  0x10C02000
 #define QCHAT_SESSION_VSID  0x10803000
+#define VOIP_SESSION_VSID   0x10004000
+#define VOIP2_SESSION_VSID  0x10004100
 #define ALL_SESSION_VSID    0xFFFFFFFF
 #define DEFAULT_MUTE_RAMP_DURATION      500
 #define DEFAULT_VOLUME_RAMP_DURATION_MS 20
@@ -470,9 +474,9 @@ public:
     bool     isSpeakerinUse(unsigned long &secs);
     status_t     setVocSessionId(uint32_t sessionId);
     void     setVoiceVolume(int volume);
-    void     setVoipVolume(int volume);
+    void     setVoipVolume(int volume, uint32_t vsid);
     void     setMicMute(int state);
-    void     setVoipMicMute(int state);
+    void     setVoipMicMute(int state, uint32_t vsid);
     void     setVoipConfig(int mode, int rate);
     void     setVoipEvrcMinMaxRate(int minRate, int maxRate);
     void     enableVoipDtx(bool flag);
@@ -1111,6 +1115,7 @@ public:
     void pauseIfUseCaseTunnelOrLPA();
     void resumeIfUseCaseTunnelOrLPA();
     uint32_t getActiveSessionVSID();
+    bool isVoipValidFormat(int format);
 private:
     AudioSpeakerProtection mspkrProtection;
     status_t     openExtOutput(int device);
@@ -1196,7 +1201,10 @@ protected:
     uint32_t            mDevSettingsFlag;
     uint32_t            mVoipInStreamCount;
     uint32_t            mVoipOutStreamCount;
+    uint32_t            mVoip2InStreamCount;
+    uint32_t            mVoip2OutStreamCount;
     bool                mVoipMicMute;
+    bool                mVoip2MicMute;
     uint32_t            mVoipBitRate;
     uint32_t            mVoipEvrcBitRateMin;
     uint32_t            mVoipEvrcBitRateMax;

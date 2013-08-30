@@ -96,8 +96,9 @@ AudioHardwareInterface *AudioHardwareALSA::create() {
 }
 
 AudioHardwareALSA::AudioHardwareALSA() :
-    mALSADevice(0),mVoipInStreamCount(0),mVoipOutStreamCount(0),mVoipMicMute(false),
-    mVoipBitRate(0),mCallState(CALL_INACTIVE),mAcdbHandle(NULL),mCsdHandle(NULL),mMicMute(0),
+    mALSADevice(0),mVoipInStreamCount(0),mVoipOutStreamCount(0),mVoip2InStreamCount(0),
+    mVoip2OutStreamCount(0),mVoipMicMute(false),mVoip2MicMute(false),mVoipBitRate(0),
+    mCallState(CALL_INACTIVE),mAcdbHandle(NULL),mCsdHandle(NULL),mMicMute(0),
     mVoipEvrcBitRateMin(0),mVoipEvrcBitRateMax(0)
 {
     FILE *fp;
@@ -541,8 +542,17 @@ status_t AudioHardwareALSA::setVoiceVolume(float v)
     vol = 100 - vol;
 
     if (mALSADevice) {
-        if(newMode == AUDIO_MODE_IN_COMMUNICATION) {
-            mALSADevice->setVoipVolume(vol);
+        if (newMode == AUDIO_MODE_IN_COMMUNICATION) {
+            if ((mVoipOutStreamCount || mVoipInStreamCount) &&
+                (mVoip2OutStreamCount || mVoip2InStreamCount)) {
+                mALSADevice->setVoipVolume(vol, ALL_SESSION_VSID);
+            } else if (mVoipOutStreamCount || mVoipInStreamCount) {
+                mALSADevice->setVoipVolume(vol, VOIP_SESSION_VSID);
+            } else if (mVoip2OutStreamCount || mVoip2InStreamCount) {
+                mALSADevice->setVoipVolume(vol, VOIP2_SESSION_VSID);
+            } else {
+                mALSADevice->setVoipVolume(vol, ALL_SESSION_VSID);
+            }
         } else if (newMode == AUDIO_MODE_IN_CALL){
                mALSADevice->setVoiceVolume(vol);
         }
@@ -570,6 +580,41 @@ uint32_t AudioHardwareALSA::getActiveSessionVSID()
     return sessionVsid;
 }
 
+bool AudioHardwareALSA::isVoipValidFormat(int format)
+{
+    bool ret = false;
+
+    switch (format) {
+    case AUDIO_FORMAT_PCM_16_BIT:
+    case AUDIO_FORMAT_AMR_NB:
+    case AUDIO_FORMAT_AMR_WB:
+#ifdef QCOM_AUDIO_FORMAT_ENABLED
+    case AUDIO_FORMAT_EVRC:
+    case AUDIO_FORMAT_EVRCB:
+    case AUDIO_FORMAT_EVRCWB:
+    case AUDIO_FORMAT_EVRCNW:
+#endif
+         ret = true;
+         break;
+    default:
+         break;
+    }
+    ALOGV("isVoipValidFormat, ret:%d, format: %x", ret, format);
+
+    return ret;
+}
+
+bool AudioHardwareALSA::isVoipCallAllowed(int format)
+{
+    bool ret = false;
+
+    if ((format == AUDIO_FORMAT_PCM_16_BIT) && (mVoipInStreamCount < 1)) {
+        ret = true;
+    } else if (mVoip2InStreamCount < 1) {
+        ret = true;
+    }
+    return ret;
+}
 #ifdef QCOM_FM_ENABLED
 #ifndef QCOM_FM_V2_ENABLED
 status_t  AudioHardwareALSA::setFmVolume(float value)
@@ -1273,6 +1318,11 @@ String8 AudioHardwareALSA::getParameters(const String8& keys)
         param.addInt(key, mVoipOutStreamCount);
     }
 
+    key = String8("VOIP2_STREAM");
+    if (param.get(key, value) == NO_ERROR) {
+        param.addInt(key, mVoip2OutStreamCount);
+    }
+
      /* Returns a value in the format:
      "all_call_states=281022464:1,282857472:1,281026560:1,276836352:1"
      */
@@ -1714,18 +1764,32 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
     }
 
 #ifdef QCOM_OUTPUT_FLAGS_ENABLED
-    if((flags & AUDIO_OUTPUT_FLAG_DIRECT) && (flags & AUDIO_OUTPUT_FLAG_VOIP_RX)&&
+    if((flags & AUDIO_OUTPUT_FLAG_DIRECT) && (flags & AUDIO_OUTPUT_FLAG_VOIP_RX) &&
+       isVoipValidFormat(*format) &&
        ((*sampleRate == VOIP_SAMPLING_RATE_8K) || (*sampleRate == VOIP_SAMPLING_RATE_16K))) {
         bool voipstream_active = false;
         for(it = mDeviceList.begin();
             it != mDeviceList.end(); ++it) {
-                if((!strcmp(it->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
-                   (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
-                    ALOGD("openOutput:  it->rxHandle %d it->handle %d",it->rxHandle,it->handle);
-                    voipstream_active = true;
-                    break;
-                }
-        }
+                if (*format == AUDIO_FORMAT_PCM_16_BIT) {
+                    if((!strcmp(it->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
+                       (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+                        ALOGD("openOutput:  it->rxHandle %d it->handle %d",
+                              it->rxHandle,it->handle);
+
+                        voipstream_active = true;
+                        break;
+                    }
+                } else {
+                    if((!strcmp(it->useCase, SND_USE_CASE_VERB_VOIP2)) ||
+                       (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_VOIP2))) {
+                        ALOGD("openOutput:  it->rxHandle %d it->handle %d",
+                              it->rxHandle,it->handle);
+
+                        voipstream_active = true;
+                        break;
+                    }
+            }
+      }
       if(voipstream_active == false) {
 #ifdef RESOURCE_MANAGER
          String8 useCase;
@@ -1737,8 +1801,13 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
              return NULL;
          }
 #endif
-         mVoipOutStreamCount = 0;
-         mVoipMicMute = false;
+         if (*format == AUDIO_FORMAT_PCM_16_BIT) {
+             mVoipOutStreamCount = 0;
+             mVoipMicMute = false;
+         } else {
+             mVoip2OutStreamCount = 0;
+             mVoip2MicMute = false;
+         }
          alsa_handle_t alsa_handle;
          unsigned long bufferSize;
          if(*sampleRate == VOIP_SAMPLING_RATE_8K) {
@@ -1769,17 +1838,32 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
           mALSADevice->setVoipEvrcMinMaxRate(mVoipEvrcBitRateMin, mVoipEvrcBitRateMax);
           char *use_case;
           snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
-          if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
-              strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_IP_VOICECALL, sizeof(alsa_handle.useCase));
+          if(*format == AUDIO_FORMAT_PCM_16_BIT) {
+              if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
+                  strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_IP_VOICECALL,
+                          sizeof(SND_USE_CASE_VERB_IP_VOICECALL));
+              } else {
+                  strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_VOIP,
+                          sizeof(SND_USE_CASE_MOD_PLAY_VOIP));
+              }
           } else {
-              strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_VOIP, sizeof(alsa_handle.useCase));
+              if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
+                  strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_VOIP2,
+                          sizeof(SND_USE_CASE_VERB_VOIP2));
+              } else {
+                  strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_VOIP2,
+                          sizeof(SND_USE_CASE_MOD_PLAY_VOIP2));
+              }
           }
           free(use_case);
           mDeviceList.push_back(alsa_handle);
           it = mDeviceList.end();
           it--;
-          ALOGD("openoutput: mALSADevice->route useCase %s mCurDevice %d mVoipOutStreamCount %d mode %d",
-                it->useCase,mCurDevice, mVoipOutStreamCount, mode());
+          ALOGD("openoutput: mALSADevice->route useCase %s mCurDevice %d mode %d",
+                it->useCase,mCurDevice, mode());
+          ALOGD("openoutput: mVoipOutStreamCount %d mVoip2OutStreamCount %d",
+                mVoipOutStreamCount, mVoip2OutStreamCount);
+
           if((mCurDevice & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
              (mCurDevice & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)||
              (mCurDevice & AudioSystem::DEVICE_OUT_PROXY)){
@@ -1788,18 +1872,32 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
 #ifdef QCOM_USBAUDIO_ENABLED
               ALOGD("enabling VOIP in openoutputstream, musbPlaybackState: %d", musbPlaybackState);
               startUsbPlaybackIfNotStarted();
-              musbPlaybackState |= USBPLAYBACKBIT_VOIPCALL;
+              if (*format == AUDIO_FORMAT_PCM_16_BIT)
+                  musbPlaybackState |= USBPLAYBACKBIT_VOIPCALL;
+              else
+                  musbPlaybackState |= USBPLAYBACKBIT_VOIP2CALL;
               ALOGD("Starting recording in openoutputstream, musbRecordingState: %d", musbRecordingState);
               startUsbRecordingIfNotStarted();
-              musbRecordingState |= USBRECBIT_VOIPCALL;
+              if (*format == AUDIO_FORMAT_PCM_16_BIT)
+                  musbRecordingState |= USBRECBIT_VOIPCALL;
+              else
+                  musbRecordingState |= USBRECBIT_VOIP2CALL;
 #endif
            } else{
               mALSADevice->route(&(*it), mCurDevice, AUDIO_MODE_IN_COMMUNICATION);
           }
-          if(!strcmp(it->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) {
-              snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_IP_VOICECALL);
+          if(*format == AUDIO_FORMAT_PCM_16_BIT) {
+              if(!strcmp(it->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) {
+                  snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_IP_VOICECALL);
+              } else {
+                  snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_VOIP);
+              }
           } else {
-              snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_VOIP);
+              if(!strcmp(it->useCase, SND_USE_CASE_VERB_VOIP2)) {
+                  snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_VOIP2);
+              } else {
+                  snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_VOIP2);
+              }
           }
       #ifdef QCOM_LISTEN_FEATURE_ENABLE
           //Notify to listen HAL that capture is active
@@ -1827,8 +1925,13 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
       out = new AudioStreamOutALSA(this, &(*it));
       err = out->set(format, channels, sampleRate, devices);
       if(err == NO_ERROR) {
-          mVoipOutStreamCount++;   //increment VoipOutstreamCount only if success
-          ALOGD("openoutput mVoipOutStreamCount %d",mVoipOutStreamCount);
+          if (*format == AUDIO_FORMAT_PCM_16_BIT) {
+              mVoipOutStreamCount++;   //increment VoipOutstreamCount only if success
+              ALOGD("openoutput mVoipOutStreamCount %d",mVoipOutStreamCount);
+          } else {
+              mVoip2OutStreamCount++;   //increment Voip2OutstreamCount only if success
+              ALOGD("openoutput mVoip2OutStreamCount %d",mVoip2OutStreamCount);
+          }
       } else {
           mLock.unlock();
           delete out;
@@ -2197,18 +2300,32 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
     }
 #endif
 
-    if((devices == AudioSystem::DEVICE_IN_COMMUNICATION) && (mVoipInStreamCount < 1) &&
+    if((devices == AudioSystem::DEVICE_IN_COMMUNICATION) && isVoipValidFormat(*format) &&
+       isVoipCallAllowed(*format) &&
        ((*sampleRate == VOIP_SAMPLING_RATE_8K) || (*sampleRate == VOIP_SAMPLING_RATE_16K))) {
         bool voipstream_active = false;
         for(it = mDeviceList.begin();
             it != mDeviceList.end(); ++it) {
-                if((!strcmp(it->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
-                   (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
-                    ALOGD("openInput:  it->rxHandle %p it->handle %p",it->rxHandle,it->handle);
-                    voipstream_active = true;
-                    break;
-                }
-        }
+                if (*format == AUDIO_FORMAT_PCM_16_BIT) {
+                    if((!strcmp(it->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
+                       (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+                        ALOGD("openInput:  it->rxHandle %p it->handle %p",
+                              it->rxHandle,it->handle);
+
+                        voipstream_active = true;
+                         break;
+                    }
+                } else {
+                    if((!strcmp(it->useCase, SND_USE_CASE_VERB_VOIP2)) ||
+                       (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_VOIP2))) {
+                        ALOGD("openInput:  it->rxHandle %p it->handle %p",
+                              it->rxHandle,it->handle);
+
+                        voipstream_active = true;
+                        break;
+                    }
+               }
+       }
         if(voipstream_active == false) {
 #ifdef RESOURCE_MANAGER
            String8 useCase;
@@ -2220,8 +2337,13 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                return NULL;
            }
 #endif
-           mVoipInStreamCount = 0;
-           mVoipMicMute = false;
+           if (*format == AUDIO_FORMAT_PCM_16_BIT) {
+               mVoipInStreamCount = 0;
+               mVoipMicMute = false;
+           } else {
+               mVoip2InStreamCount = 0;
+               mVoip2MicMute = false;
+           }
            alsa_handle_t alsa_handle;
            unsigned long bufferSize;
            if(*sampleRate == VOIP_SAMPLING_RATE_8K) {
@@ -2252,9 +2374,19 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
            mALSADevice->setVoipEvrcMinMaxRate(mVoipEvrcBitRateMin, mVoipEvrcBitRateMax);
            snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
            if ((use_case != NULL) && (strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
-                strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_VOIP, sizeof(alsa_handle.useCase));
+               if(*format == AUDIO_FORMAT_PCM_16_BIT)
+                   strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_VOIP,
+                           sizeof(SND_USE_CASE_MOD_PLAY_VOIP));
+               else
+                   strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_VOIP2,
+                           sizeof(SND_USE_CASE_MOD_PLAY_VOIP2));
            } else {
-                strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_IP_VOICECALL, sizeof(alsa_handle.useCase));
+               if(*format == AUDIO_FORMAT_PCM_16_BIT)
+                   strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_IP_VOICECALL,
+                           sizeof(SND_USE_CASE_VERB_IP_VOICECALL));
+               else
+                  strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_VOIP2,
+                          sizeof(SND_USE_CASE_VERB_VOIP2));
            }
            free(use_case);
            mDeviceList.push_back(alsa_handle);
@@ -2269,19 +2401,33 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
               mALSADevice->route(&(*it), AudioSystem::DEVICE_IN_PROXY, AUDIO_MODE_IN_COMMUNICATION);
               ALOGD("enabling VOIP in openInputstream, musbPlaybackState: %d", musbPlaybackState);
               startUsbPlaybackIfNotStarted();
-              musbPlaybackState |= USBPLAYBACKBIT_VOIPCALL;
+              if (*format == AUDIO_FORMAT_PCM_16_BIT)
+                  musbPlaybackState |= USBPLAYBACKBIT_VOIPCALL;
+              else
+                  musbPlaybackState |= USBPLAYBACKBIT_VOIP2CALL;
               ALOGD("Starting recording in openoutputstream, musbRecordingState: %d", musbRecordingState);
               startUsbRecordingIfNotStarted();
-              musbRecordingState |= USBRECBIT_VOIPCALL;
+              if (*format == AUDIO_FORMAT_PCM_16_BIT)
+                  musbRecordingState |= USBRECBIT_VOIPCALL;
+              else
+                  musbRecordingState |= USBRECBIT_VOIP2CALL;
            } else
 #endif
            {
                mALSADevice->route(&(*it),mCurDevice, AUDIO_MODE_IN_COMMUNICATION);
            }
-           if(!strcmp(it->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) {
-               snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_IP_VOICECALL);
+           if(*format == AUDIO_FORMAT_PCM_16_BIT) {
+               if(!strcmp(it->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) {
+                   snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_IP_VOICECALL);
+               } else {
+                   snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_VOIP);
+               }
            } else {
-               snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_VOIP);
+               if(!strcmp(it->useCase, SND_USE_CASE_VERB_VOIP2)) {
+                   snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_VOIP2);
+               } else {
+                   snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_VOIP2);
+               }
            }
            if(sampleRate) {
                it->sampleRate = *sampleRate;
@@ -2309,8 +2455,13 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         in = new AudioStreamInALSA(this, &(*it), acoustics);
         err = in->set(format, channels, sampleRate, devices);
         if(err == NO_ERROR) {
-            mVoipInStreamCount++;   //increment VoipInstreamCount only if success
-            ALOGD("OpenInput mVoipInStreamCount %d",mVoipInStreamCount);
+            if(*format == AUDIO_FORMAT_PCM_16_BIT) {
+                mVoipInStreamCount++;   //increment VoipInstreamCount only if success
+                ALOGD("OpenInput mVoipInStreamCount %d",mVoipInStreamCount);
+            } else {
+                mVoip2InStreamCount++;   //increment Voip2InstreamCount only if success
+                ALOGD("OpenInput mVoip2InStreamCount %d",mVoip2InStreamCount);
+            }
         } else {
             mLock.unlock();
             delete in;
@@ -2596,14 +2747,31 @@ AudioHardwareALSA::closeInputStream(AudioStreamIn* in)
 
 status_t AudioHardwareALSA::setMicMute(bool state)
 {
+    uint32_t vsid = ALL_SESSION_VSID;
     int newMode = mode();
     ALOGD("setMicMute  newMode %d state:%d",newMode,state);
+
     if(newMode == AUDIO_MODE_IN_COMMUNICATION) {
         if (mVoipMicMute != state) {
-             mVoipMicMute = state;
-            ALOGD("setMicMute: mVoipMicMute %d", mVoipMicMute);
-            if(mALSADevice) {
-                mALSADevice->setVoipMicMute(state);
+            if ((mVoipOutStreamCount || mVoipInStreamCount) &&
+                (mVoip2OutStreamCount || mVoip2InStreamCount)) {
+                mVoipMicMute = state;
+                mVoip2MicMute = state;
+            } else if (mVoipOutStreamCount || mVoipInStreamCount) {
+                mVoipMicMute = state;
+                vsid = VOIP_SESSION_VSID;
+            } else if (mVoip2OutStreamCount || mVoip2InStreamCount) {
+                mVoip2MicMute = state;
+                vsid = VOIP2_SESSION_VSID;
+            } else {
+                mVoipMicMute = state;
+                mVoip2MicMute = state;
+            }
+            ALOGD("setMicMute: mVoipMicMute %d mVoip2MicMute:%d vsid:%d",
+                  mVoipMicMute, mVoip2MicMute, vsid);
+
+            if (mALSADevice) {
+                mALSADevice->setVoipMicMute(state, vsid);
             }
         }
     } else {
@@ -2622,7 +2790,14 @@ status_t AudioHardwareALSA::getMicMute(bool *state)
 {
     int newMode = mode();
     if(newMode == AUDIO_MODE_IN_COMMUNICATION) {
-        *state = mVoipMicMute;
+        if ((mVoipOutStreamCount || mVoipInStreamCount) &&
+            (mVoip2OutStreamCount || mVoip2InStreamCount)) {
+            *state = mVoipMicMute;
+        } else if (mVoip2OutStreamCount || mVoip2InStreamCount) {
+            *state = mVoip2MicMute;
+        } else {
+            *state = mVoipMicMute;
+        }
     } else {
         *state = mMicMute;
     }

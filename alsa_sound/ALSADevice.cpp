@@ -622,8 +622,10 @@ status_t ALSADevice::setSoftwareParams(alsa_handle_t *handle)
     // Get the current software parameters
     params->tstamp_mode = SNDRV_PCM_TSTAMP_NONE;
     params->period_step = 1;
-    if(((!strcmp(handle->useCase,SND_USE_CASE_MOD_PLAY_VOIP)) ||
-        (!strcmp(handle->useCase,SND_USE_CASE_VERB_IP_VOICECALL)))){
+    if((!strcmp(handle->useCase,SND_USE_CASE_MOD_PLAY_VOIP)) ||
+       (!strcmp(handle->useCase,SND_USE_CASE_VERB_IP_VOICECALL)) ||
+       (!strcmp(handle->useCase,SND_USE_CASE_MOD_PLAY_VOIP2)) ||
+       (!strcmp(handle->useCase,SND_USE_CASE_VERB_VOIP2))) {
           ALOGV("setparam:  start & stop threshold for Voip ");
           params->avail_min = handle->channels - 1 ? periodSize/4 : periodSize/2;
           params->start_threshold = periodSize/2;
@@ -1762,6 +1764,8 @@ int ALSADevice::getUseCaseType(const char *useCase)
             MAX_LEN(useCase,SND_USE_CASE_VERB_VOICECALL)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_IP_VOICECALL,
             MAX_LEN(useCase,SND_USE_CASE_VERB_IP_VOICECALL)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_VOIP2,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_VOIP2)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_DL_REC,
             MAX_LEN(useCase,SND_USE_CASE_VERB_DL_REC)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_UL_DL_REC,
@@ -1772,6 +1776,8 @@ int ALSADevice::getUseCaseType(const char *useCase)
             MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_VOICE)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_VOIP,
             MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_VOIP)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_VOIP2,
+            MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_VOIP2)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_DL,
             MAX_LEN(useCase,SND_USE_CASE_MOD_CAPTURE_VOICE_DL)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL,
@@ -2341,12 +2347,12 @@ void ALSADevice::setVoiceVolume(int vol)
 
 
 
-void ALSADevice::setVoipVolume(int vol)
+void ALSADevice::setVoipVolume(int vol, uint32_t vsid)
 {
     int err = NO_ERROR;
     int vol_index = 0;
     char** setValues;
-    #define NUM_PARAMS 2
+    #define NUM_PARAMS 3
     ALOGD("setVoipVolume: volume %d", vol);
 
     setValues = (char**)malloc((NUM_PARAMS)*sizeof(char*));
@@ -2355,12 +2361,19 @@ void ALSADevice::setVoipVolume(int vol)
         return;
     }
 
-    for (int i = 0; i < NUM_PARAMS; i++) {
+    for (int i = 0; i < (NUM_PARAMS - 1); i++) {
         setValues[i] = (char*)malloc(4*sizeof(char));
         if (!setValues[i]) {
             err = BAD_VALUE;
             ALOGE("setVoipVolume: allocation error %d", err);
             break;
+        }
+    }
+    if (err == NO_ERROR) {
+        setValues[NUM_PARAMS-1] = (char*)malloc(12*sizeof(char));
+        if (!setValues[NUM_PARAMS-1]) {
+            err = BAD_VALUE;
+            ALOGE("setVoipVolume: allocation error %d", err);
         }
     }
 
@@ -2369,10 +2382,11 @@ void ALSADevice::setVoipVolume(int vol)
                                       MAX_VOL_INDEX);
         snprintf(setValues[0], (4*sizeof(char)), "%d", vol_index);
         snprintf(setValues[1], (4*sizeof(char)), "%d", DEFAULT_VOLUME_RAMP_DURATION_MS);
+        snprintf(setValues[2], (12*sizeof(char)), "%d", vsid);
 
         err = setMixerControlExt("Voip Rx Gain", NUM_PARAMS, setValues);
-        ALOGV("setMixerControlExt ret=%d vol_idx=%d ramp_dur=%d\n",
-              err, vol_index, DEFAULT_VOLUME_RAMP_DURATION_MS);
+        ALOGV("setMixerControlExt ret=%d vol_idx=%d ramp_dur=%d vsdid=%x\n",
+              err, vol_index, DEFAULT_VOLUME_RAMP_DURATION_MS, vsid);
     }
 
     for(int i = 0; i < NUM_PARAMS; i++)
@@ -2432,11 +2446,11 @@ void ALSADevice::setMicMute(int state)
 }
 
 
-void ALSADevice::setVoipMicMute(int state)
+void ALSADevice::setVoipMicMute(int state, uint32_t vsid)
 {
     int err = NO_ERROR;
     char** setValues;
-    #define NUM_PARAMS 2
+    #define NUM_PARAMS 3
     ALOGD("setVoipMicMute: state %d", state);
 
     setValues = (char**)malloc((NUM_PARAMS)*sizeof(char*));
@@ -2445,7 +2459,7 @@ void ALSADevice::setVoipMicMute(int state)
         return;
     }
 
-    for (int i = 0; i < NUM_PARAMS; i++) {
+    for (int i = 0; i < (NUM_PARAMS - 1); i++) {
         setValues[i] = (char*)malloc(4*sizeof(char));
         if (!setValues[i]) {
             err = BAD_VALUE;
@@ -2453,10 +2467,18 @@ void ALSADevice::setVoipMicMute(int state)
             break;
         }
     }
+    if (err == NO_ERROR) {
+        setValues[NUM_PARAMS-1] = (char*)malloc(12*sizeof(char));
+        if (!setValues[NUM_PARAMS-1]) {
+            err = BAD_VALUE;
+            ALOGE("setVoipMicMute: allocation error %d", err);
+        }
+    }
 
     if (err == NO_ERROR) {
         snprintf(setValues[0], (4*sizeof(char)), "%d", state);
         snprintf(setValues[1], (4*sizeof(char)), "%d", DEFAULT_MUTE_RAMP_DURATION);
+        snprintf(setValues[2], (12*sizeof(char)), "%d", vsid);
         setMixerControlExt("Voip Tx Mute", NUM_PARAMS, setValues);
     }
 
@@ -2469,79 +2491,136 @@ void ALSADevice::setVoipMicMute(int state)
 
 void ALSADevice::setVoipConfig(int mode, int rate)
 {
+    int err = NO_ERROR;
     char** setValues;
+    #define NUM_PARAMS 3
     ALOGD("setVoipConfig: mode %d,rate %d", mode, rate);
 
-    setValues = (char**)malloc(2*sizeof(char*));
-    if (setValues == NULL) {
-          return;
-    }
-    setValues[0] = (char*)malloc(4*sizeof(char));
-    if (setValues[0] == NULL) {
-          free(setValues);
-          return;
+    setValues = (char**)malloc((NUM_PARAMS)*sizeof(char*));
+    if (!setValues) {
+        ALOGE("setVoipConfig: allocation error");
+        return;
     }
 
-    setValues[1] = (char*)malloc(8*sizeof(char));
-    if (setValues[1] == NULL) {
-          free(setValues[0]);
-          free(setValues);
-          return;
+    for (int i = 0; i < (NUM_PARAMS-1); i++) {
+        setValues[i] = (char*)malloc(8*sizeof(char));
+        if (!setValues[i]) {
+            err = BAD_VALUE;
+            ALOGE("setVoipConfig: allocation error %d", err);
+            break;
+        }
+    }
+    if (err == NO_ERROR) {
+        setValues[NUM_PARAMS-1] = (char*)malloc(12*sizeof(char));
+        if (!setValues[NUM_PARAMS-1]) {
+            err = BAD_VALUE;
+            ALOGE("setVoipConfig: allocation error %d", err);
+        }
     }
 
-    snprintf(setValues[0], (4*sizeof(char)), "%d", mode);
-    snprintf(setValues[1], (8*sizeof(char)), "%d", rate);
+    if (err == NO_ERROR) {
+        snprintf(setValues[0], (8*sizeof(char)), "%d", mode);
+        snprintf(setValues[1], (8*sizeof(char)), "%d", rate);
+        if (mode == MODE_PCM)
+            snprintf(setValues[2], (12*sizeof(char)), "%d", VOIP_SESSION_VSID);
+        else
+            snprintf(setValues[2], (12*sizeof(char)), "%d", VOIP2_SESSION_VSID);
 
-    setMixerControlExt("Voip Mode Rate Config", 2, setValues);
+        setMixerControlExt("Voip Mode Rate Config", NUM_PARAMS, setValues);
+    }
 
-    free(setValues[0]);
-    free(setValues[1]);
-    free(setValues);
-    return;
+    for(int i = 0; i < NUM_PARAMS; i++)
+        if (setValues[i])
+            free(setValues[i]);
+    if (setValues)
+        free(setValues);
 }
 
 void ALSADevice::setVoipEvrcMinMaxRate(int minRate, int maxRate)
 {
+    int err = NO_ERROR;
     char** setValues;
+    #define NUM_PARAMS 3
     ALOGD("setVoipEvrcMinMaxRate(): minRate %d, maxRate %d", minRate, maxRate);
 
-    setValues = (char**)malloc(2*sizeof(char*));
-    if (setValues == NULL) {
-          return;
-    }
-    setValues[0] = (char*)malloc(8*sizeof(char));
-    if (setValues[0] == NULL) {
-          free(setValues);
-          return;
+    setValues = (char**)malloc((NUM_PARAMS)*sizeof(char*));
+    if (!setValues) {
+        ALOGE("setVoipEvrcMinMaxRate: allocation error %d", err);
+        return;
     }
 
-    setValues[1] = (char*)malloc(8*sizeof(char));
-    if (setValues[1] == NULL) {
-          free(setValues[0]);
-          free(setValues);
-          return;
+    for (int i = 0; i < (NUM_PARAMS-1); i++) {
+        setValues[i] = (char*)malloc(8*sizeof(char));
+        if (!setValues[i]) {
+            err = BAD_VALUE;
+            ALOGE("setVoipEvrcMinMaxRate: allocation error %d", err);
+            break;
+        }
+    }
+    if (err == NO_ERROR) {
+        setValues[NUM_PARAMS-1] = (char*)malloc(12*sizeof(char));
+        if (!setValues[NUM_PARAMS-1]) {
+            err = BAD_VALUE;
+            ALOGE("setVoipEvrcMinMaxRate: allocation error %d", err);
+        }
     }
 
-    snprintf(setValues[0], (8*sizeof(char)), "%d", minRate);
-    snprintf(setValues[1], (8*sizeof(char)), "%d", maxRate);
+    if (err == NO_ERROR) {
+        snprintf(setValues[0], (8*sizeof(char)), "%d", minRate);
+        snprintf(setValues[1], (8*sizeof(char)), "%d", maxRate);
+        snprintf(setValues[2], (12*sizeof(char)), "%d", VOIP2_SESSION_VSID);
 
-    setMixerControlExt("Voip Evrc Min Max Rate Config", 2, setValues);
+        setMixerControlExt("Voip Evrc Min Max Rate Config", 3, setValues);
+    }
 
-    free(setValues[0]);
-    free(setValues[1]);
-    free(setValues);
-    return;
+    for(int i = 0; i < NUM_PARAMS; i++)
+        if (setValues[i])
+            free(setValues[i]);
+    if (setValues)
+        free(setValues);
 }
 
 void ALSADevice::enableVoipDtx(bool enable)
 {
     status_t err = NO_ERROR;
-
+    char** setValues;
+    #define NUM_PARAMS 2
     ALOGD("enableVoipDtx(): enable=%d", enable);
 
-    err = setMixerControl("Voip Dtx Mode", enable, 0);
-    if (err != NO_ERROR)
-        ALOGE("enableVoipDtx(): enable DTX failed");
+    setValues = (char**)malloc((NUM_PARAMS)*sizeof(char*));
+    if (!setValues) {
+        ALOGE("enableVoipDtx: allocation error %d", err);
+        return;
+    }
+
+    for (int i = 0; i < (NUM_PARAMS-1); i++) {
+        setValues[i] = (char*)malloc(4*sizeof(char));
+        if (!setValues[i]) {
+            err = BAD_VALUE;
+            ALOGE("enableVoipDtx: allocation error %d", err);
+            break;
+        }
+    }
+    if (err == NO_ERROR) {
+        setValues[NUM_PARAMS-1] = (char*)malloc(12*sizeof(char));
+        if (!setValues[NUM_PARAMS-1]) {
+            err = BAD_VALUE;
+            ALOGE("enableVoipDtx: allocation error %d", err);
+        }
+    }
+
+    if (err == NO_ERROR) {
+        snprintf(setValues[0], (4*sizeof(char)), "%d", enable);
+        snprintf(setValues[1], (12*sizeof(char)), "%d", VOIP2_SESSION_VSID);
+
+        setMixerControlExt("Voip Dtx Mode", NUM_PARAMS, setValues);
+    }
+
+    for(int i = 0; i < NUM_PARAMS; i++)
+        if (setValues[i])
+            free(setValues[i]);
+    if (setValues)
+        free(setValues);
 }
 
 status_t ALSADevice::setVocSessionId(uint32_t sessionId)

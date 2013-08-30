@@ -93,8 +93,13 @@ status_t AudioStreamOutALSA::setVolume(float left, float right)
     vol = lrint((volume * 0x2000)+0.5);
 
     if(!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,
-            sizeof(mHandle->useCase)) || !strncmp(mHandle->useCase,
-            SND_USE_CASE_MOD_PLAY_VOIP, sizeof(mHandle->useCase))) {
+                                  sizeof(SND_USE_CASE_VERB_IP_VOICECALL)) ||
+       !strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP,
+                                  sizeof(SND_USE_CASE_MOD_PLAY_VOIP)) ||
+       !strncmp(mHandle->useCase, SND_USE_CASE_VERB_VOIP2,
+                                  sizeof(SND_USE_CASE_VERB_VOIP2)) ||
+       !strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP2,
+                                  sizeof(SND_USE_CASE_MOD_PLAY_VOIP2))) {
         ALOGV("Avoid Software volume by returning success\n");
         return status;
     }
@@ -115,7 +120,9 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
     int write_pending = bytes;
 
     if((strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) &&
-       (strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+       (strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP)) &&
+       (strcmp(mHandle->useCase, SND_USE_CASE_VERB_VOIP2)) &&
+       (strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP2))) {
         mParent->mLock.lock();
         /*
           We can have scenario where the HDMI is current active device in HAL,
@@ -191,7 +198,9 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
             }
             free(use_case);
             if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
-               (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+               (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP)) ||
+               (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_VOIP2)) ||
+               (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP2))) {
 #ifdef QCOM_USBAUDIO_ENABLED
                 if((mParent->mCurRxDevice & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
                       (mParent->mCurRxDevice & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)) {
@@ -224,7 +233,9 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
                 snd_use_case_set(mHandle->ucMgr, "_enamod", mHandle->useCase);
             }
             if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
-              (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+               (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP)) ||
+               (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_VOIP2)) ||
+               (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP2))) {
                  err = mHandle->module->startVoipCall(mHandle);
             }
             else
@@ -240,8 +251,16 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
                    (mParent->mCurRxDevice  == AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)){
                 if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
                    (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
-                    ALOGV("Setting VOIPCALL bit here, musbPlaybackState %d", mParent->musbPlaybackState);
+                    ALOGV("Setting VOIPCALL bit here, musbPlaybackState %d",
+                          mParent->musbPlaybackState);
+
                     mParent->musbPlaybackState |= USBPLAYBACKBIT_VOIPCALL;
+                } else if ((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_VOIP2)) ||
+                           (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP2))) {
+                    ALOGV("Setting VOIP2CALL bit here, musbPlaybackState %d",
+                          mParent->musbPlaybackState);
+
+                    mParent->musbPlaybackState |= USBPLAYBACKBIT_VOIP2CALL;
                 } else {
                     mParent->startUsbPlaybackIfNotStarted();
                     ALOGV("enabling music, musbPlaybackState: %d ", mParent->musbPlaybackState);
@@ -284,8 +303,16 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
         ALOGV("Starting playback on USB");
         if(!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL) ||
            !strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP)) {
-            ALOGV("Setting VOIPCALL bit here, musbPlaybackState %d", mParent->musbPlaybackState);
+            ALOGV("Setting VOIPCALL bit here, musbPlaybackState %d",
+                  mParent->musbPlaybackState);
+
             mParent->musbPlaybackState |= USBPLAYBACKBIT_VOIPCALL;
+        } else if (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_VOIP2) ||
+                   !strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP2) ) {
+            ALOGV("Setting VOIP2CALL bit here, musbPlaybackState %d",
+                  mParent->musbPlaybackState);
+
+            mParent->musbPlaybackState |= USBPLAYBACKBIT_VOIP2CALL;
         }else{
             ALOGV("enabling music, musbPlaybackState: %d ", mParent->musbPlaybackState);
             if ((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_HIFI)) ||
@@ -309,7 +336,8 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
         if (write_pending < period_size) {
             write_pending = period_size;
         }
-        if((mParent->mVoipOutStreamCount) && (mHandle->rxHandle != 0)) {
+        if((mParent->mVoipOutStreamCount || mParent->mVoip2OutStreamCount) &&
+           (mHandle->rxHandle != 0)) {
             n = pcm_write(mHandle->rxHandle,
                      (char *)buffer + sent,
                       period_size);
@@ -324,13 +352,19 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
                 ALOGE("pcm_write returned error %d, trying to recover\n", n);
                 pcm_close(mHandle->handle);
                 mHandle->handle = NULL;
-                if((!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL, strlen(SND_USE_CASE_VERB_IP_VOICECALL))) ||
-                  (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP, strlen(SND_USE_CASE_MOD_PLAY_VOIP)))) {
-                    if (mHandle->rxHandle) {
-                        pcm_close(mHandle->rxHandle);
-                        mHandle->rxHandle = NULL;
-                        mHandle->module->startVoipCall(mHandle);
-                    }
+                if((!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,
+                                               strlen(SND_USE_CASE_VERB_IP_VOICECALL))) ||
+                   (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP,
+                                               strlen(SND_USE_CASE_MOD_PLAY_VOIP))) ||
+                   (!strncmp(mHandle->useCase, SND_USE_CASE_VERB_VOIP2,
+                                               strlen(SND_USE_CASE_VERB_VOIP2))) ||
+                   (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP2,
+                                               strlen(SND_USE_CASE_MOD_PLAY_VOIP2)))) {
+                     if (mHandle->rxHandle) {
+                         pcm_close(mHandle->rxHandle);
+                         mHandle->rxHandle = NULL;
+                         mHandle->module->startVoipCall(mHandle);
+                     }
                 }
                 else
                 {
@@ -364,7 +398,9 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
             write_pending -= period_size;
         }
 
-    } while ((mHandle->handle||(mHandle->rxHandle && mParent->mVoipOutStreamCount)) && sent < bytes);
+    } while ((mHandle->handle||(mHandle->rxHandle &&
+             (mParent->mVoipOutStreamCount || mParent->mVoip2OutStreamCount))) &&
+              sent < bytes);
 
     return sent;
 }
@@ -393,6 +429,7 @@ status_t AudioStreamOutALSA::close()
 #ifdef QCOM_USBAUDIO_ENABLED
                  ALOGV("Deregistering VOIP Call bit, musbPlaybackState:%d, musbRecordingState: %d",
                        mParent->musbPlaybackState, mParent->musbRecordingState);
+
                  mParent->musbPlaybackState &= ~USBPLAYBACKBIT_VOIPCALL;
                  mParent->musbRecordingState &= ~USBRECBIT_VOIPCALL;
                  mParent->closeUsbPlaybackIfNothingActive();
@@ -420,6 +457,41 @@ status_t AudioStreamOutALSA::close()
              return NO_ERROR;
          }
          mParent->mVoipMicMute = 0;
+
+    } else if ((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_VOIP2)) ||
+               (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP2))) {
+         if(mParent->mVoip2InStreamCount || mParent->mVoip2OutStreamCount) {
+#ifdef QCOM_USBAUDIO_ENABLED
+             ALOGV("Deregistering VOIP2 Call bit, musbPlaybackState:%d, musbRecordingState: %d",
+                   mParent->musbPlaybackState, mParent->musbRecordingState);
+
+             mParent->musbPlaybackState &= ~USBPLAYBACKBIT_VOIP2CALL;
+             mParent->musbRecordingState &= ~USBRECBIT_VOIP2CALL;
+             mParent->closeUsbPlaybackIfNothingActive();
+             mParent->closeUsbRecordingIfNothingActive();
+
+             if (mParent->mRouteAudioToExtOut) {
+                 //TODO: HANDLE VOIP A2DP
+             }
+#endif
+             if (mParent->mVoip2OutStreamCount > 0) {
+                 mParent->mVoip2OutStreamCount--;
+             }
+             ALOGD(" mVoip2InStreamCount= %d, mVoip2OutStreamCount=%d",
+                   mParent->mVoip2InStreamCount, mParent->mVoip2OutStreamCount);
+#ifdef RESOURCE_MANAGER
+             useCase.setTo("USECASE_VOIP_CALL");
+             if(!mParent->mVoip2InStreamCount && !mParent->mVoip2OutStreamCount) {
+                 status_t err = mParent->setParameterForConcurrency(
+                         useCase, AudioHardwareALSA::CONCURRENCY_INACTIVE);
+                 if(err != OK) {
+                     return err;
+                 }
+             }
+#endif
+             return NO_ERROR;
+         }
+         mParent->mVoip2MicMute = 0;
     }
 #ifdef QCOM_USBAUDIO_ENABLED
     else {
@@ -457,7 +529,9 @@ status_t AudioStreamOutALSA::standby()
     ALOGV("standby = %s", mHandle->useCase);
 
     if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
-      (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+       (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP)) ||
+       (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_VOIP2)) ||
+       (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP2))) {
         return NO_ERROR;
     }
 

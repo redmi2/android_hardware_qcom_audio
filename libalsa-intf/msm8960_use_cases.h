@@ -266,6 +266,7 @@ static card_mapping_t card_mapping_list[] = {
 #define SND_USE_CASE_VERB_SPKR_CALIB_RX		"Spk Calibration"
 #define SND_USE_CASE_VERB_VOICE2             "Voice2"
 #define SND_USE_CASE_VERB_QCHAT    "QCHAT"
+#define SND_USE_CASE_VERB_VOIP2    "VOIP2"
 
 #define SND_USE_CASE_DEV_FM_TX           "FM Tx"
 #define SND_USE_CASE_DEV_ANC_HEADSET     "ANC Headset"
@@ -343,6 +344,7 @@ static card_mapping_t card_mapping_list[] = {
 #define SND_USE_CASE_MOD_PLAY_LPA        "Play LPA"
 #define SND_USE_CASE_MOD_PLAY_VOIP       "Play VOIP"
 #define SND_USE_CASE_MOD_CAPTURE_VOIP    "Capture VOIP"
+#define SND_USE_CASE_MOD_PLAY_VOIP2      "Play VOIP2"
 #define SND_USE_CASE_MOD_CAPTURE_VOICE_UL       "Capture Voice Uplink"
 #define SND_USE_CASE_MOD_CAPTURE_VOICE_DL       "Capture Voice Downlink"
 #define SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL    "Capture Voice Uplink Downlink"

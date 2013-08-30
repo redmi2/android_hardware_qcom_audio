@@ -146,8 +146,10 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
     int newMode = mParent->mode();
 
     if((mHandle->handle == NULL) && (mHandle->rxHandle == NULL) &&
-        (strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) &&
-        (strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+       (strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) &&
+       (strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP)) &&
+       (strcmp(mHandle->useCase, SND_USE_CASE_VERB_VOIP2)) &&
+       (strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP2))) {
         mParent->mLock.lock();
         snd_use_case_get(mHandle->ucMgr, "_verb", (const char **)&use_case);
         if ((use_case != NULL) && (strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
@@ -328,7 +330,9 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
         }
         free(use_case);
         if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
-            (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+           (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP)) ||
+           (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_VOIP2)) ||
+           (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP2))) {
 #ifdef QCOM_USBAUDIO_ENABLED
             if((mDevices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) ||
                (mDevices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)) {
@@ -364,7 +368,9 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
             snd_use_case_set(mHandle->ucMgr, "_enamod", mHandle->useCase);
         }
        if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
-           (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+          (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP)) ||
+          (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_VOIP2)) ||
+          (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP2))) {
             err = mHandle->module->startVoipCall(mHandle);
         }
         else
@@ -378,9 +384,13 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
 
         if (mHandle->format == AUDIO_FORMAT_AMR_WB &&
             (strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,
-                        strlen(SND_USE_CASE_VERB_IP_VOICECALL))) &&
+                                       strlen(SND_USE_CASE_VERB_IP_VOICECALL))) &&
             (strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP,
-                        strlen(SND_USE_CASE_MOD_PLAY_VOIP)))) {
+                                       strlen(SND_USE_CASE_MOD_PLAY_VOIP))) &&
+            (strncmp(mHandle->useCase, SND_USE_CASE_VERB_VOIP2,
+                                       strlen(SND_USE_CASE_VERB_VOIP2))) &&
+            (strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP2,
+                                       strlen(SND_USE_CASE_MOD_PLAY_VOIP2)))) {
             ALOGD("read:: Allocate mAmrwbInputBuffer size %d", mHandle->periodSize);
             mAmrwbInputBuffer = (uint8_t*) calloc(1, mHandle->periodSize);
             if (mAmrwbInputBuffer == NULL) {
@@ -415,6 +425,11 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
            !strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP)) {
             ALOGD("Enabling voip recording bit");
             mParent->musbRecordingState |= USBRECBIT_VOIPCALL;
+        } else if ((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_VOIP2)) ||
+                 (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP2))) {
+            ALOGD("Enabling Voip2 recording bit");
+
+            mParent->musbRecordingState |= USBRECBIT_VOIP2CALL;
         }else{
             ALOGD("Enabling HiFi Recording bit");
             mParent->musbRecordingState |= USBRECBIT_REC;
@@ -516,8 +531,14 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
     } else
 #endif
     if (mHandle->format == AUDIO_FORMAT_AMR_WB &&
-        (strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL, strlen(SND_USE_CASE_VERB_IP_VOICECALL))) &&
-        (strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP, strlen(SND_USE_CASE_MOD_PLAY_VOIP)))) {
+        (strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,
+                                   strlen(SND_USE_CASE_VERB_IP_VOICECALL))) &&
+        (strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP,
+                                   strlen(SND_USE_CASE_MOD_PLAY_VOIP))) &&
+        (strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,
+                                   strlen(SND_USE_CASE_VERB_VOIP2))) &&
+        (strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP,
+                                   strlen(SND_USE_CASE_MOD_PLAY_VOIP2)))) {
         ALOGV("AUDIO_FORMAT_AMR_WB");
         do {
             if (read_pending < AMR_WB_FRAMESIZE) {
@@ -564,8 +585,14 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                     ALOGW("pcm_read() returned error n %d, Recovering from error\n", n);
                     pcm_close(mHandle->handle);
                     mHandle->handle = NULL;
-                    if((!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL, strlen(SND_USE_CASE_VERB_IP_VOICECALL))) ||
-                    (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP, strlen(SND_USE_CASE_MOD_PLAY_VOIP)))) {
+                    if((!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,
+                                                   strlen(SND_USE_CASE_VERB_IP_VOICECALL))) ||
+                       (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP,
+                                                   strlen(SND_USE_CASE_MOD_PLAY_VOIP))) ||
+                       (!strncmp(mHandle->useCase, SND_USE_CASE_VERB_VOIP2,
+                                                   strlen(SND_USE_CASE_VERB_VOIP2))) ||
+                       (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP2,
+                                                   strlen(SND_USE_CASE_MOD_PLAY_VOIP2)))) {
                         if (mHandle->rxHandle) {
                             pcm_close(mHandle->rxHandle);
                             mHandle->rxHandle = NULL;
@@ -599,7 +626,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
             else {
                 read += static_cast<ssize_t>((period_size));
                 read_pending -= period_size;
-                if (mParent->mMicMute || mParent->mVoipMicMute) {
+                if (mParent->mMicMute || mParent->mVoipMicMute || mParent->mVoip2MicMute) {
                     memset(buffer, 0, period_size);
                 }
                 buffer += period_size;
@@ -636,7 +663,9 @@ status_t AudioStreamInALSA::close()
         if(mParent->mVoipInStreamCount || mParent->mVoipOutStreamCount) {
 #ifdef QCOM_USBAUDIO_ENABLED
             ALOGV("Deregistering VOIP Call bit, musbPlaybackState:%d,"
-                   "musbRecordingState:%d", mParent->musbPlaybackState, mParent->musbRecordingState);
+                  "musbRecordingState:%d", mParent->musbPlaybackState,
+                  mParent->musbRecordingState);
+
             mParent->musbPlaybackState &= ~USBPLAYBACKBIT_VOIPCALL;
             mParent->musbRecordingState &= ~USBRECBIT_VOIPCALL;
             mParent->closeUsbRecordingIfNothingActive();
@@ -660,6 +689,38 @@ status_t AudioStreamInALSA::close()
             return NO_ERROR;
         }
         mParent->mVoipMicMute = 0;
+
+    } else if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_VOIP2)) ||
+              (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP2))) {
+        if(mParent->mVoip2InStreamCount || mParent->mVoip2OutStreamCount) {
+#ifdef QCOM_USBAUDIO_ENABLED
+            ALOGV("Deregistering VOIP2 Call bit, musbPlaybackState:%d,"
+                  "musbRecordingState:%d", mParent->musbPlaybackState,
+                  mParent->musbRecordingState);
+
+            mParent->musbPlaybackState &= ~USBPLAYBACKBIT_VOIP2CALL;
+            mParent->musbRecordingState &= ~USBRECBIT_VOIP2CALL;
+            mParent->closeUsbRecordingIfNothingActive();
+            mParent->closeUsbPlaybackIfNothingActive();
+#endif
+            if (mParent->mVoip2InStreamCount > 0) {
+                mParent->mVoip2InStreamCount--;
+            }
+            ALOGD("mVoip2InStreamCount= %d, mParent->mVoip2OutStreamCount=%d",
+                  mParent->mVoip2InStreamCount, mParent->mVoip2OutStreamCount);
+#ifdef RESOURCE_MANAGER
+            useCase.setTo("USECASE_VOIP_CALL");
+            if(!mParent->mVoip2InStreamCount && !mParent->mVoip2OutStreamCount) {
+                status_t err = mParent->setParameterForConcurrency(
+                        useCase, AudioHardwareALSA::CONCURRENCY_INACTIVE);
+                //TODO : no error here?, cleanup might not be proper
+                if(err != OK)
+                    return err;
+            }
+#endif
+            return NO_ERROR;
+        }
+        mParent->mVoip2MicMute = 0;
 #ifdef QCOM_USBAUDIO_ENABLED
     } else {
         ALOGD("Deregistering REC bit, musbRecordingState:%d", mParent->musbRecordingState);
@@ -737,7 +798,9 @@ status_t AudioStreamInALSA::standby()
     ALOGD("standby");
 
     if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
-        (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
+       (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP)) ||
+       (!strcmp(mHandle->useCase, SND_USE_CASE_VERB_VOIP2)) ||
+       (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP2)) ) {
          return NO_ERROR;
     }
 #ifdef QCOM_CSDCLIENT_ENABLED

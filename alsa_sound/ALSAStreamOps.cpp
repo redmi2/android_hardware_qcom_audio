@@ -62,6 +62,13 @@ ALSAStreamOps::~ALSAStreamOps()
             return ;
         }
         mParent->mVoipMicMute = 0;
+    } else if ((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_VOIP2)) ||
+               (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP2))) {
+        if(mParent->mVoip2InStreamCount || mParent->mVoip2OutStreamCount) {
+            ALOGD("ALSAStreamOps::close() Ignore for Voip2");
+            return ;
+        }
+        mParent->mVoip2MicMute = 0;
         mParent->mVoipBitRate = 0;
         mParent->mVoipEvrcBitRateMin = 0;
         mParent->mVoipEvrcBitRateMax = 0;
@@ -300,8 +307,14 @@ String8 ALSAStreamOps::getParameters(const String8& keys)
     else {
         key = String8(VOIPCHECK_KEY);
         if (param.get(key, value) == NO_ERROR) {
-            if((!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL, strlen(SND_USE_CASE_VERB_IP_VOICECALL))) ||
-               (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP, strlen(SND_USE_CASE_MOD_PLAY_VOIP))))
+            if((!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,
+                                           strlen(SND_USE_CASE_VERB_IP_VOICECALL))) ||
+               (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP,
+                                           strlen(SND_USE_CASE_MOD_PLAY_VOIP))) ||
+               (!strncmp(mHandle->useCase, SND_USE_CASE_VERB_VOIP2,
+                                           strlen(SND_USE_CASE_VERB_VOIP2))) ||
+               (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP2,
+                                           strlen(SND_USE_CASE_MOD_PLAY_VOIP2))))
                 param.addInt(key, true);
             else
                 param.addInt(key, false);
@@ -548,15 +561,22 @@ void ALSAStreamOps::close()
         return;
     }
 
-    if((!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL, strlen(SND_USE_CASE_VERB_IP_VOICECALL))) ||
-       (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP, strlen(SND_USE_CASE_MOD_PLAY_VOIP)))) {
-       mParent->mVoipMicMute = false;
+    if ((!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL, strlen(SND_USE_CASE_VERB_IP_VOICECALL))) ||
+        (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP, strlen(SND_USE_CASE_MOD_PLAY_VOIP)))) {
+        mParent->mVoipMicMute = false;
+        mParent->mVoipInStreamCount = 0;
+        mParent->mVoipOutStreamCount = 0;
+    } else if ((!strncmp(mHandle->useCase, SND_USE_CASE_VERB_VOIP2,
+                                           strlen(SND_USE_CASE_VERB_VOIP2))) ||
+               (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP2,
+                                           strlen(SND_USE_CASE_MOD_PLAY_VOIP2)))) {
+       mParent->mVoip2MicMute = false;
        mParent->mVoipBitRate = 0;
        mParent->mVoipEvrcBitRateMin = 0;
        mParent->mVoipEvrcBitRateMax = 0;
-       mParent->mVoipInStreamCount = 0;
-       mParent->mVoipOutStreamCount = 0;
-    }
+       mParent->mVoip2InStreamCount = 0;
+       mParent->mVoip2OutStreamCount = 0;
+   }
     mParent->mALSADevice->close(mHandle);
 }
 
