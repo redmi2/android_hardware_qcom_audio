@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2009 The Android Open Source Project
  * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
- *
+ * Not a contribution.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -70,6 +70,102 @@ namespace android_audio_legacy {
 // ----------------------------------------------------------------------------
 
 AudioParameter param;
+
+
+uint32_t AudioPolicyManager::checkDeviceMuteStrategies(AudioOutputDescriptor *outputDesc,
+                                                       audio_devices_t prevDevice,
+                                                       uint32_t delayMs)
+{
+    // mute/unmute strategies using an incompatible device combination
+    // if muting, wait for the audio in pcm buffer to be drained before proceeding
+    // if unmuting, unmute only after the specified delay
+    if (outputDesc->isDuplicated()) {
+        return 0;
+    }
+
+    uint32_t muteWaitMs = 0;
+    audio_devices_t device = outputDesc->device();
+#ifdef QCOM_APM_VERSION_JBMR2
+    bool shouldMute = outputDesc->isActive() && (AudioSystem::popCount(device) >= 2);
+#else
+    bool shouldMute = (outputDesc->refCount() != 0) && (AudioSystem::popCount(device) >= 2);
+#endif
+    // temporary mute output if device selection changes to avoid volume bursts due to
+    // different per device volumes
+#ifdef QCOM_APM_VERSION_JBMR2
+    bool tempMute = outputDesc->isActive() && (device != prevDevice);
+#else
+    bool tempMute = (outputDesc->refCount() != 0) && (device != prevDevice);
+#endif
+    for (size_t i = 0; i < NUM_STRATEGIES; i++) {
+        audio_devices_t curDevice = getDeviceForStrategy((routing_strategy)i, false /*fromCache*/);
+        bool mute = shouldMute && (curDevice & device) && (curDevice != device);
+        bool doMute = false;
+
+        if (mute && !outputDesc->mStrategyMutedByDevice[i]) {
+            doMute = true;
+            outputDesc->mStrategyMutedByDevice[i] = true;
+        } else if (!mute && outputDesc->mStrategyMutedByDevice[i]){
+            doMute = true;
+            outputDesc->mStrategyMutedByDevice[i] = false;
+        }
+        if (doMute || tempMute) {
+            for (size_t j = 0; j < mOutputs.size(); j++) {
+                AudioOutputDescriptor *desc = mOutputs.valueAt(j);
+                if ((desc->supportedDevices() & outputDesc->supportedDevices())
+                        == AUDIO_DEVICE_NONE) {
+                    continue;
+                }
+                audio_io_handle_t curOutput = mOutputs.keyAt(j);
+                ALOGVV("checkDeviceMuteStrategies() %s strategy %d (curDevice %04x) on output %d",
+                      mute ? "muting" : "unmuting", i, curDevice, curOutput);
+                setStrategyMute((routing_strategy)i, mute, curOutput, mute ? 0 : delayMs * 4);
+#ifdef QCOM_APM_VERSION_JBMR2
+                if (desc->isStrategyActive((routing_strategy)i)) {
+#else
+                if (desc->strategyRefCount((routing_strategy)i) != 0) {
+#endif
+                    if (tempMute) {
+                        if ((desc != outputDesc) && (desc->device() == device)) {
+                            ALOGD("avoid tempmute on curOutput %d as device is same", curOutput);
+                        } else {
+                            setStrategyMute((routing_strategy)i, true, curOutput);
+
+                            //Change latency for tunnel/LPA player to make sure no noise on device switch
+                            //Routing to  BTA2DP,  USB device ,  Proxy(WFD) will take time, increasing latency time
+                            if((desc->mFlags & AUDIO_OUTPUT_FLAG_LPA) || (desc->mFlags & AUDIO_OUTPUT_FLAG_TUNNEL)
+                                || (device & AUDIO_DEVICE_OUT_USB_DEVICE) || (device & AUDIO_DEVICE_OUT_BLUETOOTH_A2DP)
+                                || (device & AUDIO_DEVICE_OUT_PROXY) || (device & AUDIO_DEVICE_OUT_FM) )
+                            {
+                               setStrategyMute((routing_strategy)i, false, curOutput,desc->latency()*4 ,device);
+                            }
+                            else
+                               setStrategyMute((routing_strategy)i, false, curOutput,desc->latency()*2 ,device);
+                        }
+                    }
+                    if (tempMute || mute) {
+                        if (muteWaitMs < desc->latency()) {
+                            muteWaitMs = desc->latency();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // FIXME: should not need to double latency if volume could be applied immediately by the
+    // audioflinger mixer. We must account for the delay between now and the next time
+    // the audioflinger thread for this output will process a buffer (which corresponds to
+    // one buffer size, usually 1/2 or 1/4 of the latency).
+    muteWaitMs *= 2;
+    // wait for the PCM output buffers to empty before proceeding with the rest of the command
+    if (muteWaitMs > delayMs) {
+        muteWaitMs -= delayMs;
+        usleep(muteWaitMs * 1000);
+        return muteWaitMs;
+    }
+    return 0;
+}
 
 status_t AudioPolicyManager::setDeviceConnectionState(audio_devices_t device,
                                                   AudioSystem::device_connection_state state,
@@ -216,14 +312,6 @@ status_t AudioPolicyManager::setDeviceConnectionState(audio_devices_t device,
         }
 
         updateDevicesAndOutputs();
-#ifdef QCOM_PROXY_DEVICE_ENABLED
-        if (state == AudioSystem::DEVICE_STATE_AVAILABLE &&
-                audio_is_a2dp_device(device) &&
-                (mAvailableOutputDevices & AUDIO_DEVICE_OUT_PROXY)) {
-            ALOGV("Delay the proxy device open");
-            return NO_ERROR;
-        }
-#endif
 
         audio_devices_t newDevice = getNewDevice(mPrimaryOutput, false /*fromCache*/);
 #ifdef QCOM_FM_ENABLED
@@ -260,7 +348,7 @@ status_t AudioPolicyManager::setDeviceConnectionState(audio_devices_t device,
             }
         }
 #endif
-        for (size_t i = 0; i < mOutputs.size(); i++) {
+        for (int i = mOutputs.size() -1; i >= 0; i--) {
             audio_devices_t newDevice = getNewDevice(mOutputs.keyAt(i), true /*fromCache*/);
             setOutputDevice(mOutputs.keyAt(i),
                             getNewDevice(mOutputs.keyAt(i), true /*fromCache*/),
@@ -628,7 +716,7 @@ void AudioPolicyManager::setForceUse(AudioSystem::force_use usage, AudioSystem::
     checkA2dpSuspend();
     checkOutputForAllStrategies();
     updateDevicesAndOutputs();
-    for (size_t i = 0; i < mOutputs.size(); i++) {
+    for (int i = mOutputs.size() -1; i >= 0; i--) {
         audio_io_handle_t output = mOutputs.keyAt(i);
         audio_devices_t newDevice = getNewDevice(output, true /*fromCache*/);
         setOutputDevice(output, newDevice, (newDevice != AUDIO_DEVICE_NONE));
@@ -854,6 +942,9 @@ status_t AudioPolicyManager::startOutput(audio_io_handle_t output,
                             (strategy == STRATEGY_SONIFICATION_RESPECTFUL);
         uint32_t waitMs = 0;
         uint32_t muteWaitMs = 0;
+#ifndef QCOM_APM_VERSION_JBMR2
+        uint32_t RefCount = 0;
+#endif
         bool force = false;
         for (size_t i = 0; i < mOutputs.size(); i++) {
             AudioOutputDescriptor *desc = mOutputs.valueAt(i);
@@ -866,6 +957,9 @@ status_t AudioPolicyManager::startOutput(audio_io_handle_t output,
                     desc->device() != newDevice) {
                     force = true;
                 }
+#ifndef QCOM_APM_VERSION_JBMR2
+                RefCount += desc->refCount();
+#endif
                 // wait for audio on other active outputs to be presented when starting
                 // a notification so that audio focus effect can propagate.
 #ifdef QCOM_APM_VERSION_JBMR2
@@ -879,7 +973,11 @@ status_t AudioPolicyManager::startOutput(audio_io_handle_t output,
                 }
             }
         }
-
+#ifndef QCOM_APM_VERSION_JBMR2
+        if(RefCount==0){
+           force = true;
+        }
+#endif
 #ifdef QCOM_FM_ENABLED
         #ifdef QCOM_FM_V2_ENABLED
         if(stream == AudioSystem::MUSIC && output == getA2dpOutput()) {
@@ -1329,29 +1427,32 @@ status_t AudioPolicyManager::checkOutputsForDevice(audio_devices_t device,
 #ifdef DOLBY_UDC_MULTICHANNEL
                 if (device == AUDIO_DEVICE_OUT_AUX_DIGITAL)
                 {
-                    bool supportHDMI8 = false;
+                    bool hdmiFlagSet = false;
                     for (uint32_t i = 0; i < profile->mChannelMasks.size(); ++i)
                     {
                         audio_channel_mask_t channelMask =
                             profile->mChannelMasks[i];
-                        if (channelMask == AUDIO_CHANNEL_OUT_7POINT1)
-                        {
-                            supportHDMI8 = true;
+                        switch (channelMask) {
+                        case  AUDIO_CHANNEL_OUT_7POINT1:
+                            ALOGV("DOLBY_ENDPOINT mCurrentHdmiDeviceCapability ="
+                                  "HDMI_8");
+                            mCurrentHdmiDeviceCapability = HDMI_8;
+                            hdmiFlagSet = true;
+                            break;
+                        case AUDIO_CHANNEL_OUT_5POINT1:
+                            ALOGV("DOLBY_ENDPOINT mCurrentHdmiDeviceCapability ="
+                                  "HDMI_6");
+                            mCurrentHdmiDeviceCapability = HDMI_6;
+                            hdmiFlagSet = true;
+                            break;
+                        default:
+                            ALOGV("DOLBY_ENDPOINTmCurrentHdmiDeviceCapability="
+                                  "HDMI_2");
+                            mCurrentHdmiDeviceCapability = HDMI_2;
                             break;
                         }
-                    }
-
-                    if (supportHDMI8)
-                    {
-                        ALOGV("DOLBY_ENDPOINT mCurrentHdmiDeviceCapability ="
-                              "HDMI_8");
-                        mCurrentHdmiDeviceCapability = HDMI_8;
-                    }
-                    else
-                    {
-                        ALOGV("DOLBY_ENDPOINT mCurrentHdmiDeviceCapability ="
-                              "HDMI_6");
-                        mCurrentHdmiDeviceCapability = HDMI_6;
+                        if (hdmiFlagSet)
+                            break;
                     }
                 }
 #endif //DOLBY_UDC_MULTICHANNEL
@@ -1362,7 +1463,8 @@ status_t AudioPolicyManager::checkOutputsForDevice(audio_devices_t device,
                 profiles.removeAt(profile_index);
                 profile_index--;
 #ifdef DOLBY_UDC_MULTICHANNEL
-                if (device == AUDIO_DEVICE_OUT_AUX_DIGITAL)
+                if ((device == AUDIO_DEVICE_OUT_AUX_DIGITAL) &&
+                    (mCurrentHdmiDeviceCapability == HDMI_INVALID))
                 {
                     // Seems the current behaviour for HDMI 2 case is to have
                     // output to be
@@ -2034,8 +2136,9 @@ status_t AudioPolicyManager::checkAndSetVolume(int stream,
                 if(output == mPrimaryOutput) {
                     AudioParameter param = AudioParameter();
                     param.addFloat(String8(AudioParameter::keyFmVolume), fmVolume);
-                    ALOGV("checkAndSetVolume setParameters fm_volume");
-                    mpClientInterface->setParameters(mPrimaryOutput, param.toString());
+                    ALOGV("checkAndSetVolume setParameters fm_volume, volume=:%f delay=:%d",fmVolume,delayMs*2);
+                    //Double delayMs to avoid sound burst while device switch.
+                    mpClientInterface->setParameters(mPrimaryOutput, param.toString(), delayMs*2);
                 }
                 else if(mHasA2dp && output == getA2dpOutput()) {
                     mpClientInterface->setStreamVolume((AudioSystem::stream_type)stream, volume, output, delayMs);
