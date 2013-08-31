@@ -755,9 +755,9 @@ status_t AudioSessionOutALSA::stop()
 
 status_t AudioSessionOutALSA::standby()
 {
-    Mutex::Autolock autoLock(mParent->mLock);
     status_t err = NO_ERROR;
     flush();
+    Mutex::Autolock autoLock(mParent->mLock);
 
 #ifdef QCOM_USBAUDIO_ENABLED
     if (mParent->musbPlaybackState) {
@@ -789,15 +789,21 @@ status_t AudioSessionOutALSA::standby()
     Acquire draining lock so that we can be sure drain is done
     Flush will cause drain to complete, but we have to wait for it
     */
-    // At this point, all the buffers with the driver should be
-    // flushed.
-    Mutex::Autolock autoLock1(mDrainingLock);
+    /*
+    At this point, all the buffers with the driver should be flushed.
+    */
+
+    mLock.lock();
+    mSessionStatus = -1;
+    mLock.unlock();
+
+    requestAndWaitForEventThreadExit();
+
     mAlsaHandle->module->standby(mAlsaHandle);
     /*
         Since ALSA Handle is closed, make sure no operations on
         ALSA handle happen after this
     */
-    mSessionStatus = -1;
 
 
     if (mParent->mRouteAudioToExtOut) {
@@ -838,9 +844,11 @@ status_t AudioSessionOutALSA::dump(int fd, const Vector<String16>& args)
 
 status_t AudioSessionOutALSA::getNextWriteTimestamp(int64_t *timestamp)
 {
+    Mutex::Autolock autoLock(mLock);
     struct snd_compr_tstamp tstamp;
     tstamp.timestamp = -1;
-    if (ioctl(mAlsaHandle->handle->fd, SNDRV_COMPRESS_TSTAMP, &tstamp)){
+    if (mAlsaHandle && mAlsaHandle->handle &&
+        ioctl(mAlsaHandle->handle->fd, SNDRV_COMPRESS_TSTAMP, &tstamp)){
         ALOGE("Failed SNDRV_COMPRESS_TSTAMP\n");
         return UNKNOWN_ERROR;
     } else {
@@ -941,12 +949,12 @@ SNDRV_PCM_FORMAT_S16_LE : mFormat);
     alsa_handle.session     = this;
     strlcpy(alsa_handle.useCase, useCase, sizeof(alsa_handle.useCase));
 
-    mAlsaDevice->route(&alsa_handle, devices, mParent->mode());
     if (bIsUseCase) {
-        snd_use_case_set(mUcMgr, "_verb", useCase);
+       snd_use_case_set(mUcMgr, "_verb", useCase);
     } else {
-        snd_use_case_set(mUcMgr, "_enamod", useCase);
+       snd_use_case_set(mUcMgr, "_enamod", useCase);
     }
+    mAlsaDevice->route(&alsa_handle, devices, mParent->mode());
 
     //Set Tunnel or LPA bit if the playback over usb is tunnel or Lpa
     if((devices & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
@@ -1088,25 +1096,22 @@ void AudioSessionOutALSA::reset() {
     }
 #endif
 
-    if(mAlsaHandle) {
-        ALOGD("closeDevice mAlsaHandle");
-        closeDevice(mAlsaHandle);
-        mAlsaHandle = NULL;
-    }
 #ifdef QCOM_USBAUDIO_ENABLED
     mParent->closeUsbPlaybackIfNothingActive();
 #endif
     ALOGV("Erase device list");
     for(ALSAHandleList::iterator it = mParent->mDeviceList.begin();
             it != mParent->mDeviceList.end(); ++it) {
-        if( isTunnelUseCase(it->useCase) ||
-           (!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER,
-                            strlen(SND_USE_CASE_VERB_HIFI_LOW_POWER))) ||
-           (!strncmp(it->useCase, SND_USE_CASE_MOD_PLAY_LPA,
-                            strlen(SND_USE_CASE_MOD_PLAY_LPA)))) {
+        if (&(*it) == mAlsaHandle) {
             mParent->mDeviceList.erase(it);
             break;
         }
+    }
+
+    if(mAlsaHandle) {
+        ALOGD("closeDevice mAlsaHandle");
+        closeDevice(mAlsaHandle);
+        mAlsaHandle = NULL;
     }
     mParent->mLock.unlock();
 }
@@ -1136,12 +1141,8 @@ status_t AudioSessionOutALSA::drainAndPostEOS_l()
     }
 
     /*
-    To indicate to other threads that we are draining
-    and we have to wait till this is done. And take this
-    lock before unlocking mLock so that ::standby() will not
-    be able to acquire the mDrainingLock
+    if alsa handle is invalid, this flag will be false
     */
-    Mutex::Autolock autoLock(mDrainingLock);
     if (mSessionStatus != 0) {
         ALOGE("ALSA Handle closed already");
         return INVALID_OPERATION;
