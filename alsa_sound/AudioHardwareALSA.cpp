@@ -45,6 +45,7 @@
 #include "AudioUsbALSA.h"
 #endif
 #include "AudioUtil.h"
+#include <linux/msm_audio.h>
 
 //#define OUTPUT_BUFFER_LOG
 #ifdef OUTPUT_BUFFER_LOG
@@ -65,6 +66,7 @@ extern "C"
     static int (*acdb_init)();
     static int (*acdb_reload_vocvol)(int, int, int);
     static void (*acdb_deallocate)();
+    static void (*acdb_send_audio_cal)(int, int);
 #endif
 #ifdef QCOM_CSDCLIENT_ENABLED
     static int (*csd_client_init)();
@@ -79,6 +81,7 @@ extern "C"
 namespace android_audio_legacy
 {
 
+#define CLEAR_TX_CAL_BLOCK 0
 // ----------------------------------------------------------------------------
 
 AudioHardwareInterface *AudioHardwareALSA::create() {
@@ -179,6 +182,8 @@ AudioHardwareALSA::AudioHardwareALSA() :
            acdb_deallocate = (void (*)())::dlsym(mAcdbHandle,"acdb_loader_deallocate_ACDB");
 	   if (acdb_deallocate == NULL)
 	       ALOGE("dlsym:Error:%s Loading acdb_deallocate");
+           acdb_send_audio_cal =
+           (void (*)(int, int))::dlsym(mAcdbHandle,"acdb_loader_send_audio_cal");
         }
     }
     mALSADevice->setACDBHandle(mAcdbHandle);
@@ -226,6 +231,8 @@ AudioHardwareALSA::AudioHardwareALSA() :
         snd_use_case_mgr_create(&mUcMgr, "snd_soc_msm", cardInfo->card);
     } else if (!strcmp((const char*)cardInfo->name, "msm8226-tapan-snd-card")) {
         snd_use_case_mgr_create(&mUcMgr, "snd_soc_msm_Tapan", cardInfo->card);
+    } else if (!strcmp((const char*)cardInfo->name, "msm8226-tapan9302-snd-card")) {
+        snd_use_case_mgr_create(&mUcMgr, "snd_soc_msm_TapanLite", cardInfo->card);
     } else if (!strcmp((const char*)cardInfo->name, "msm8226-tapan-skuf-snd-card")) {
         snd_use_case_mgr_create(&mUcMgr, "snd_soc_msm_Tapan_SKUF", cardInfo->card);
     } else if (!strcmp((const char*)cardInfo->name, "msm8960-tabla1x-snd-card") ||
@@ -2564,6 +2571,8 @@ void AudioHardwareALSA::handleFm(int device)
         } else {
             snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_FM);
         }
+        if (acdb_send_audio_cal)
+            acdb_send_audio_cal(CLEAR_TX_CAL_BLOCK, MSM_SNDDEV_CAP_TX);
         mALSADevice->startFm(&(*it));
         activeUsecase = useCaseStringToEnum(it->useCase);
 #ifdef QCOM_USBAUDIO_ENABLED
@@ -2661,9 +2670,10 @@ void AudioHardwareALSA::disableVoiceCall(int mode, int device, uint32_t vsid)
 #endif
 }
 
-void AudioHardwareALSA::enableVoiceCall(int mode, int device, uint32_t vsid)
+status_t AudioHardwareALSA::enableVoiceCall(int mode, int device, uint32_t vsid)
 {
     // Start voice call
+    status_t status;
     unsigned long bufferSize = DEFAULT_VOICE_BUFFER_SIZE;
     alsa_handle_t alsa_handle;
     char *use_case;
@@ -2681,8 +2691,14 @@ void AudioHardwareALSA::enableVoiceCall(int mode, int device, uint32_t vsid)
         ALOGE("%s(): Error, verb=%p or modifier=%p is NULL",
               __func__, verb, modifier);
 
-            return;
+            return NO_INIT;
     }
+
+    if (device == AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP) {
+        ALOGE("%s(): Error, BTA2DP is not supported in voice call",
+              __func__);
+        return NO_INIT;
+     }
 
     snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
     if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
@@ -2717,7 +2733,17 @@ void AudioHardwareALSA::enableVoiceCall(int mode, int device, uint32_t vsid)
     } else {
         snd_use_case_set(mUcMgr, "_enamod", modifier);
     }
-    mALSADevice->startVoiceCall(&(*it), vsid);
+
+    status = mALSADevice->startVoiceCall(&(*it), vsid);
+
+    if (status == NO_ERROR) {
+        ALOGV("AudioHardwareAlsa: voice call succesfully started");
+    }
+    else {
+        ALOGE("AudioHardwareAlsa: voice call setup was unsuccesfull");
+        mDeviceList.erase(it);
+        return NO_INIT;
+    }
 
 #ifdef QCOM_USBAUDIO_ENABLED
     if((device & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
@@ -2728,6 +2754,8 @@ void AudioHardwareALSA::enableVoiceCall(int mode, int device, uint32_t vsid)
        musbRecordingState |= USBRECBIT_VOICECALL;
     }
 #endif
+
+    return NO_ERROR;
 }
 
 char *AudioHardwareALSA::getUcmVerbForVSID(uint32_t vsid)
@@ -2851,6 +2879,7 @@ bool AudioHardwareALSA::routeCall(int device, int newMode, uint32_t vsid)
     int *curCallState = getCallStateForVSID(vsid);
     int newCallState = mCallState;
     enum voice_lch_mode lch_mode;
+    status_t status;
 
     if (curCallState == NULL) {
         ALOGE("%s(): Error, mCurCallState=%p is NULL",
@@ -2880,9 +2909,16 @@ bool AudioHardwareALSA::routeCall(int device, int newMode, uint32_t vsid)
         if (*curCallState == CALL_INACTIVE) {
             ALOGD("%s(): Start call for vsid:%x ",__func__, vsid);
 
-            enableVoiceCall(newMode, device, vsid);
-            isRouted = true;
-            *curCallState = CALL_ACTIVE;
+            status = enableVoiceCall(newMode, device, vsid);
+            if (status == NO_INIT) {
+                ALOGV("doRouting: voice call setup was unsuccesfull");
+                isRouted = false;
+                *curCallState = CALL_INACTIVE;
+            } else {
+                ALOGV("doRouting: voice call setup was succesfull");
+                isRouted = true;
+                *curCallState = CALL_ACTIVE;
+            }
 
         } else if (*curCallState == CALL_HOLD) {
             ALOGD("%s(): Resume call from hold state for vsid:%x",
