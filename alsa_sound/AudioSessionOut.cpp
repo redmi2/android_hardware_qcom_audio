@@ -132,6 +132,13 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
         }
     }
 
+    if (mParent->mALSADevice->mADSPState == ADSP_UP_AFTER_SSR) {
+           // In-case of multiple streams only one stream will be resumed
+           // after resetting mADSPState to ADSP_UP with output device routed
+           ALOGV("We are restarting after SSR - Reset ADSP state to ADSP_UP");
+           mParent->mALSADevice->mADSPState = ADSP_UP;
+    }
+
     //open device based on the type (LPA or Tunnel) and devices
     //TODO: Check format type for linear vs non-linear to determine LPA/Tunnel
     *status = openAudioSessionDevice(type, devices);
@@ -141,6 +148,10 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
         mSessionStatus = -1;
         return;
     }
+    //start off with mute, the proper volume will be set later
+    mLock.unlock();
+    setVolume(0, 0);
+    mLock.lock();
     //Creates the event thread to poll events from LPA/Compress Driver
     createEventThread();
 
@@ -1003,10 +1014,10 @@ status_t AudioSessionOutALSA::closeDevice(alsa_handle_t *pHandle)
     ALOGD("closeDevice: useCase %s", pHandle->useCase);
     //TODO: remove from mDeviceList
     if(pHandle) {
-        status = mAlsaDevice->close(pHandle);
-	if (mTunnelMode) {
+        if (mTunnelMode) {
             mParent->freeTunnel(pHandle->useCase);
         }
+        status = mAlsaDevice->close(pHandle);
     }
     return status;
 }
