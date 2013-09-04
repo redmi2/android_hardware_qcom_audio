@@ -450,8 +450,10 @@ status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
     ALOGV("setParameters keyvalue = %s", keyValuePairs.string());
     AudioParameter param = AudioParameter(keyValuePairs);
     String8 key = String8(AudioParameter::keyRouting);
+    String8 keyScreen = String8(AudioParameter::keyScreenState);
     String8 keyStandby = String8(STANDBY_DEVICES_KEY);
     String8 keyResume = String8(RESUME_DEVICES_KEY);
+    String8 value;
     int device;
     if (param.getInt(key, device) == NO_ERROR && device) {
         // Ignore routing if device is 0.
@@ -490,6 +492,8 @@ status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
         mConfiguringSessions = true;
         doRouting(mDevices | device);
         mConfiguringSessions = false;
+    } else if (param.get(keyScreen, value) == NO_ERROR) {
+        ALOGD("Session playback in progrees during the screen on/off");
     } else {
         mParent->setParameters(keyValuePairs);
     }

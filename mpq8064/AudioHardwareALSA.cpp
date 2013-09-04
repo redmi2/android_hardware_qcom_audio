@@ -131,6 +131,7 @@ AudioHardwareALSA::AudioHardwareALSA() :
     mSpdifOutputChannels = STEREO_CHANNELS;
     mSpdifRenderFormat = UNCOMPRESSED;
     mHdmiRenderFormat = UNCOMPRESSED;
+    mScreenState = true;
 }
 
 AudioHardwareALSA::~AudioHardwareALSA()
@@ -399,11 +400,16 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
     key = String8(HDMI_OCHANNELS_KEY);
     if (param.getInt(key, devValue) == NO_ERROR) {
         ALOGD("output channels set forced on  HDMI: %d", devValue);
-        mHdmiOutputChannels = devValue < DEFAULT_CHANNEL_MODE ?
+        int channels = devValue < DEFAULT_CHANNEL_MODE ?
                               DEFAULT_CHANNEL_MODE :
                               devValue > MAX_SUPPORTED_CHANNELS ?
                                   MAX_SUPPORTED_CHANNELS: devValue;
-        mALSADevice->mHdmiOutputChannels = mHdmiOutputChannels;
+        if(channels != mHdmiOutputChannels) {
+            mHdmiOutputChannels = channels;
+            mALSADevice->mHdmiOutputChannels = mHdmiOutputChannels;
+            //restart all the sessions on hdmi for the channels to take affect
+            mALSADevice->setOuputChannels(mHdmiOutputChannels, AudioSystem::DEVICE_OUT_AUX_DIGITAL);
+        }
         param.remove(key);
     }
 
@@ -446,6 +452,19 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
       mALSADevice->setPlaybackOutputDelay(AudioSystem::DEVICE_OUT_AUX_DIGITAL,
                                           devValue);
       param.remove(key);
+    }
+
+    key = String8(AudioParameter::keyScreenState);
+    if (param.get(key, value) == NO_ERROR) {
+        if(!strncmp(value, "on", 2))
+            mScreenState = true;
+        else if(!strncmp(value, "off", 3))
+            mScreenState = false;
+
+        List <AudioStreamOut *>::iterator it;
+        for(it = mSessions.begin(); it != mSessions.end(); ++it) {
+            (*it)->setParameters(param.toString());
+        }
     }
 
     if (param.size()) {
@@ -1058,7 +1077,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
           err = out->set(format, channels, sampleRate, devices);
           mSessions.push_back(out);
       }
-
+      pcm_prepare(it->handle);
       if (status) *status = err;
       return out;
     }

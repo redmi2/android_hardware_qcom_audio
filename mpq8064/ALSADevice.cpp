@@ -479,12 +479,13 @@ void ALSADevice::switchDeviceUseCase(alsa_handle_t *handle,
 
     snd_use_case_get(handle->ucMgr, "_verb", (const char **)&use_case);
     bIsUseCaseSet = ((use_case == NULL) ||
-        (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
-            strlen(SND_USE_CASE_VERB_INACTIVE))));
+            (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
+                      strlen(SND_USE_CASE_VERB_INACTIVE))) ||
+            (!strncmp(use_case, handle->useCase, MAX_STR_LEN)));
 
     enableDevice(handle, bIsUseCaseSet);
 
-    handle->activeDevice = switchTodevices;
+    handle->devices = handle->activeDevice = switchTodevices;
 
     if (use_case != NULL) {
         free(use_case);
@@ -998,8 +999,13 @@ status_t ALSADevice::close(alsa_handle_t *handle)
 {
     int ret;
     status_t err = NO_ERROR;
-     struct pcm *h = handle->rxHandle;
+    struct pcm *h = handle->rxHandle;
+    char * use_case = NULL;
+    bool bIsUseCaseSet = false;
 
+    snd_use_case_get(handle->ucMgr, "_verb", (const char **)&use_case);
+    bIsUseCaseSet = ((use_case != NULL) && (handle->handle != NULL) &&
+                        (!strncmp(use_case, handle->useCase, MAX_STR_LEN)));
     handle->rxHandle = 0;
     ALOGD("close: handle %p h %p", handle, h);
     if (h) {
@@ -1026,6 +1032,9 @@ status_t ALSADevice::close(alsa_handle_t *handle)
                                   strlen(SND_USE_CASE_MOD_PLAY_LPA)))) {
         disableDevice(handle);
     }
+
+    if (bIsUseCaseSet)
+        snd_use_case_set(handle->ucMgr, "_verb", SND_USE_CASE_VERB_INACTIVE);
 
     return err;
 }
@@ -1151,58 +1160,62 @@ void ALSADevice::disableDevice(alsa_handle_t *handle)
     bool disableRxDevice = true, disableTxDevice = true;
     char *use_case = NULL;
     unsigned usecase_type = 0;
+    bool bIsUseCaseSet = false;
 
     snd_use_case_get(handle->ucMgr, "_verb", (const char **)&use_case);
+    bIsUseCaseSet = ((use_case != NULL) && (!strncmp(use_case, handle->useCase, MAX_STR_LEN)));
     ALOGD("disableDevice device = %x verb  %s mode %d use case %s",
           devices, (use_case == NULL) ? "NULL" : use_case, handle->mode, handle->useCase);
 
-    {
-        while (devices != 0) {
-            int deviceToDisable = devices & (-devices);
-            int actualDevices = getDevices(deviceToDisable, handle->mode, &rxDevice, &txDevice);
+    while (devices != 0) {
+        int deviceToDisable = devices & (-devices);
+        int actualDevices = getDevices(deviceToDisable, handle->mode, &rxDevice, &txDevice);
 
-            for (ALSAHandleList::iterator it = mDeviceList->begin(); it != mDeviceList->end(); ++it) {
-                if (it->useCase != NULL) {
-                    if (strcmp(it->useCase, handle->useCase)) {
-                        if ((&(*it)) != handle && handle->activeDevice && it->activeDevice && (it->activeDevice & actualDevices)) {
-                            ALOGD("disableRxDevice - false use case %s active Device %x deviceToDisable %x",
-                                  it->useCase, it->activeDevice, deviceToDisable);
-                            if(getDeviceType(it->activeDevice & actualDevices, 0) & DEVICE_TYPE_RX)
-                                disableRxDevice = false;
-                            if(getDeviceType(it->activeDevice & actualDevices, 0) & DEVICE_TYPE_TX)
-                                disableTxDevice = false;
-                        }
+        for (ALSAHandleList::iterator it = mDeviceList->begin(); it != mDeviceList->end(); ++it) {
+            if (it->useCase != NULL) {
+                if (strcmp(it->useCase, handle->useCase)) {
+                    if ((&(*it)) != handle && handle->activeDevice && it->activeDevice && (it->activeDevice & actualDevices)) {
+                        ALOGD("disableRxDevice - false use case %s active Device %x deviceToDisable %x",
+                                it->useCase, it->activeDevice, deviceToDisable);
+                        if(getDeviceType(it->activeDevice & actualDevices, 0) & DEVICE_TYPE_RX)
+                            disableRxDevice = false;
+                        if(getDeviceType(it->activeDevice & actualDevices, 0) & DEVICE_TYPE_TX)
+                            disableTxDevice = false;
                     }
                 }
             }
-
-            if(rxDevice) {
-                usecase_type = getUseCaseType(handle->useCase);
-                if (usecase_type & DEVICE_TYPE_RX) {
-                    if(disableRxDevice)
-                        snd_use_case_set_case(handle->ucMgr, "_disdev", rxDevice, handle->useCase);
-                    else
-                        snd_use_case_set_case(handle->ucMgr, "_dismod", handle->useCase, rxDevice);
-                }
-                free(rxDevice);
-                rxDevice = NULL;
-            }
-
-            if(txDevice) {
-                usecase_type = getUseCaseType(handle->useCase);
-                if (usecase_type & USECASE_TYPE_TX) {
-                    if(disableTxDevice)
-                        snd_use_case_set_case(handle->ucMgr, "_disdev", txDevice, handle->useCase);
-                    else
-                        snd_use_case_set_case(handle->ucMgr, "_dismod", handle->useCase, txDevice);
-                }
-                free(txDevice);
-                txDevice = NULL;
-            }
-            devices = devices & (~deviceToDisable);
-            disableRxDevice = true;
-            disableTxDevice = true;
         }
+
+        if(rxDevice) {
+            usecase_type = getUseCaseType(handle->useCase);
+            if (usecase_type & DEVICE_TYPE_RX) {
+                if(disableRxDevice)
+                    snd_use_case_set_case(handle->ucMgr, "_disdev", rxDevice, handle->useCase);
+                else if(bIsUseCaseSet)
+                    snd_use_case_set_case(handle->ucMgr, "_disverb", handle->useCase, rxDevice);
+                else
+                    snd_use_case_set_case(handle->ucMgr, "_dismod", handle->useCase, rxDevice);
+            }
+            free(rxDevice);
+            rxDevice = NULL;
+        }
+
+        if(txDevice) {
+            usecase_type = getUseCaseType(handle->useCase);
+            if (usecase_type & USECASE_TYPE_TX) {
+                if(disableTxDevice)
+                    snd_use_case_set_case(handle->ucMgr, "_disdev", txDevice, handle->useCase);
+                else if(bIsUseCaseSet)
+                    snd_use_case_set_case(handle->ucMgr, "_disverb", handle->useCase, txDevice);
+                else
+                    snd_use_case_set_case(handle->ucMgr, "_dismod", handle->useCase, txDevice);
+            }
+            free(txDevice);
+            txDevice = NULL;
+        }
+        devices = devices & (~deviceToDisable);
+        disableRxDevice = true;
+        disableTxDevice = true;
     }
     handle->activeDevice = 0;
 }
@@ -1929,6 +1942,25 @@ status_t ALSADevice::setHDMIChannelCount(int channels)
     return err;
 }
 
+void ALSADevice::setOuputChannels(int channels, int device) {
+    ALSAHandleListRef hdmiDeviceList;
+    if(AudioSystem::popCount(device) != 1 ||
+      !(device & AudioSystem::DEVICE_OUT_ALL))
+        return;
+    //Deroute the device from all the handles(this will trigger AFE close) ->
+    //set the device channels and config -> route the device again(this will trigger AFE start)
+    for(ALSAHandleList::iterator it = mDeviceList->begin(); it != mDeviceList->end(); ++it) {
+        if (it->activeDevice & device) {
+            switchDeviceUseCase(&(*it), it->activeDevice & ~device, it->mode);
+            hdmiDeviceList.push_back(&(*it));
+        }
+    }
+    //The new device properties are set in the enablDevice
+    for(ALSAHandleListRef::iterator it = hdmiDeviceList.begin(); it != hdmiDeviceList.end(); ++it)
+        switchDeviceUseCase(*it, (*it)->activeDevice | device, (*it)->mode);
+    return;
+}
+
 int ALSADevice::getDevices(uint32_t devices, uint32_t mode, char **rxDevice, char **txDevice)
 {
     ALOGV("%s: device %d", __FUNCTION__, devices);
@@ -2623,6 +2655,8 @@ int ALSADevice::getHDMIMaxChannelForEDIDFormat(EDID_AUDIO_FORMAT_ID formatId)
             mChannelAllocation = 0x0B;
         else if(mHdmiOutputChannels == 2)
             mChannelAllocation = 0x0;
+    } else {
+        mChannelAllocation = mEDIDInfo.channelAllocation;
     }
     return hdmiChannels;
 }
