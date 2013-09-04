@@ -127,7 +127,7 @@ AudioHardwareALSA::AudioHardwareALSA() :
     mA2dpThread = NULL;
     mSpdifOutputFormat = UNCOMPRESSED;
     mHdmiOutputFormat = UNCOMPRESSED;
-    mHdmiOutputChannels = MAX_INPUT_CHANNELS_SUPPORTED;
+    mHdmiOutputChannels = STEREO_CHANNELS;
     mSpdifOutputChannels = STEREO_CHANNELS;
     mSpdifRenderFormat = UNCOMPRESSED;
     mHdmiRenderFormat = UNCOMPRESSED;
