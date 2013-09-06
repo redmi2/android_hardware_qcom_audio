@@ -195,7 +195,8 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
     fake that the handle is valid and rendering data in real time to AudioFlinger
     so that no underruns happen in framework
     */
-    mCanStandby = false;
+    if(bytes)
+        mCanStandby = false;
     {
         Mutex::Autolock autolock1(mParent->mDeviceStateLock);
         devices = mParent->getUnComprDeviceInCurrDevices(mDevices);
