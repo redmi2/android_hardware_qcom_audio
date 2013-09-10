@@ -744,7 +744,7 @@ int use_case_index)
                           strlen(SND_USE_CASE_VERB_IP_VOICECALL)) ||
                           (!strncmp(current_mod, SND_USE_CASE_MOD_PLAY_VOIP,
                            strlen(SND_USE_CASE_MOD_PLAY_VOIP)))) ||
-                          (!uc_mgr->isFusion3Platform))
+                          (!uc_mgr->isExternalModem))
                            acdb_loader_send_voice_cal(uc_mgr->current_rx_device,
                                                     uc_mgr->current_tx_device);
                 } else {

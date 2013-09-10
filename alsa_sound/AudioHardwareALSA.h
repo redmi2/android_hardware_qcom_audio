@@ -1202,7 +1202,7 @@ protected:
     int mVoiceVolFeatureSet;
     int mIsFmActive;
     bool mBluetoothVGS;
-    bool mFusion3Platform;
+    bool mExternalModem;
 #ifdef QCOM_USBAUDIO_ENABLED
     int musbPlaybackState;
     int musbRecordingState;

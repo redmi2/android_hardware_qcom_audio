@@ -127,7 +127,7 @@ AudioHardwareALSA::AudioHardwareALSA() :
     mDevSettingsFlag |= TTY_OFF;
 #endif
     mBluetoothVGS = false;
-    mFusion3Platform = false;
+    mExternalModem = false;
     //mIsVoicePathActive = false;
 
     mRouteAudioToExtOut = false;
@@ -247,7 +247,7 @@ AudioHardwareALSA::AudioHardwareALSA() :
         if (!strcmp("msm8960", platform) &&
             (!strcmp("mdm", baseband) || !strcmp("sglte2", baseband))) {
             ALOGD("Detected Fusion tabla 2.x");
-            mFusion3Platform = true;
+            mExternalModem = true;
             if (!access("/sys/devices/soc0/platform_version", F_OK)) {
                 fp = fopen("/sys/devices/soc0/platform_version","r");
             } else {
@@ -284,7 +284,7 @@ AudioHardwareALSA::AudioHardwareALSA() :
     }
 
 #ifdef QCOM_CSDCLIENT_ENABLED
-    if (mFusion3Platform) {
+    if (mExternalModem) {
         mCsdHandle = ::dlopen("/vendor/lib/libcsd-client.so", RTLD_NOW);
         if (mCsdHandle == NULL) {
             ALOGE("AudioHardware: DLOPEN not successful for CSD CLIENT");
@@ -319,7 +319,7 @@ AudioHardwareALSA::AudioHardwareALSA() :
         return;
     } else {
         ALOGI("ucm instance opened: %u", (unsigned)mUcMgr);
-        mUcMgr->isFusion3Platform = mFusion3Platform;
+        mUcMgr->isExternalModem = mExternalModem;
     }
 
     //set default AudioParameters
@@ -431,7 +431,7 @@ AudioHardwareALSA::~AudioHardwareALSA()
 #endif
 
 #ifdef QCOM_CSDCLEINT_ENABLED
-    if (mFusion3Platform) {
+    if (mExternalModem) {
         if (mCsdHandle) {
             if (csd_client_deinit == NULL) {
                 ALOGE("csd_client_deinit is NULL");
@@ -800,7 +800,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
 #endif
 
 #ifdef QCOM_CSDCLIENT_ENABLED
-    if (mFusion3Platform) {
+    if (mExternalModem) {
         key = String8(INCALLMUSIC_KEY);
         if (param.get(key, value) == NO_ERROR) {
             if (value == "true") {
@@ -2286,13 +2286,13 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                 (newMode == AUDIO_MODE_IN_CALL)) {
                 ALOGD("openInputStream: into incall recording, channels %d", *channels);
 
-                if ((!sessionVsid) && (mFusion3Platform == false)) {
+                if ((!sessionVsid) && (mExternalModem == false)) {
                     return NULL;
                 }
                 mIncallMode = *channels;
                 if ((*channels & AUDIO_CHANNEL_IN_VOICE_UPLINK) &&
                     (*channels & AUDIO_CHANNEL_IN_VOICE_DNLINK)) {
-                    if (mFusion3Platform) {
+                    if (mExternalModem) {
                         mALSADevice->setVocRecMode(INCALL_REC_STEREO);
                         strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE,
                                 sizeof(alsa_handle.useCase));
@@ -2308,7 +2308,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                         }
                     }
                 } else if (*channels & AUDIO_CHANNEL_IN_VOICE_DNLINK) {
-                    if (mFusion3Platform) {
+                    if (mExternalModem) {
                         mALSADevice->setVocRecMode(INCALL_REC_MONO);
                         strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_CAPTURE_VOICE,
                                 sizeof(alsa_handle.useCase));
@@ -2324,7 +2324,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                        }
                    }
                 } else if (*channels & AUDIO_CHANNEL_IN_VOICE_UPLINK) {
-                   if (mFusion3Platform == false) {
+                   if (mExternalModem == false) {
                        mALSADevice->setVocSessionId(sessionVsid);
                        strlcpy(alsa_handle.useCase,
                                SND_USE_CASE_MOD_CAPTURE_VOICE_UL,
@@ -2359,13 +2359,13 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
             if ((devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
                 (newMode == AUDIO_MODE_IN_CALL)) {
                 ALOGD("openInputStream: incall recording, channels %d", *channels);
-                if ((!sessionVsid) && (mFusion3Platform == false)) {
+                if ((!sessionVsid) && (mExternalModem == false)) {
                     return NULL;
                 }
                 mIncallMode = *channels;
                 if ((*channels & AUDIO_CHANNEL_IN_VOICE_UPLINK) &&
                     (*channels & AUDIO_CHANNEL_IN_VOICE_DNLINK)) {
-                    if (mFusion3Platform) {
+                    if (mExternalModem) {
                         mALSADevice->setVocRecMode(INCALL_REC_STEREO);
                         strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_INCALL_REC,
                                 sizeof(alsa_handle.useCase));
@@ -2380,7 +2380,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                         }
                     }
                 } else if (*channels & AUDIO_CHANNEL_IN_VOICE_DNLINK) {
-                    if (mFusion3Platform) {
+                    if (mExternalModem) {
                         mALSADevice->setVocRecMode(INCALL_REC_MONO);
                         strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_INCALL_REC,
                                 sizeof(alsa_handle.useCase));
@@ -2395,7 +2395,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                         }
                     }
                 } else if (*channels & AUDIO_CHANNEL_IN_VOICE_UPLINK) {
-                   if (mFusion3Platform == false) {
+                   if (mExternalModem == false) {
                        mALSADevice->setVocSessionId(sessionVsid);
                        strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_UL_REC,
                                sizeof(SND_USE_CASE_VERB_UL_REC));

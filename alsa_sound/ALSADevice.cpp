@@ -228,7 +228,7 @@ struct snd_ctl_card_info *ALSADevice::getSoundCardInfo()
     return &mSndCardInfo;
 }
 
-static bool isPlatformFusion3() {
+static bool isExternalModem() {
     char platform[128], baseband[128];
     property_get("ro.board.platform", platform, "");
     property_get("ro.baseband", baseband, "");
@@ -250,7 +250,7 @@ static bool shouldUseHandsetAnc(int flags, int inChannels)
         aanc_enabled = 1;
     }
 
-    if (!isPlatformFusion3() && !aanc_enabled) {
+    if (!isExternalModem() && !aanc_enabled) {
         return false;
     }
     return (flags & ANC_FLAG) && (inChannels == 1);
@@ -756,7 +756,7 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
     }
 
 #ifdef QCOM_CSDCLIENT_ENABLED
-    if (isPlatformFusion3() && (inCallDevSwitch == true)) {
+    if (isExternalModem() && (inCallDevSwitch == true)) {
         if (csd_disable_device == NULL) {
             ALOGE("csd_client_disable_device is NULL");
         } else {
@@ -914,8 +914,8 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
     }
 #endif
 #ifdef QCOM_CSDCLIENT_ENABLED
-    if (isPlatformFusion3() && (inCallDevSwitch == true)) {
-        if (isPlatformFusion3()) {
+    if (isExternalModem() && (inCallDevSwitch == true)) {
+        if (isExternalModem()) {
             if (csd_enable_device == NULL) {
                 ALOGE("csd_client_enable_device is NULL");
             } else {
@@ -1322,7 +1322,7 @@ status_t ALSADevice::startVoiceCall(alsa_handle_t *handle, uint32_t vsid)
     }
 
 #ifdef QCOM_CSDCLIENT_ENABLED
-    if (isPlatformFusion3()) {
+    if (isExternalModem()) {
         if (csd_start_voice == NULL) {
             ALOGE("csd_client_start_voice is NULL");
         } else {
@@ -1583,7 +1583,7 @@ status_t ALSADevice::close(alsa_handle_t *handle, uint32_t vsid)
              !strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_QCHAT)) ||
             (!strcmp(handle->useCase, SND_USE_CASE_VERB_VOICE2) ||
              !strcmp(handle->useCase, SND_USE_CASE_MOD_PLAY_VOICE2)) &&
-            isPlatformFusion3()) {
+            isExternalModem()) {
             if (csd_stop_voice == NULL) {
                 ALOGE("csd_client_disable_device is NULL");
             } else {
@@ -2308,7 +2308,7 @@ void ALSADevice::setVoiceVolume(int vol)
         free(setValues);
 
 #ifdef QCOM_CSDCLIENT_ENABLED
-    if (isPlatformFusion3()) {
+    if (isExternalModem()) {
         if (csd_volume == NULL) {
             ALOGE("csd_client_volume is NULL");
         } else {
@@ -2400,7 +2400,7 @@ void ALSADevice::setMicMute(int state)
         free(setValues);
 
 #ifdef QCOM_CSDCLIENT_ENABLED
-    if (isPlatformFusion3()) {
+    if (isExternalModem()) {
         if (csd_mic_mute == NULL) {
             ALOGE("csd_mic_mute is NULL");
         } else {
@@ -2525,7 +2525,7 @@ void ALSADevice::enableWideVoice(bool flag, uint32_t vsid)
     }
 
 #ifdef QCOM_CSDCLIENT_ENABLED
-    if (isPlatformFusion3()) {
+    if (isExternalModem()) {
         if (csd_wide_voice == NULL) {
             ALOGE("csd_wide_voice is NULL");
         } else {
@@ -2556,7 +2556,7 @@ void ALSADevice::enableFENS(bool flag, uint32_t vsid)
     }
 
 #ifdef QCOM_CSDCLIENT_ENABLED
-    if (isPlatformFusion3()) {
+    if (isExternalModem()) {
         if (csd_fens == NULL) {
             ALOGE("csd_fens is NULL");
         } else {
@@ -2603,7 +2603,7 @@ void ALSADevice::enableSlowTalk(bool flag, uint32_t vsid)
     free(setValues);
 
 #ifdef QCOM_CSDCLIENT_ENABLED
-    if (isPlatformFusion3()) {
+    if (isExternalModem()) {
         if (csd_slow_talk == NULL) {
             ALOGE("csd_slow_talk is NULL");
         } else {
