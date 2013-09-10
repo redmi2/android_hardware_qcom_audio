@@ -232,7 +232,7 @@ static bool isExternalModem() {
     char platform[128], baseband[128];
     property_get("ro.board.platform", platform, "");
     property_get("ro.baseband", baseband, "");
-    if (!strcmp("msm8960", platform) &&
+    if ((!strcmp("msm8960", platform) || !strcmp("apq8084", platform)) &&
         (!strcmp("mdm", baseband) || !strcmp("sglte2", baseband)))
         return true;
     else
@@ -870,8 +870,11 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
     ALOGD("switchDevice: mCurTxUCMDevivce %s mCurRxDevDevice %s", mCurTxUCMDevice, mCurRxUCMDevice);
 #ifdef QCOM_ACDB_ENABLED
     /* Use speaker phone mic if in voice call using speakerphone */
-    if (((mRxACDBID == DEVICE_SPEAKER_RX_ACDB_ID) && (mTxACDBID == DEVICE_HANDSET_TX_ACDB_ID)) &&
-       ((mCallMode == AUDIO_MODE_IN_CALL) || (mCallMode == AUDIO_MODE_IN_COMMUNICATION))) {
+    if (((mRxACDBID == DEVICE_SPEAKER_RX_ACDB_ID ||
+          mRxACDBID == DEVICE_SPEAKER_MONO_RX_ACDB_ID) &&
+          (mTxACDBID == DEVICE_HANDSET_TX_ACDB_ID)) &&
+          ((mCallMode == AUDIO_MODE_IN_CALL) ||
+          (mCallMode == AUDIO_MODE_IN_COMMUNICATION))) {
 
         mTxACDBID = DEVICE_SPEAKER_TX_ACDB_ID;
     } else {

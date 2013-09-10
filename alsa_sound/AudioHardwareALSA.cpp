@@ -212,7 +212,14 @@ AudioHardwareALSA::AudioHardwareALSA() :
         }
     }
 
-    if (!strcmp((const char*)cardInfo->name, "msm8974-taiko-mtp-snd-card")) {
+
+    if (!strcmp((const char*)cardInfo->name, "apq8084-taiko-mtp-snd-card")) {
+        snd_use_case_mgr_create(&mUcMgr, "snd_soc_msm_Taiko", cardInfo->card);
+    } else if (!strcmp((const char*)cardInfo->name, "apq8084-taiko-cdp-snd-card")) {
+        snd_use_case_mgr_create(&mUcMgr, "snd_soc_msm_Taiko_CDP", cardInfo->card);
+    } else if (!strcmp((const char*)cardInfo->name, "apq8084-taiko-liquid-snd-card")) {
+        snd_use_case_mgr_create(&mUcMgr, "snd_soc_msm_Taiko_liquid", cardInfo->card);
+    } else if (!strcmp((const char*)cardInfo->name, "msm8974-taiko-mtp-snd-card")) {
         snd_use_case_mgr_create(&mUcMgr, "snd_soc_msm_Taiko", cardInfo->card);
     } else if (!strcmp((const char*)cardInfo->name, "msm8974-taiko-cdp-snd-card")) {
         snd_use_case_mgr_create(&mUcMgr, "snd_soc_msm_Taiko_CDP", cardInfo->card);
@@ -276,6 +283,13 @@ AudioHardwareALSA::AudioHardwareALSA() :
             ALOGD("Detected tabla 2.x sound card");
             snd_use_case_mgr_create(&mUcMgr, "snd_soc_msm_2x", cardInfo->card);
         }
+    }
+
+    property_get("ro.board.platform", platform, "");
+    property_get("ro.baseband", baseband, "");
+    if (!strcmp("apq8084", platform) && (!strcmp("mdm", baseband))) {
+        ALOGD("Detected APQ 8084 based Fusion platform ");
+        mExternalModem = true;
     }
 
     if (mUcMgr == NULL) {
