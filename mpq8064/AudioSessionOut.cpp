@@ -238,6 +238,7 @@ status_t AudioSessionOutALSA::start()
     status_t status = NO_ERROR;
     struct snd_compr_tstamp tstamp;
     uint64_t min_resume_delay = ULLONG_MAX, delay[NUM_DEVICES_SUPPORT_COMPR_DATA] = {0};
+    uint64_t baseDelay = 0;
     ALOGD("start: mSessionState %d", mSessionState);
     if(mSessionState & PAUSE) {
         if (mRouteAudioToA2dp)
@@ -251,10 +252,24 @@ status_t AudioSessionOutALSA::start()
                     if(ioctl(mRxHandle[i]->handle->fd, SNDRV_COMPRESS_TSTAMP, &tstamp)) {
                         ALOGE("Failed SNDRV_COMPRESS_TSTAMP\n");
                     } else {
-                        delay[i] = tstamp.timestamp;
-                        if(min_resume_delay > tstamp.timestamp)
-                            min_resume_delay = tstamp.timestamp;
-                        ALOGVV("start: Timestamp returned = %lld\n", tstamp.timestamp/1000);
+                        baseDelay = mRxHandleBaseTime[i];
+                        ALOGVV("baseDelay = %lld\n", baseDelay);
+                        if (mRxHandleBaseTime[i] == ULLONG_MAX) {
+                            // populate basetime if dirty, and handle started(timestamp>0)
+                            if (tstamp.timestamp > 0 && i > 0) {
+                                mRxHandleBaseTime[i] = delay[i-1] - tstamp.timestamp;
+                                baseDelay = mRxHandleBaseTime[i];
+                            } else {
+                                ALOGW("improper basetime for handle[%d], time %lld\n",
+                                                                     i, tstamp.timestamp);
+                                baseDelay = 0;
+                            }
+                        }
+                        delay[i] = tstamp.timestamp + baseDelay;
+                        if(min_resume_delay > delay[i])
+                            min_resume_delay = delay[i];
+                        ALOGVV("start: Timestamp %lld, delay %lld\n",
+                                                     tstamp.timestamp/1000, delay[i]/1000);
                     }
                 }
             }
@@ -1004,6 +1019,7 @@ void AudioSessionOutALSA::reinitialize()
         mRxHandle[i]               = NULL;
         mRxHandleRouteFormat[i]    = ROUTE_UNCOMPRESSED;
         mRxHandleDevices[i]        = AUDIO_DEVICE_NONE;
+        mRxHandleBaseTime[i]       = 0;
     }
 }
 
@@ -2501,7 +2517,7 @@ void AudioSessionOutALSA::adjustRxHandleAndStates()
             mRxHandle[index-1] = mRxHandle[index];
             mRxHandleRouteFormat[index-1] = mRxHandleRouteFormat[index];
             mRxHandleDevices[index-1] = mRxHandleDevices[index];
-
+            mRxHandleBaseTime[index-1] = mRxHandleBaseTime[index];
             resetRxHandleState(index);
         }
     }
@@ -2517,6 +2533,7 @@ void AudioSessionOutALSA::resetRxHandleState(int index)
     mRxHandle[index]                = NULL;
     mRxHandleRouteFormat[index]     = ROUTE_UNCOMPRESSED;
     mRxHandleDevices[index]         = AUDIO_DEVICE_NONE;
+    mRxHandleBaseTime[index]        = 0;
     return;
 }
 
@@ -2551,6 +2568,10 @@ void AudioSessionOutALSA::handleSwitchAndOpenForDeviceSwitch(int devices, int fo
               ALOGE("openPlaybackDevice failed");
         } else {
             mNumRxHandlesActive++;
+            // handle open in between a session,
+            // need to get basetime(set dirty to indicate) if its not the only handle
+            if (mNumRxHandlesActive > 1)
+                mRxHandleBaseTime[index] = ULLONG_MAX;
             if(mRxHandleRouteFormat[index] & ROUTE_UNCOMPRESSED) {
                 if(mALSADevice->setPlaybackVolume(mRxHandle[index],
                                                         mStreamVol))
