@@ -891,6 +891,7 @@ public:
     status_t            close();
 
 private:
+    Mutex               mLock;
     uint32_t            mFrameCount;
     alsa_handle_t *     mPcmRxHandle;
     alsa_handle_t *     mSpdifRxHandle;
