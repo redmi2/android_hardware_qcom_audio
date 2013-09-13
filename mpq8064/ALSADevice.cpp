@@ -2539,7 +2539,7 @@ status_t ALSADevice::openProxyDevice()
    sparams->avail_min =
            mProxyParams.mProxyPcmHandle->period_size/(2*channels);
    sparams->start_threshold = 1;
-   sparams->stop_threshold = mProxyParams.mProxyPcmHandle->buffer_size;
+   sparams->stop_threshold = INT_MAX;
    sparams->xfer_align =
            mProxyParams.mProxyPcmHandle->period_size/(2*channels);
    sparams->silence_size = 0;
