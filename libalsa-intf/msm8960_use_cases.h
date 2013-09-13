@@ -174,7 +174,7 @@ struct snd_use_case_mgr {
     int current_rx_device;
     card_ctxt_t *card_ctxt_ptr;
     pthread_t thr;
-    bool isFusion3Platform;
+    bool isExternalModem;
 };
 
 #define MAX_NUM_CARDS (sizeof(card_list)/sizeof(char *))

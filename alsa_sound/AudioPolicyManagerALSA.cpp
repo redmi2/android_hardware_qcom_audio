@@ -526,7 +526,7 @@ void AudioPolicyManager::setPhoneState(int state)
     int delayMs = 0;
     if (state == AUDIO_MODE_IN_CALL &&
 #ifdef QCOM_CSDCLIENT_ENABLED
-        platform_is_Fusion3() &&
+        isExternalModem() &&
 #endif
         oldState == AUDIO_MODE_RINGTONE) {
         delayMs = 40;
@@ -596,7 +596,7 @@ void AudioPolicyManager::setPhoneState(int state)
     // played out
     if (state == AUDIO_MODE_IN_CALL &&
 #ifdef QCOM_CSDCLIENT_ENABLED
-        platform_is_Fusion3() &&
+        isExternalModem() &&
 #endif
         oldState == AUDIO_MODE_RINGTONE) {
         delayMs = 40;
@@ -2401,7 +2401,7 @@ float AudioPolicyManager::computeVolume(int stream,
     return AudioPolicyManagerBase::computeVolume(stream, index, output, device);
 }
 
-bool AudioPolicyManager::platform_is_Fusion3()
+bool AudioPolicyManager::isExternalModem()
 {
     char platform[128], baseband[128];
     property_get("ro.board.platform", platform, "");

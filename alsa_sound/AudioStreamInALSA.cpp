@@ -159,7 +159,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                 if ((mParent->mIncallMode & AUDIO_CHANNEL_IN_VOICE_UPLINK) &&
                     (mParent->mIncallMode & AUDIO_CHANNEL_IN_VOICE_DNLINK)) {
 #ifdef QCOM_CSDCLIENT_ENABLED
-                    if (mParent->mFusion3Platform) {
+                    if (mParent->mExternalModem) {
                         mParent->mALSADevice->setVocRecMode(INCALL_REC_STEREO);
                         strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE,
                                 sizeof(mHandle->useCase));
@@ -183,7 +183,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                     }
                 } else if (mParent->mIncallMode & AUDIO_CHANNEL_IN_VOICE_DNLINK) {
 #ifdef QCOM_CSDCLIENT_ENABLED
-                    if (mParent->mFusion3Platform) {
+                    if (mParent->mExternalModem) {
                         mParent->mALSADevice->setVocRecMode(INCALL_REC_MONO);
                         strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE,
                                 sizeof(mHandle->useCase));
@@ -206,7 +206,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                         }
                     }
                 } else if (mParent->mIncallMode & AUDIO_CHANNEL_IN_VOICE_UPLINK) {
-                    if (mParent->mFusion3Platform == false) {
+                    if (mParent->mExternalModem == false) {
                         mParent->mALSADevice->setVocSessionId(sessionVsid);
                         strlcpy(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL,
                                 sizeof(SND_USE_CASE_MOD_CAPTURE_VOICE_UL));
@@ -247,7 +247,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                 if ((mParent->mIncallMode & AUDIO_CHANNEL_IN_VOICE_UPLINK) &&
                     (mParent->mIncallMode & AUDIO_CHANNEL_IN_VOICE_DNLINK)) {
 #ifdef QCOM_CSDCLIENT_ENABLED
-                    if (mParent->mFusion3Platform) {
+                    if (mParent->mExternalModem) {
                         ALOGD("AudioStreamInALSA: check useCase: %s", mHandle->useCase);
                         mParent->mALSADevice->setVocRecMode(INCALL_REC_STEREO);
                         strlcpy(mHandle->useCase, SND_USE_CASE_VERB_INCALL_REC,
@@ -272,7 +272,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                     }
                 } else if (mParent->mIncallMode & AUDIO_CHANNEL_IN_VOICE_DNLINK) {
 #ifdef QCOM_CSDCLIENT_ENABLED
-                   if (mParent->mFusion3Platform) {
+                   if (mParent->mExternalModem) {
                         ALOGD("AudioStreamInALSA: check useCase: %s", mHandle->useCase);
                        mParent->mALSADevice->setVocRecMode(INCALL_REC_MONO);
                        strlcpy(mHandle->useCase, SND_USE_CASE_VERB_INCALL_REC,
@@ -296,7 +296,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                         }
                    }
                 } else if (mParent->mIncallMode & AUDIO_CHANNEL_IN_VOICE_UPLINK) {
-                    if (mParent->mFusion3Platform == false) {
+                    if (mParent->mExternalModem == false) {
                         mParent->mALSADevice->setVocSessionId(sessionVsid);
                         strlcpy(mHandle->useCase, SND_USE_CASE_VERB_UL_REC,
                                 sizeof(SND_USE_CASE_VERB_UL_REC));
@@ -666,7 +666,7 @@ status_t AudioStreamInALSA::close()
      }
 
 #ifdef QCOM_CSDCLIENT_ENABLED
-    if (mParent->mFusion3Platform) {
+    if (mParent->mExternalModem) {
        if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_INCALL_REC)) ||
            (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE))) {
            if (csd_stop_record == NULL) {
@@ -740,7 +740,7 @@ status_t AudioStreamInALSA::standby()
     }
 #ifdef QCOM_CSDCLIENT_ENABLED
     ALOGD("standby");
-    if (mParent->mFusion3Platform) {
+    if (mParent->mExternalModem) {
        if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_INCALL_REC)) ||
            (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE))) {
            if (csd_stop_record == NULL) {
