@@ -1713,7 +1713,8 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
             // FALL THROUGH
 
         default:    // FORCE_NONE
-            // when not in a phone call, phone strategy should route STREAM_VOICE_CALL to A2DP
+            // when not in a phone call, phone strategy should route STREAM_VOICE_CALL to A2DP and
+            // STREAM_BLUETOOTH_SCO to SCO
             if (!isInCall())
             {
                 if ((mForceUse[AudioSystem::FOR_MEDIA] != AudioSystem::FORCE_NO_BT_A2DP) &&
@@ -1723,6 +1724,10 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
                     device = mAvailableOutputDevices & AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES;
                     if (device) break;
                 }
+                device = mAvailableOutputDevices & AUDIO_DEVICE_OUT_BLUETOOTH_SCO_HEADSET;
+                if (device) break;
+                device = mAvailableOutputDevices & AUDIO_DEVICE_OUT_BLUETOOTH_SCO;
+                if (device) break;
             }
             device = mAvailableOutputDevices & AUDIO_DEVICE_OUT_WIRED_HEADPHONE;
             if (device) break;
