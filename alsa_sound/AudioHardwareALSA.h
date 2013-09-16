@@ -870,6 +870,9 @@ protected:
     int mCSCallActive;
     int mVolteCallActive;
     int mSGLTECallActive;
+    bool mCSMicMute;
+    bool mVoLTEMicMute;
+    bool mSGLTEMicMute;
     int mCallState;
     int mIsFmActive;
     bool mBluetoothVGS;

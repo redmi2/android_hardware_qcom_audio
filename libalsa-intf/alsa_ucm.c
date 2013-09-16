@@ -627,6 +627,7 @@ int use_case_index)
     card_mctrl_t *ctrl_list;
     int list_size, index, verb_index, ret = 0, voice_acdb = 0, rx_id, tx_id;
     char *ident_value = NULL;
+    char current_mod[MAX_STR_LEN];
 
     /* Check if voice call use case/modifier exists */
     if ((!strncmp(uc_mgr->card_ctxt_ptr->current_verb,
@@ -640,6 +641,7 @@ int use_case_index)
         strlen(SND_USE_CASE_VERB_IP_VOICECALL)))) {
         voice_acdb = 1;
     }
+//The ident_value should store latest/current modifier
     if (voice_acdb != 1) {
         list_size =
         snd_ucm_get_size_of_list(uc_mgr->card_ctxt_ptr->mod_list_head);
@@ -656,9 +658,7 @@ int use_case_index)
                     (!strncmp(ident_value, SND_USE_CASE_MOD_PLAY_VOIP,
                     strlen(SND_USE_CASE_MOD_PLAY_VOIP)))) {
                     voice_acdb = 1;
-                    free(ident_value);
-                    ident_value = NULL;
-                    break;
+                    strlcpy(current_mod, ident_value, MAX_STR_LEN);
                 }
                 free(ident_value);
                 ident_value = NULL;
@@ -719,9 +719,8 @@ int use_case_index)
                     && tx_id == DEVICE_HANDSET_TX_FV5_ACDB_ID) {
                     tx_id = DEVICE_SPEAKER_TX_FV5_ACDB_ID;
                 }
-
-                if ((rx_id != uc_mgr->current_rx_device) ||
-                    (tx_id != uc_mgr->current_tx_device)) {
+/* Despite no change in rx and tx devices, calibration data can be required to be sent.
+This happens when the modifier changes*/
                     uc_mgr->current_rx_device = rx_id;
                     uc_mgr->current_tx_device = tx_id;
                     ALOGD("Voice acdb: rx id %d tx id %d",
@@ -730,12 +729,7 @@ int use_case_index)
                     if (!uc_mgr->isFusion3Platform)
                         acdb_loader_send_voice_cal(uc_mgr->current_rx_device,
                                                     uc_mgr->current_tx_device);
-                } else {
-                    ALOGV("Voice acdb: Required acdb already pushed \
-                         rx id %d tx id %d", uc_mgr->current_rx_device,
-                         uc_mgr->current_tx_device);
-                }
-            }
+             }
             free(ident_value);
             ident_value = NULL;
         }
@@ -986,6 +980,8 @@ int getUseCaseType(const char *useCase)
             MAX_LEN(useCase,SND_USE_CASE_VERB_SGLTECALL)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_IP_VOICECALL,
             MAX_LEN(useCase,SND_USE_CASE_VERB_IP_VOICECALL)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_UL_REC,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_UL_REC)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_DL_REC,
             MAX_LEN(useCase,SND_USE_CASE_VERB_DL_REC)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_UL_DL_REC,
@@ -1002,6 +998,8 @@ int getUseCaseType(const char *useCase)
             MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_SGLTE)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_VOIP,
             MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_VOIP)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL,
+            MAX_LEN(useCase,SND_USE_CASE_MOD_CAPTURE_VOICE_UL)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_DL,
             MAX_LEN(useCase,SND_USE_CASE_MOD_CAPTURE_VOICE_DL)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL,
