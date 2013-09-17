@@ -1333,6 +1333,8 @@ int ALSADevice::getUseCaseType(const char *useCase)
             MAX_LEN(useCase,SND_USE_CASE_VERB_VOICECALL)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_IP_VOICECALL,
             MAX_LEN(useCase,SND_USE_CASE_VERB_IP_VOICECALL)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_UL_REC,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_UL_REC)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_DL_REC,
             MAX_LEN(useCase,SND_USE_CASE_VERB_DL_REC)) ||
         !strncmp(useCase, SND_USE_CASE_VERB_UL_DL_REC,
@@ -1343,6 +1345,8 @@ int ALSADevice::getUseCaseType(const char *useCase)
             MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_VOICE)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_PLAY_VOIP,
             MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_VOIP)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL,
+            MAX_LEN(useCase,SND_USE_CASE_MOD_CAPTURE_VOICE_UL)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_DL,
             MAX_LEN(useCase,SND_USE_CASE_MOD_CAPTURE_VOICE_DL)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL,
