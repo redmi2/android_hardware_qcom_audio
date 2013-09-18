@@ -102,13 +102,12 @@ endif
 #LOCAL_CFLAGS += -DUSES_FLUENCE_INCALL
 #endif
 
-#Do not use separate audio Input path feature
 #Separate audio input path can be set using input source of audio parameter
 # 1. Voice Recognition
 # 2. Camcording
 # 3. etc.
 #ifeq ($(strip $(BOARD_USES_SEPERATED_AUDIO_INPUT)),true)
-#LOCAL_CFLAGS += -DSEPERATED_AUDIO_INPUT
+LOCAL_CFLAGS += -DSEPERATED_AUDIO_INPUT
 #endif
 
 LOCAL_SRC_FILES := \
@@ -168,6 +167,7 @@ LOCAL_C_INCLUDES += frameworks/base/include
 LOCAL_C_INCLUDES += system/core/include
 LOCAL_C_INCLUDES += system/media/audio_utils/include
 LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/audio-acdb-util
+LOCAL_C_INCLUDES += system/media/audio_effects/include
 
 ifeq ($(QCOM_LISTEN_FEATURE),true)
   LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/audio-listen

@@ -107,11 +107,20 @@ ALSADevice::ALSADevice() {
     property_get("persist.audio.handset.mic",value,"0");
     strlcpy(mMicType, value, sizeof(mMicType));
     property_get("persist.audio.fluence.mode",value,"0");
-    if (!strcmp("broadside", value)) {
+    if (!strncmp(value, "broadside", MAX_LEN(value,"broadside"))) {
         mFluenceMode = FLUENCE_MODE_BROADSIDE;
     } else {
         mFluenceMode = FLUENCE_MODE_ENDFIRE;
     }
+
+    mDualMicConfig = DUALMIC_CONFIG_NONE;
+    property_get("persist.audio.dualmic.config",value,"0");
+    if (!strncmp(value, "broadside", MAX_LEN(value,"broadside"))) {
+        mDualMicConfig = DUALMIC_CONFIG_BROADSIDE;
+    } else if (!strncmp(value, "endfire", MAX_LEN(value,"endfire"))) {
+        mDualMicConfig = DUALMIC_CONFIG_ENDFIRE;
+    }
+
     property_get("ro.board.platform", platform, "");
     property_get("ro.baseband", baseband, "");
     if (!strcmp("msm8960", platform) && !strcmp("sglte", baseband)) {
@@ -743,9 +752,9 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
     }
 #endif
 
-    rxDevice = getUCMDevice(devices & AudioSystem::DEVICE_OUT_ALL, 0, NULL);
+    rxDevice = getUCMDevice(devices & AudioSystem::DEVICE_OUT_ALL, handle, NULL, false /*input*/);
     ALOGD("%s: rxDevice %s devices:0x%x", __FUNCTION__, rxDevice,devices);
-    txDevice = getUCMDevice(devices & AudioSystem::DEVICE_IN_ALL, 1, rxDevice);
+    txDevice = getUCMDevice(devices & AudioSystem::DEVICE_IN_ALL, handle, rxDevice, true /*input*/);
     ALOGD("%s: txDevice:%s devices:0x%x", __FUNCTION__, txDevice,devices);
 
     if ((rxDevice != NULL) && (txDevice != NULL)) {
@@ -844,9 +853,11 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
         }
         strlcpy(mCurRxUCMDevice, rxDevice, sizeof(mCurRxUCMDevice));
     }
+
     if (txDevice != NULL) {
-       snd_use_case_set(handle->ucMgr, "_enadev", txDevice);
-       strlcpy(mCurTxUCMDevice, txDevice, sizeof(mCurTxUCMDevice));
+        applyEffectsConfig(handle, txDevice);
+        snd_use_case_set(handle->ucMgr, "_enadev", txDevice);
+        strlcpy(mCurTxUCMDevice, txDevice, sizeof(mCurTxUCMDevice));
     }
 #ifdef QCOM_CSDCLIENT_ENABLED
     if (isExternalModem() && (inCallDevSwitch == true)) {
@@ -925,29 +936,15 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
     mRxACDBID = snd_use_case_get(handle->ucMgr, ident, NULL);
     ALOGD("rx_dev_id=%d, tx_dev_id=%d\n", mRxACDBID, mTxACDBID);
 
-    if (((devices & AudioSystem::DEVICE_IN_BUILTIN_MIC) || (devices & AudioSystem::DEVICE_IN_BACK_MIC))
+    if (((devices & AudioSystem::DEVICE_IN_BUILTIN_MIC) ||
+         (devices & AudioSystem::DEVICE_IN_BACK_MIC))
         && (mInChannels == 1)) {
-        ALOGD("switchDevice:use device %x for channels:%d usecase:%s",devices,handle->channels,handle->useCase);
-        int ec_acdbid;
-        char *ec_dev;
-        char *ec_rx_dev;
-        if (acdb_loader_get_ecrx_device) {
-            ec_acdbid = acdb_loader_get_ecrx_device(mTxACDBID);
-            ec_dev = getUCMDeviceFromAcdbId(ec_acdbid);
-            if (ec_dev) {
-                memset(&ident,0,sizeof(ident));
-                strlcpy(ident, "EC_REF_RXMixerCTL/", sizeof(ident));
-                strlcat(ident, ec_dev, sizeof(ident));
-                snd_use_case_get(handle->ucMgr, ident, (const char **)&ec_rx_dev);
-                ALOGD("SwitchDevice: ec_ref_rx_acdbid:%d ec_dev:%s ec_rx_dev:%s", ec_acdbid, ec_dev, ec_rx_dev);
-                if (ec_rx_dev) {
-                    setEcrxDevice(ec_rx_dev);
-                    free(ec_rx_dev);
-                }
-                free(ec_dev);
-            }
-        } else {
-            ALOGE("acdb_loader_get_ecrx_device is NULL");
+        ALOGD("switchDevice:use device %x for channels:%d usecase:%s",
+              devices,handle->channels,handle->useCase);
+        char *ec_rx_dev = getEchoRefDev(handle, mCurTxUCMDevice);
+        if (ec_rx_dev) {
+            setEcrxDevice(ec_rx_dev);
+            free(ec_rx_dev);
         }
     }
 #endif
@@ -1904,7 +1901,7 @@ char *ALSADevice::getUCMDeviceFromAcdbId(int acdb_id)
      }
 }
 
-char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
+char* ALSADevice::getUCMDevice(uint32_t devices, alsa_handle_t *handle, char *rxDevice, bool input)
 {
     if (!input) {
         ALOGD("getUCMDevice for output device: devices:%x is input device:%d",devices,input);
@@ -2222,34 +2219,42 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
                     return strdup(SND_USE_CASE_DEV_SSR_QUAD_MIC); /* SSR Quad MIC */
                 }
 #endif
-#ifdef SEPERATED_AUDIO_INPUT
-                if(mInput_source == AUDIO_SOURCE_VOICE_RECOGNITION) {
-                    return strdup(SND_USE_CASE_DEV_VOICE_RECOGNITION ); /* VOICE RECOGNITION TX */
+                char * snd_device = voiceSourceDev(handle, devices);
+                if (snd_device != NULL){
+                   char * snd_device_return = strdup(snd_device);
+                   free(snd_device);
+                   return snd_device_return;
                 }
-#endif
-                else {
-                    if ((rxDevice != NULL) &&
-                        !strncmp(rxDevice, SND_USE_CASE_DEV_ANC_HANDSET,
-                            strlen(SND_USE_CASE_DEV_ANC_HANDSET) + 1)) {
-                        return strdup(SND_USE_CASE_DEV_AANC_LINE); /* AANC LINE TX */
-                    } else {
-                        return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
-                    }
-                }
+
+                if ((rxDevice != NULL) &&
+                    !strncmp(rxDevice, SND_USE_CASE_DEV_ANC_HANDSET,
+                             strlen(SND_USE_CASE_DEV_ANC_HANDSET) + 1)) {
+                  return strdup(SND_USE_CASE_DEV_AANC_LINE); /* AANC LINE TX */
+                } else {
+                  return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
+                 }
+
             }
         } else if (devices & AudioSystem::DEVICE_IN_AUX_DIGITAL) {
             return strdup(SND_USE_CASE_DEV_HDMI_TX); /* HDMI TX */
         } else if ((devices & AudioSystem::DEVICE_IN_WIRED_HEADSET)) {
-            return strdup(SND_USE_CASE_DEV_HEADSET); /* HEADSET TX */
+
+          char * snd_device = voiceSourceDev(handle, devices);
+          if (snd_device != NULL){
+              char * snd_device_return = strdup(snd_device);
+              free(snd_device);
+              return snd_device_return;
+          }
+
 #ifdef QCOM_ANC_HEADSET_ENABLED
         } else if (devices & AudioSystem::DEVICE_IN_ANC_HEADSET) {
             return strdup(SND_USE_CASE_DEV_HEADSET); /* HEADSET TX */
 #endif
         } else if (devices & AudioSystem::DEVICE_IN_BLUETOOTH_SCO_HEADSET) {
-             if (mBtscoSamplerate == BTSCO_RATE_16KHZ)
-                 return strdup(SND_USE_CASE_DEV_BTSCO_WB_TX); /* BTSCO TX*/
-             else
-                 return strdup(SND_USE_CASE_DEV_BTSCO_NB_TX); /* BTSCO TX*/
+              if (mBtscoSamplerate == BTSCO_RATE_16KHZ)
+                  return strdup(SND_USE_CASE_DEV_BTSCO_WB_TX); /* BTSCO TX*/
+              else
+                  return strdup(SND_USE_CASE_DEV_BTSCO_NB_TX); /* BTSCO TX*/
 #ifdef QCOM_USBAUDIO_ENABLED
         } else if (devices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET) {
             if ((mCallMode == AUDIO_MODE_IN_CALL) ||
@@ -2292,16 +2297,21 @@ char* ALSADevice::getUCMDevice(uint32_t devices, int input, char *rxDevice)
         } else if ((devices & AudioSystem::DEVICE_IN_AMBIENT) ||
                    (devices & AudioSystem::DEVICE_IN_BACK_MIC)) {
             ALOGI("No proper mapping found with UCM device list, setting default");
+            char * snd_device = voiceSourceDev(handle, devices);
+            if (snd_device != NULL){
+               char * snd_device_return = strdup(snd_device);
+               free(snd_device);
+               return snd_device_return;
+            }
+
             if (!strncmp(mMicType, "analog", 6)) {
                 return strdup(SND_USE_CASE_DEV_HANDSET); /* HANDSET TX */
             } else {
-#ifdef SEPERATED_AUDIO_INPUT
-                if (callMode == AUDIO_MODE_IN_CALL) {
+                if (mCallMode == AUDIO_MODE_IN_CALL) {
                     return strdup(SND_USE_CASE_DEV_VOC_LINE); /* Voice BUILTIN-MIC TX */
-                } else if(mInput_source == AUDIO_SOURCE_CAMCORDER) {
+                } else if(handle->source == AUDIO_SOURCE_CAMCORDER) {
                     return strdup(SND_USE_CASE_DEV_CAMCORDER_TX ); /* CAMCORDER TX */
                 } else
-#endif
                     return strdup(SND_USE_CASE_DEV_LINE); /* BUILTIN-MIC TX */
             }
         } else {
@@ -3397,14 +3407,6 @@ status_t ALSADevice::setDDPEndpParams(alsa_handle_t *handle,
 }
 #endif
 
-#ifdef SEPERATED_AUDIO_INPUT
-void s_setInput(int input)
-{
-    mInput_source = input;
-    ALOGD("s_setInput() : input_source = %d",input_source);
-}
-#endif
-
 #ifdef QCOM_CSDCLIENT_ENABLED
 void  ALSADevice::setCsdHandle(void* handle)
 {
@@ -3529,4 +3531,182 @@ void ALSADevice::setCustomStereoOnOff(bool flag)
     }
 }
 
+char * ALSADevice::getEchoRefDev(alsa_handle_t *handle, const char *txDevice) {
+    int ec_acdbid;
+    char *ec_dev;
+    char *ec_rx_dev = NULL;
+    char ident[70];
+
+    if (!txDevice)
+        return NULL;
+
+    memset(&ident,0,sizeof(ident));
+    strlcpy(ident, "ACDBID/", sizeof(ident));
+    strlcat(ident, txDevice, sizeof(ident));
+    int tx_dev_id = snd_use_case_get(handle->ucMgr, ident, NULL);
+    if (acdb_loader_get_ecrx_device) {
+        ec_acdbid = acdb_loader_get_ecrx_device(tx_dev_id);
+        ec_dev = getUCMDeviceFromAcdbId(ec_acdbid);
+        if (ec_dev) {
+            memset(&ident,0,sizeof(ident));
+            strlcpy(ident, "EC_REF_RXMixerCTL/", sizeof(ident));
+            strlcat(ident, ec_dev, sizeof(ident));
+            snd_use_case_get(handle->ucMgr, ident, (const char **)&ec_rx_dev);
+            ALOGV("setEchoRef: ec_ref_rx_acdbid:%d ec_dev:%s ec_rx_dev:%s",
+                  ec_acdbid, ec_dev, ec_rx_dev);
+        }
+    } else {
+        ALOGE("acdb_loader_get_ecrx_device is NULL");
+    }
+
+    return ec_rx_dev;
+}
+
+//this function is to apply any UCM related configs for the
+//enabled effects. For now its used to set echo ref for some Tx usecases
+void ALSADevice::applyEffectsConfig(alsa_handle_t * handle, const char * device) {
+  if (!handle || !device) return;
+
+  char *ec_rx_dev = strdup("NONE");
+  if (handle->source == AUDIO_SOURCE_VOICE_COMMUNICATION) {
+    if (handle->preProcEffects.enableAEC) {
+      ec_rx_dev = getEchoRefDev(handle, device);
+      if (ec_rx_dev) {
+        setEcrxDevice(ec_rx_dev);
+      }
+    }
+  }
+  if(ec_rx_dev)
+     free(ec_rx_dev);
+}
+
+/* Return a valid UCM device if source is VOICE_RECOG/COMM */
+char * ALSADevice::voiceSourceDev(alsa_handle_t * handle, uint32_t devices) {
+  if(handle){
+        if (handle->source == AUDIO_SOURCE_VOICE_RECOGNITION) {
+              return voiceRecogUCMDev(handle, devices);
+        } else if (handle->source == AUDIO_SOURCE_VOICE_COMMUNICATION) {
+            return voiceCommUCMDev(handle, devices);
+        }
+  }
+  return NULL;
+}
+
+#define MK_USECASE(x) SND_USE_CASE_DEV_VOICE_RECOG_##x
+//returns a UCM device based on the VOICE_RECOGNITION source, effects, channels and
+//in_device.
+char * ALSADevice::voiceRecogUCMDev(alsa_handle_t * handle, uint32_t devices) {
+  uint32_t in_device = devices & AudioSystem::DEVICE_IN_ALL;
+  bool skipEffects = false;
+  const char * snd_device = NULL;
+  int row = -1;
+  int column = 0;
+  if (handle->source != AUDIO_SOURCE_VOICE_RECOGNITION) {
+    return NULL;
+  }
+
+  if (handle->channels == 2) {
+    skipEffects = true;
+  }
+  if (handle->preProcEffects.enableNS)
+  {
+      column = 1;
+  }
+  if (in_device & AudioSystem::DEVICE_IN_BUILTIN_MIC) {
+    switch (mDualMicConfig) {
+    case DUALMIC_CONFIG_BROADSIDE :
+      row = 1;
+      snd_device = SND_USE_CASE_DEV_DMIC_BS_FLUENCE_OFF;
+      break;
+    case DUALMIC_CONFIG_ENDFIRE:
+      row = 2;
+      snd_device = SND_USE_CASE_DEV_DMIC_EF_FLUENCE_OFF;
+    default:
+      row = 0;
+      snd_device = SND_USE_CASE_DEV_VOICE_RECOGNITION; //double assignment
+    }
+  } else {
+    //no need to check for effects, return here so that the default path can be taken
+    return NULL;
+  }
+
+  if (skipEffects) return strdup(snd_device);
+
+  const char * effectsTable[4][2] = {
+           /* no effects */                             /* with NS */
+    { SND_USE_CASE_DEV_VOICE_RECOGNITION  ,   MK_USECASE(NS)                 },
+    { SND_USE_CASE_DEV_DMIC_BS_FLUENCE_OFF,   MK_USECASE(DMIC_BS_FLUENCE_NS) },
+    { SND_USE_CASE_DEV_DMIC_EF_FLUENCE_OFF,   MK_USECASE(DMIC_EF_FLUENCE_NS) },
+  };
+  ALOGD("effectsTable[%d][%d] = %s", row, column, effectsTable[row][column]);
+  return strdup(effectsTable[row][column]);
+
+}
+#undef MK_USECASE
+
+#define ROW(x) x, x##_AEC, x##_NS, x##_AEC_NS
+#define MK_USECASE(x) SND_USE_CASE_DEV_VOICE_COMM_DMIC_##x
+//returns a UCM device based on the VOICE_COMM source, effects, channels and
+//in_device.
+char * ALSADevice::voiceCommUCMDev(alsa_handle_t * handle, uint32_t devices) {
+  uint32_t in_device = devices & AudioSystem::DEVICE_IN_ALL;
+  bool skipEffects = false;
+  const char * snd_device = NULL;
+  int row = -1;
+  int column = 0;
+  if (handle->source != AUDIO_SOURCE_VOICE_COMMUNICATION) {
+    return NULL;
+  }
+
+  if (handle->channels >= 2) {
+    ALOGW("voiceCommUCMDev unsupported for >= 2 channels");
+    return NULL;
+  }
+
+  if (devices & AudioSystem::DEVICE_OUT_SPEAKER) {
+      in_device = AudioSystem::DEVICE_IN_BACK_MIC;
+  }
+  if (handle->preProcEffects.enableAEC){
+      ALOGV("Enable AEC in Voice_Communication");
+      column = 1;
+  }
+  if (handle->preProcEffects.enableNS) {
+      ALOGV("Enable NS in Voice_Communication");
+      column += 2; //2 if just NS, 3 if AEC+NS
+  }
+
+  if (in_device & AudioSystem::DEVICE_IN_BUILTIN_MIC) {
+    snd_device = SND_USE_CASE_DEV_HANDSET;
+    switch (mDualMicConfig) {
+    case DUALMIC_CONFIG_BROADSIDE :
+      row = 1;
+      break;
+    case DUALMIC_CONFIG_ENDFIRE:
+      row = 2;
+    default:
+      row = 0;
+    }
+  } else if (in_device & AudioSystem::DEVICE_IN_BACK_MIC) {
+    row = 3;
+    snd_device = SND_USE_CASE_DEV_LINE;//whats the UCM entry for mono BACK MIC?"";
+  } else {
+    //no need to check for effects, return here so that the default path can be taken
+    //in caller
+    return NULL;
+  }
+
+  if (skipEffects || column == 0 /* no effects */ ) return strdup(snd_device);
+
+  const char * effectsTable[5][4] = {
+    { ROW(SND_USE_CASE_DEV_HANDSET) },
+    { NULL, MK_USECASE(BS_FLUENCE_AEC), MK_USECASE(BS_FLUENCE_NS), MK_USECASE(BS_FLUENCE_AEC_NS) },
+    { NULL, MK_USECASE(EF_FLUENCE_AEC), MK_USECASE(EF_FLUENCE_NS), MK_USECASE(EF_FLUENCE_AEC_NS) },
+    { ROW(SND_USE_CASE_DEV_LINE) }, //whats the UCM entry for mono BACK MIC?"";
+  };
+  ALOGD("effectsTable[%d][%d] = %s", row, column, effectsTable[row][column]);
+  return strdup(effectsTable[row][column]);
+
+}
+#undef MK_USECASE
+#undef ROW
 }

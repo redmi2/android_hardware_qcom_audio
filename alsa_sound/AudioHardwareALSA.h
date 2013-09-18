@@ -364,6 +364,13 @@ static struct mDDPEndpParams {
 
 static uint32_t FLUENCE_MODE_ENDFIRE   = 0;
 static uint32_t FLUENCE_MODE_BROADSIDE = 1;
+
+typedef enum {
+  DUALMIC_CONFIG_NONE,
+  DUALMIC_CONFIG_ENDFIRE,
+  DUALMIC_CONFIG_BROADSIDE,
+} DualMicConfig;
+
 class ALSADevice;
 
 enum {
@@ -410,6 +417,11 @@ enum call_state {
 /* Query if Proxy can be Opend */
 #define AUDIO_CAN_OPEN_PROXY "can_open_proxy"
 
+typedef struct {
+   bool enableAEC;
+   bool enableNS;
+} PreProcEffects;
+
 class AudioSessionOutALSA;
 struct alsa_handle_t {
     ALSADevice*         module;
@@ -429,6 +441,8 @@ struct alsa_handle_t {
 #ifdef QCOM_TUNNEL_LPA_ENABLED
     AudioSessionOutALSA *session;
 #endif
+    PreProcEffects      preProcEffects;
+    int                 source;
 };
 
 struct output_metadata_handle_t {
@@ -502,9 +516,6 @@ public:
                                char *ddpEndpParams, int *length, bool send_params);
     status_t getRMS(int *valp);
     void setCustomStereoOnOff(bool flag);
-#ifdef SEPERATED_AUDIO_INPUT
-    void     setInput(int);
-#endif
 #ifdef QCOM_CSDCLIENT_ENABLED
     void     setCsdHandle(void*);
 #endif
@@ -539,7 +550,7 @@ private:
     status_t setMixerControl(const char *name, unsigned int value, int index = -1);
     status_t setMixerControl(const char *name, const char *);
     status_t setMixerControlExt(const char *name, int count, char **setValues);
-    char *   getUCMDevice(uint32_t devices, int input, char *rxDevice);
+    char *   getUCMDevice(uint32_t devices, alsa_handle_t *handle, char *rxDevice, bool input);
     status_t  start(alsa_handle_t *handle);
 
     status_t   openProxyDevice();
@@ -554,6 +565,12 @@ private:
     void       initProxyParams();
     status_t   startProxy();
     void       spkrCalibStatusUpdate(bool);
+    char *     voiceRecogUCMDev(alsa_handle_t * handle, uint32_t devices);
+    char *     voiceCommUCMDev(alsa_handle_t * handle, uint32_t devices);
+    char *     getEchoRefDev(alsa_handle_t *handle, const char * device);
+    void       applyEffectsConfig(alsa_handle_t * handle, const char * device);
+    char *     voiceSourceDev(alsa_handle_t * handle, uint32_t device);
+
 private:
     char mMicType[25];
     char mCurRxUCMDevice[50];
@@ -562,6 +579,7 @@ private:
     int mRxACDBID;
     //fluence mode value: FLUENCE_MODE_BROADSIDE or FLUENCE_MODE_ENDFIRE
     uint32_t mFluenceMode;
+    DualMicConfig mDualMicConfig;
     int mFmVolume;
     uint32_t mDevSettingsFlag;
     int mBtscoSamplerate;
@@ -574,9 +592,7 @@ private:
     int mDevChannelCap;
     bool mIsSglte;
     bool mIsFmEnabled;
-#ifdef SEPERATED_AUDIO_INPUT
-    int mInput_source;
-#endif
+
 #ifdef QCOM_WFD_ENABLED
     int mWFDChannelCap;
 #endif
@@ -907,10 +923,7 @@ public:
 
     virtual status_t    standby();
 
-    virtual status_t    setParameters(const String8& keyValuePairs)
-    {
-        return ALSAStreamOps::setParameters(keyValuePairs);
-    }
+    virtual status_t    setParameters(const String8& keyValuePairs);
 
     virtual String8     getParameters(const String8& keys)
     {
@@ -925,12 +938,12 @@ public:
 
     virtual status_t addAudioEffect(effect_handle_t effect)
     {
-        return BAD_VALUE;
+        return addRemoveEffect(effect, true /*enable */);
     }
 
     virtual status_t removeAudioEffect(effect_handle_t effect)
     {
-        return BAD_VALUE;
+        return addRemoveEffect(effect, false /*enable*/);
     }
     status_t            setAcousticParams(void* params);
 
@@ -941,8 +954,11 @@ public:
     status_t initSurroundSoundLibrary(unsigned long buffersize);
 #endif
 
+    void setInput(int input);
+
 private:
     void                resetFramesLost();
+    status_t            addRemoveEffect(effect_handle_t effect, bool enable);
 
     unsigned int        mFramesLost;
     AudioSystem::audio_in_acoustics mAcoustics;
@@ -962,8 +978,9 @@ private:
     int                 mSurroundInputBufferIdx;
     int                 mSurroundOutputBufferIdx;
 #endif
-
     uint8_t             *mAmrwbInputBuffer;
+    bool                mEnableAEC; //Echo cancellation
+    bool                mEnableNS; //Noise Supression
 protected:
     AudioHardwareALSA *     mParent;
 };

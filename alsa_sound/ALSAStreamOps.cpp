@@ -202,16 +202,12 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
     int device;
     status_t err = NO_ERROR;
 
-#ifdef SEPERATED_AUDIO_INPUT
     String8 key_input = String8(AudioParameter::keyInputSource);
     int source;
 
     if (param.getInt(key_input, source) == NO_ERROR) {
         ALOGD("setParameters(), input_source = %d", source);
-        mParent->mALSADevice->setInput(source);
-        param.remove(key_input);
     }
-#endif
 
     if (param.getInt(key, device) == NO_ERROR) {
         // Ignore routing if device is 0.

@@ -411,7 +411,7 @@ status_t AudioPolicyManager::setDeviceConnectionState(audio_devices_t device,
             AudioInputDescriptor *inputDesc = mInputs.valueFor(activeInput);
             audio_devices_t newDevice = getDeviceForInputSource(inputDesc->mInputSource);
             if ((newDevice != AUDIO_DEVICE_NONE) && (newDevice != inputDesc->mDevice)) {
-                ALOGV("setDeviceConnectionState() changing device from %x to %x for input %d",
+                ALOGD("setDeviceConnectionState() changing device from %x to %x for input %d",
                         inputDesc->mDevice, newDevice, activeInput);
                 inputDesc->mDevice = newDevice;
                 AudioParameter param = AudioParameter();
