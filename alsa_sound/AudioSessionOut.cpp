@@ -186,7 +186,7 @@ status_t AudioSessionOutALSA::setVolume(float left, float right)
         ALOGW("AudioSessionOutALSA::setVolume(%f) over 1.0, assuming 1.0\n", volume);
         volume = 1.0;
     }
-    mStreamVol = (lrint((left * 0x2000)+0.5)) << 16 | (lrint((right * 0x2000)+0.5));
+    mStreamVol = lrint((volume * 0x2000)+0.5);
 
     ALOGV("Setting stream volume to %d (available range is 0 to 0x2000)\n", mStreamVol);
     if(mAlsaHandle) {
