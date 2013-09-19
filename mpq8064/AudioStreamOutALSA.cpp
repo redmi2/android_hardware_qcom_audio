@@ -104,13 +104,13 @@ status_t AudioStreamOutALSA::setVolume(float left, float right)
 }
 
 status_t AudioStreamOutALSA::setParameters(const String8& keyValuePairs) {
-    ALOGD("AudioStreamOut: setParameters %s device = %d activeDevice = %d",
-                keyValuePairs.string(), mHandle->devices, mHandle->activeDevice);
+    ALOGD("AudioStreamOut: setParameters %s Standbydevice = %d activeDevice = %d",
+                keyValuePairs.string(), mStandbyDevices, mHandle->activeDevice);
     AudioParameter param = AudioParameter(keyValuePairs);
     String8 keyStandby = String8(STANDBY_DEVICES_KEY);
     String8 keyResume = String8(RESUME_DEVICES_KEY);
-    String8 key = String8(AudioParameter::keyRouting);
-    key = String8(AudioParameter::keyScreenState);
+    String8 keyRouting = String8(AudioParameter::keyRouting);
+    String8 keyScreenState = String8(AudioParameter::keyScreenState);
     String8 value;
     int device;
     if(param.getInt(keyStandby, device) == NO_ERROR && device) {
@@ -138,7 +138,7 @@ status_t AudioStreamOutALSA::setParameters(const String8& keyValuePairs) {
             mHandle->playbackMode = PLAY;
         }
         mStandbyDevices &= ~device;
-    } else if (param.get(key, value) == NO_ERROR) {
+    } else if (param.get(keyScreenState, value) == NO_ERROR) {
         if (mParent->mScreenState)
             //write function call ensures the device open and prepare so that the silence can be played
             write(NULL, 0);
@@ -146,7 +146,7 @@ status_t AudioStreamOutALSA::setParameters(const String8& keyValuePairs) {
             standby_l();
     } else {
         ALSAStreamOps::setParameters(keyValuePairs);
-        if (param.getInt(key, device) == NO_ERROR) {
+        if (param.getInt(keyRouting, device) == NO_ERROR) {
             if(device == 0 || device == AudioSystem::DEVICE_OUT_SPDIF) {
                 mDevices = AudioSystem::DEVICE_OUT_SPDIF;
                 standby_l();
@@ -215,7 +215,7 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
                               strlen(SND_USE_CASE_VERB_IP_VOICECALL))) &&
          (strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP,
                               strlen(SND_USE_CASE_VERB_IP_VOICECALL)))) {
-        mParent->mLock.lock();
+        mLock.lock();
         ALOGV("mDevices =0x%x", mDevices);
         if(mDevices &  AudioSystem::DEVICE_OUT_PROXY) {
             ALOGV("StreamOut write - mRouteAudioToA2dp = %d ", mParent->mRouteAudioToA2dp);
@@ -277,7 +277,7 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
              mHandle->module->open(mHandle);
         if(mHandle->handle && mHandle->handle->fd < 0) {
             ALOGE("write:: device open failed");
-            mParent->mLock.unlock();
+            mLock.unlock();
             return 0;
         }
         if (mParent->mRouteAudioToA2dp) {
@@ -288,13 +288,13 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
                 err = mParent->startA2dpPlayback_l(mA2dpUseCase);
                 if(err) {
                     ALOGE("startA2dpPlayback_l from write return err = %d", err);
-                    mParent->mLock.unlock();
+                    mLock.unlock();
                     return err;
                 }
             }
         }
         pcm_prepare(mHandle->handle);
-        mParent->mLock.unlock();
+        mLock.unlock();
     }
 
     period_size = mHandle->periodSize;
@@ -339,14 +339,14 @@ status_t AudioStreamOutALSA::dump(int fd, const Vector<String16>& args)
 
 status_t AudioStreamOutALSA::open(int mode)
 {
-    Mutex::Autolock autoLock(mParent->mLock);
+    Mutex::Autolock autoLock(mLock);
 
     return ALSAStreamOps::open(mode);
 }
 
 status_t AudioStreamOutALSA::close()
 {
-    Mutex::Autolock autoLock(mParent->mLock);
+    Mutex::Autolock autoLock(mLock);
     ALOGV("close = %d", mParent->mRouteAudioToA2dp);
     if (mParent->mRouteAudioToA2dp) {
          ALOGD("close-stopA2dpPlayback_l- usecase %x", mA2dpUseCase);
@@ -382,8 +382,7 @@ status_t AudioStreamOutALSA::close()
 status_t AudioStreamOutALSA::standby_l()
 {
      ALOGD("AudioStreamOut: standby_l()");
-     Mutex::Autolock autoLock(mParent->mLock);
-     Mutex::Autolock autolock1(mParent->mDeviceStateLock);
+     Mutex::Autolock autoLock(mLock);
      if((!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,
                               strlen(SND_USE_CASE_VERB_IP_VOICECALL))) ||
        (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP,
@@ -418,7 +417,7 @@ status_t AudioStreamOutALSA::standby()
     ALOGD("AudioStreamOut: standby()");
     mCanStandby = true;
     if (mParent->mScreenState) {
-        Mutex::Autolock autoLock(mParent->mLock);
+        Mutex::Autolock autoLock(mLock);
         if (mPowerLock) {
             release_wake_lock ("AudioOutLock");
             mPowerLock = false;
