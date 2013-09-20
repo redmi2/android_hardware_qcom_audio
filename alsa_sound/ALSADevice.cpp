@@ -640,6 +640,7 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
     const char **mods_list;
     use_case_t useCaseNode;
     unsigned usecase_type = 0;
+    int temp_TxACBDID;
     bool inCallDevSwitch = false;
     char *rxDevice, *txDevice, ident[70], *use_case = NULL;
     int err = 0, index, mods_size;
@@ -867,25 +868,29 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
         setFmVolume(mFmVolume);
     }
 #endif
-    ALOGD("switchDevice: mCurTxUCMDevivce %s mCurRxDevDevice %s", mCurTxUCMDevice, mCurRxUCMDevice);
+    ALOGD("switchDevice: mCurTxUCMDevice %s mCurRxDevDevice %s", mCurTxUCMDevice, mCurRxUCMDevice);
 #ifdef QCOM_ACDB_ENABLED
     /* Use speaker phone mic if in voice call using speakerphone */
-    if (((mRxACDBID == DEVICE_SPEAKER_RX_ACDB_ID) && (mTxACDBID == DEVICE_HANDSET_TX_ACDB_ID)) &&
-       ((mCallMode == AUDIO_MODE_IN_CALL) || (mCallMode == AUDIO_MODE_IN_COMMUNICATION))) {
-
-        mTxACDBID = DEVICE_SPEAKER_TX_ACDB_ID;
-    } else {
-        memset(&ident,0,sizeof(ident));
-        strlcpy(ident, "ACDBID/", sizeof(ident));
-        strlcat(ident, mCurTxUCMDevice, sizeof(ident));
-        mTxACDBID = snd_use_case_get(handle->ucMgr, ident, NULL);
-    }
+    memset(&ident,0,sizeof(ident));
+    strlcpy(ident, "ACDBID/", sizeof(ident));
+    strlcat(ident, mCurTxUCMDevice, sizeof(ident));
+    temp_TxACBDID = snd_use_case_get(handle->ucMgr, ident, NULL);
 
     memset(&ident,0,sizeof(ident));
     strlcpy(ident, "ACDBID/", sizeof(ident));
     strlcat(ident, mCurRxUCMDevice, sizeof(ident));
     mRxACDBID = snd_use_case_get(handle->ucMgr, ident, NULL);
-    ALOGD("rx_dev_id=%d, tx_dev_id=%d\n", mRxACDBID, mTxACDBID);
+
+     /* Use speaker phone mic if in voice call using speakerphone */
+    if (((mRxACDBID == DEVICE_SPEAKER_RX_ACDB_ID) || (mRxACDBID == DEVICE_SPEAKER_MONO_RX_ACDB_ID)) &&
+       (temp_TxACBDID == DEVICE_HANDSET_TX_ACDB_ID) &&
+       ((mCallMode == AUDIO_MODE_IN_CALL) || (mCallMode == AUDIO_MODE_IN_COMMUNICATION))) {
+
+        mTxACDBID = DEVICE_SPEAKER_TX_ACDB_ID;
+    } else {
+        mTxACDBID = temp_TxACBDID;
+    }
+    ALOGD("rx_ACDB_id=%d, tx_ACDB_id=%d\n", mRxACDBID, mTxACDBID);
 
     if (((devices & AudioSystem::DEVICE_IN_BUILTIN_MIC) || (devices & AudioSystem::DEVICE_IN_BACK_MIC))
         && (mInChannels == 1)) {
