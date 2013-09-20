@@ -287,7 +287,7 @@ void AudioBitstreamSM::copyResidueBitstreamToStart(size_t bytesConsumedInDecode)
     size_t remainingTotalBytes = mInputBufferWritePtr -
                               (bytesConsumedInDecode+mInputBuffer);
     if(mBufferingFactorCnt == mBufferingFactor) {
-        memcpy(mInputBuffer, mInputBuffer+bytesConsumedInDecode, remainingTotalBytes);
+        memmove(mInputBuffer, mInputBuffer+bytesConsumedInDecode, remainingTotalBytes);
         mInputBufferWritePtr = mInputBuffer+remainingTotalBytes;
         mInputBufferCurrPtr = mInputBufferWritePtr-remainingCurrValidBytes;
     } else {

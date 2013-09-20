@@ -1008,7 +1008,6 @@ private:
     // rendering
     int                 mFrameCount;
     // misc
-    bool                mPowerLock;
     // routing
     uint32_t            mA2dpUseCase;
     bool                mRouteAudioToA2dp;
