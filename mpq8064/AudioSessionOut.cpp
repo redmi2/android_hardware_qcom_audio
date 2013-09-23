@@ -999,7 +999,6 @@ void AudioSessionOutALSA::reinitialize()
     mIsMS11FilePlaybackMode    = true;
     mDecoderConfigBuffer       = NULL;
     mDecoderConfigBufferLength = 0;
-    mFirstBitstreamBuffer      = true;
     // rendering
     mFrameCount                = 0;
     // routing states
@@ -2124,7 +2123,7 @@ bool AudioSessionOutALSA::swDecode(char *buffer, size_t bytes)
     OFF. This is specifically done to handle Widevine usecase, in which the
     ADTS HEADER is not stripped off by the Widevine parser
     */
-    if(mFirstBitstreamBuffer == true) {
+    if(mIsMS11FilePlaybackMode == true) {
         uint16_t uData = (*((char *)buffer) << 8) + *((char *)buffer + 1) ;
         if(ADTS_HEADER_SYNC_RESULT == (uData & ADTS_HEADER_SYNC_MASK)) {
             ALOGD("Sync word found hence configure MS11 in file_playback Mode OFF");
@@ -2132,7 +2131,6 @@ bool AudioSessionOutALSA::swDecode(char *buffer, size_t bytes)
             mIsMS11FilePlaybackMode = false;
             openMS11Instance();
         }
-        mFirstBitstreamBuffer = false;
     }
     //decode
     if(mDecoderType == SW_PASSTHROUGH) {
