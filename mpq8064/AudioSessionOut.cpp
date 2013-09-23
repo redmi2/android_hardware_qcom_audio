@@ -819,7 +819,8 @@ void AudioSessionOutALSA::updateDeviceSupportedFormats()
         } else {
            mHdmiFormat = UNCOMPRESSED;
         }
-        fixUpHdmiFormatBasedOnEDID();
+        if (!(mHdmiFormat == COMPRESSED))
+            fixUpHdmiFormatBasedOnEDID();
         if(mStandByFormats & STANDBY_COMPR_HDMI)
             mHdmiFormat = UNCOMPRESSED;
         if (mHdmiFormat == UNCOMPRESSED) {
@@ -844,8 +845,7 @@ void AudioSessionOutALSA::fixUpHdmiFormatBasedOnEDID()
     int mainFormat = mFormat & AUDIO_FORMAT_MAIN_MASK;
     switch(mainFormat) {
     case AUDIO_FORMAT_EAC3:
-        if(mHdmiFormat == COMPRESSED ||
-           mHdmiFormat == AUTO_DEVICE_FORMAT) {
+        if(mHdmiFormat == AUTO_DEVICE_FORMAT) {
             if (mALSADevice->getFormatHDMIIndexEDIDInfo(DOLBY_DIGITAL_PLUS_1) < 0) {
                 ALOGD("Fallback to convert as EAC3 pass through not supported on SPDIF");
                 mHdmiFormat = COMPRESSED_CONVERT_EAC3_AC3;
@@ -870,8 +870,7 @@ void AudioSessionOutALSA::fixUpHdmiFormatBasedOnEDID()
         }
         break;
     case AUDIO_FORMAT_AC3:
-        if((mHdmiFormat == COMPRESSED) ||
-           (mHdmiFormat == COMPRESSED_CONVERT_EAC3_AC3) ||
+        if((mHdmiFormat == COMPRESSED_CONVERT_EAC3_AC3) ||
            (mHdmiFormat == COMPRESSED_CONVERT_ANY_AC3) ||
            (mHdmiFormat == AUTO_DEVICE_FORMAT)) {
             if(mALSADevice->getFormatHDMIIndexEDIDInfo(AC3) < 0) {
@@ -907,8 +906,7 @@ void AudioSessionOutALSA::fixUpHdmiFormatBasedOnEDID()
         break;
     case AUDIO_FORMAT_DTS:
     case AUDIO_FORMAT_DTS_LBR:
-        if((mHdmiFormat == COMPRESSED) ||
-           (mHdmiFormat == AUTO_DEVICE_FORMAT) ||
+        if((mHdmiFormat == AUTO_DEVICE_FORMAT) ||
            (mHdmiFormat == COMPRESSED_CONVERT_ANY_DTS)) {
             if(mALSADevice->getFormatHDMIIndexEDIDInfo(DTS) < 0) {
                 ALOGD("Falling back to UNCOMPRESSED as PASS THROUGH is not supported");
