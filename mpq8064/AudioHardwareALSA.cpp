@@ -916,7 +916,8 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
             delete out;
             out = NULL;
         }
-        mSessions.push_back(out);
+        if(out != NULL)
+             mSessions.push_back(out);
         if (status) *status = err;
         return out;
     }
