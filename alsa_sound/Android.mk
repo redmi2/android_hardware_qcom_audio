@@ -79,7 +79,7 @@ ifneq ($(strip $(QCOM_AUDIO_FEATURE_DISABLED_INCALL_MUSIC)),true)
     LOCAL_CFLAGS += -DQCOM_INCALL_MUSIC_ENABLED
 endif
 
-ifeq ($(call is-board-platform-in-list,msm8974 msm8226 msm8610),true)
+ifeq ($(call is-board-platform-in-list,msm8974 msm8226 msm8610 apq8084),true)
   LOCAL_CFLAGS += -DTARGET_B_FAMILY
   ifdef DOLBY_DAP
     LOCAL_CFLAGS += -DQCOM_DS1_DOLBY_DAP
@@ -193,6 +193,10 @@ ifeq ($(call is-board-platform,msm8610),true)
   LOCAL_MODULE := audio.primary.msm8610
 endif
 
+ifeq ($(call is-board-platform,apq8084),true)
+  LOCAL_MODULE := audio.primary.apq8084
+endif
+
 LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw
 LOCAL_MODULE_TAGS := optional
 
@@ -272,6 +276,10 @@ endif
 
 ifeq ($(call is-board-platform,msm8610),true)
   LOCAL_MODULE := audio_policy.msm8610
+endif
+
+ifeq ($(call is-board-platform,apq8084),true)
+  LOCAL_MODULE := audio_policy.apq8084
 endif
 
 LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw

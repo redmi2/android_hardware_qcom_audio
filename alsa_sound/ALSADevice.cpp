@@ -199,7 +199,8 @@ ALSADevice::ALSADevice() {
                 strstr((const char*)mSndCardInfo.name, "msm8x10") ||
                 strstr((const char*)mSndCardInfo.name, "msm8226") ||
                 strstr((const char*)mSndCardInfo.name, "apq8064") ||
-                strstr((const char*)mSndCardInfo.name, "apq8074") ) {
+                strstr((const char*)mSndCardInfo.name, "apq8074") ||
+                strstr((const char*)mSndCardInfo.name, "apq8084") ) {
                 break;
             }
         }
