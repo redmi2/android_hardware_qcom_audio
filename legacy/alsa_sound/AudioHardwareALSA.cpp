@@ -575,7 +575,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         if(mMode != AUDIO_MODE_IN_CALL){
            return NO_ERROR;
         }
-        doRouting(0);
+        doRouting(0,NULL);
         param.remove(key);
     }
 #ifdef QCOM_FLUENCE_ENABLED
@@ -602,7 +602,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
             ALOGV("Fluence feature Disabled");
         }
         mALSADevice->setFlags(mDevSettingsFlag);
-        doRouting(0);
+        doRouting(0,NULL);
         param.remove(key);
     }
 #endif
@@ -642,7 +642,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
             mDevSettingsFlag &= (~ANC_FLAG);
         }
         mALSADevice->setFlags(mDevSettingsFlag);
-        doRouting(0);
+        doRouting(0,NULL);
         param.remove(key);
     }
 #endif
@@ -651,7 +651,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
     if (param.getInt(key, device) == NO_ERROR) {
         // Ignore routing if device is 0.
         if(device) {
-            doRouting(device);
+            doRouting(device,NULL);
         }
         param.remove(key);
     }
@@ -807,7 +807,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
            }
 
            if(isAnyCallActive())
-                doRouting(0);
+              doRouting(0,NULL);
         }
         param.remove(key);
     }
@@ -963,7 +963,7 @@ void AudioHardwareALSA::startUsbRecordingIfNotStarted(){
 }
 #endif
 
-status_t AudioHardwareALSA::doRouting(int device)
+status_t AudioHardwareALSA::doRouting(int device, char* useCase)
 {
     Mutex::Autolock autoLock(mLock);
     int newMode = mode();
@@ -1090,7 +1090,17 @@ status_t AudioHardwareALSA::doRouting(int device)
             ALSAHandleList::iterator it = mDeviceList.end();
             it--;
             status_t err = NO_ERROR;
+            if (useCase != NULL) {
+                //if required usecase is not null, go through mDeviceList to find last matching alsa_handle_t
+                for(ALSAHandleList::iterator it2 = mDeviceList.begin(); it2 != mDeviceList.end(); it2++) {
+                    if (!strncmp(useCase, it2->useCase,sizeof(useCase))) {
+                            it = it2;
+                            ALOGV("found matching required usecase:%s device:%x",it->useCase,it->devices);
+                        }
+                }
+            }
             uint32_t activeUsecase = useCaseStringToEnum(it->useCase);
+            ALOGV("Dorouting updated usecase:%s device:%x activeUsecase",it->useCase, it->devices, activeUsecase);
             if (!((device & AudioSystem::DEVICE_OUT_ALL_A2DP) &&
                   (mCurRxDevice & AUDIO_DEVICE_OUT_ALL_USB))) {
                    if (device != mCurRxDevice) {
