@@ -1039,6 +1039,8 @@ status_t ALSADevice::open(alsa_handle_t *handle)
         {
             flags |= PCM_5POINT1;
         }
+    } else if (handle->channels == 8 ) {
+            flags |= PCM_7POINT1;
     }
     else {
         flags |= PCM_STEREO;
@@ -2466,19 +2468,64 @@ void ALSADevice::setVoipConfig(int mode, int rate)
 
     setValues[1] = (char*)malloc(8*sizeof(char));
     if (setValues[1] == NULL) {
-          free(setValues);
           free(setValues[0]);
+          free(setValues);
           return;
     }
 
-    sprintf(setValues[0], "%d",mode);
-    sprintf(setValues[1], "%d",rate);
+    snprintf(setValues[0], (4*sizeof(char)), "%d", mode);
+    snprintf(setValues[1], (8*sizeof(char)), "%d", rate);
 
     setMixerControlExt("Voip Mode Rate Config", 2, setValues);
-    free(setValues[1]);
+
     free(setValues[0]);
+    free(setValues[1]);
     free(setValues);
     return;
+}
+
+void ALSADevice::setVoipEvrcMinMaxRate(int minRate, int maxRate)
+{
+    char** setValues;
+    ALOGD("setVoipEvrcMinMaxRate(): minRate %d, maxRate %d", minRate, maxRate);
+
+    setValues = (char**)malloc(2*sizeof(char*));
+    if (setValues == NULL) {
+          return;
+    }
+    setValues[0] = (char*)malloc(8*sizeof(char));
+    if (setValues[0] == NULL) {
+          free(setValues);
+          return;
+    }
+
+    setValues[1] = (char*)malloc(8*sizeof(char));
+    if (setValues[1] == NULL) {
+          free(setValues[0]);
+          free(setValues);
+          return;
+    }
+
+    snprintf(setValues[0], (8*sizeof(char)), "%d", minRate);
+    snprintf(setValues[1], (8*sizeof(char)), "%d", maxRate);
+
+    setMixerControlExt("Voip Evrc Min Max Rate Config", 2, setValues);
+
+    free(setValues[0]);
+    free(setValues[1]);
+    free(setValues);
+    return;
+}
+
+void ALSADevice::enableVoipDtx(bool enable)
+{
+    status_t err = NO_ERROR;
+
+    ALOGD("enableVoipDtx(): enable=%d", enable);
+
+    err = setMixerControl("Voip Dtx Mode", enable, 0);
+    if (err != NO_ERROR)
+        ALOGE("enableVoipDtx(): enable DTX failed");
 }
 
 status_t ALSADevice::setVocSessionId(uint32_t sessionId)
@@ -3030,7 +3077,7 @@ status_t ALSADevice::startProxy() {
            break;
        }
    }
-   ALOGD("startProxy - Proxy started");
+   ALOGV("startProxy - Proxy started");
    capture_handle->start = 1;
    capture_handle->sync_ptr->flags = SNDRV_PCM_SYNC_PTR_APPL |
                SNDRV_PCM_SYNC_PTR_AVAIL_MIN;
@@ -3459,6 +3506,16 @@ status_t ALSADevice::getRMS(int *valp) {
         }
     }
     return err;
+}
+
+void ALSADevice::setCustomStereoOnOff(bool flag)
+{
+    ALOGD("%s: flag %d",__func__, flag);
+    if(flag == true) {
+        setMixerControl("Set Custom Stereo OnOff", 1, 0);
+    } else {
+        setMixerControl("Set Custom Stereo OnOff", 0, 0);
+    }
 }
 
 }

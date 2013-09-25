@@ -70,6 +70,7 @@ namespace android_audio_legacy {
 // ----------------------------------------------------------------------------
 
 AudioParameter param;
+static float mLastALSAvoiceVolume = -1.0f ;
 
 
 uint32_t AudioPolicyManager::checkDeviceMuteStrategies(AudioOutputDescriptor *outputDesc,
@@ -312,14 +313,6 @@ status_t AudioPolicyManager::setDeviceConnectionState(audio_devices_t device,
         }
 
         updateDevicesAndOutputs();
-#ifdef QCOM_PROXY_DEVICE_ENABLED
-        if (state == AudioSystem::DEVICE_STATE_AVAILABLE &&
-                audio_is_a2dp_device(device) &&
-                (mAvailableOutputDevices & AUDIO_DEVICE_OUT_PROXY)) {
-            ALOGV("Delay the proxy device open");
-            return NO_ERROR;
-        }
-#endif
 
         audio_devices_t newDevice = getNewDevice(mPrimaryOutput, false /*fromCache*/);
 #ifdef QCOM_FM_ENABLED
@@ -950,6 +943,9 @@ status_t AudioPolicyManager::startOutput(audio_io_handle_t output,
                             (strategy == STRATEGY_SONIFICATION_RESPECTFUL);
         uint32_t waitMs = 0;
         uint32_t muteWaitMs = 0;
+#ifdef QCOM_APM_VERSION_JBMR2
+        bool isStreamActive = false;
+#endif
 #ifndef QCOM_APM_VERSION_JBMR2
         uint32_t RefCount = 0;
 #endif
@@ -968,6 +964,10 @@ status_t AudioPolicyManager::startOutput(audio_io_handle_t output,
 #ifndef QCOM_APM_VERSION_JBMR2
                 RefCount += desc->refCount();
 #endif
+#ifdef QCOM_APM_VERSION_JBMR2
+        isStreamActive = desc->isStreamActive(AudioSystem::MUSIC);
+        ALOGD("isStreamActive: %u", isStreamActive);
+#endif
                 // wait for audio on other active outputs to be presented when starting
                 // a notification so that audio focus effect can propagate.
 #ifdef QCOM_APM_VERSION_JBMR2
@@ -983,6 +983,11 @@ status_t AudioPolicyManager::startOutput(audio_io_handle_t output,
         }
 #ifndef QCOM_APM_VERSION_JBMR2
         if(RefCount==0){
+           force = true;
+        }
+#endif
+#ifdef QCOM_APM_VERSION_JBMR2
+        if (isStreamActive == false) {
            force = true;
         }
 #endif
@@ -1060,6 +1065,13 @@ status_t AudioPolicyManager::stopOutput(audio_io_handle_t output,
         // store time at which the stream was stopped - see isStreamActive()
         if (outputDesc->mRefCount[stream] == 0) {
             outputDesc->mStopTime[stream] = systemTime();
+
+            if ((outputDesc->mRefCount[AUDIO_STREAM_RING]!= 0) && (stream == AUDIO_STREAM_VOICE_CALL)) {
+                 // When AUDIO_STREAM_RING is present, Send Mute on RING
+                 // if it gets stopOutput on  AUDIO_STREAM_VOICE_CALL
+                 setStreamMute(AudioSystem::RING, true, mPrimaryOutput);
+            }
+
             audio_devices_t newDevice = getNewDevice(output, false /*fromCache*/);
             // delay the device switch by twice the latency because stopOutput() is executed when
             // the track stop() command is received and at that time the audio track buffer can
@@ -1126,6 +1138,11 @@ audio_io_handle_t AudioPolicyManager::getInput(int inputSource,
     case AUDIO_SOURCE_VOICE_CALL:
         channelMask |= (AudioSystem::CHANNEL_IN_VOICE_UPLINK | AudioSystem::CHANNEL_IN_VOICE_DNLINK);
         break;
+#ifdef RESOURCE_MANAGER
+    case AUDIO_SOURCE_CAMCORDER:
+           checkAndSuspendOutputs();
+       break;
+#endif
     default:
         break;
     }
@@ -1240,6 +1257,11 @@ status_t AudioPolicyManager::stopInput(audio_io_handle_t input)
         AudioParameter param = AudioParameter();
         param.addInt(String8(AudioParameter::keyRouting), 0);
         mpClientInterface->setParameters(input, param.toString());
+#ifdef RESOURCE_MANAGER
+        if(inputDesc->mInputSource == AUDIO_SOURCE_CAMCORDER ) {
+            checkAndRestoreOutputs();
+        }
+#endif
         setOutputDevice(mPrimaryOutput, getNewDevice(mPrimaryOutput, true), true);
         inputDesc->mRefCount = 0;
         return NO_ERROR;
@@ -1561,13 +1583,24 @@ audio_devices_t AudioPolicyManager::getNewDevice(audio_io_handle_t output, bool 
     // 6: the strategy DTMF is active on the output:
     //      use device for strategy DTMF
 #ifdef QCOM_APM_VERSION_JBMR2
+
+    bool sonificationFlag =  false;
+    AudioOutputDescriptor *desc;
+    for (size_t i = 0; i < mOutputs.size(); i++) {
+        desc = mOutputs.valueAt(i);
+        sonificationFlag = (desc->isStrategyActive(STRATEGY_SONIFICATION));
+        if(sonificationFlag) {
+           break;
+        }
+    }
+
     if (outputDesc->isStrategyActive(STRATEGY_ENFORCED_AUDIBLE)) {
         device = getDeviceForStrategy(STRATEGY_ENFORCED_AUDIBLE, fromCache);
     } else if (isInCall() ||
                     outputDesc->isStrategyActive(STRATEGY_PHONE)) {
         device = getDeviceForStrategy(STRATEGY_PHONE, fromCache);
     } else if (outputDesc->isStrategyActive(STRATEGY_SONIFICATION) ||
-               primaryOutputDesc->isStrategyActive(STRATEGY_SONIFICATION)) {
+               sonificationFlag) {
         device = getDeviceForStrategy(STRATEGY_SONIFICATION, fromCache);
     } else if (outputDesc->isStrategyActive(STRATEGY_SONIFICATION_RESPECTFUL)) {
         device = getDeviceForStrategy(STRATEGY_SONIFICATION_RESPECTFUL, fromCache);
@@ -1852,7 +1885,7 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
                 device2 = mAvailableOutputDevices & AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET;
             }
 #ifdef QCOM_FM_ENABLED
-            if (device2 == AUDIO_DEVICE_NONE) {
+            if ((strategy != STRATEGY_SONIFICATION) && (device2 == AUDIO_DEVICE_NONE)) {
                 device2 = mAvailableOutputDevices & AUDIO_DEVICE_OUT_FM_TX;
             }
 #endif
@@ -1957,12 +1990,6 @@ uint32_t AudioPolicyManager::setOutputDevice(audio_io_handle_t output,
     }
     // update stream volumes according to new device
     applyStreamVolumes(output, device, delayMs);
-
-#ifdef QCOM_FM_ENABLED
-    //if changing from a combined headset + speaker + FM  route, unmute media streams
-    if (mAvailableOutputDevices & AUDIO_DEVICE_OUT_FM)
-        muteWaitMs = checkDeviceMuteStrategies(outputDesc, prevDevice, delayMs);
-#endif
 
     return muteWaitMs;
 }
@@ -2175,12 +2202,6 @@ status_t AudioPolicyManager::checkAndSetVolume(int stream,
     if (stream == AudioSystem::VOICE_CALL ||
         stream == AudioSystem::BLUETOOTH_SCO) {
         float voiceVolume;
-        // Force voice volume to max for bluetooth SCO as volume is managed by the headset
-        if (stream == AudioSystem::VOICE_CALL) {
-            voiceVolume = (float)index/(float)mStreams[stream].mIndexMax;
-        } else {
-            voiceVolume = 1.0;
-        }
 
         voiceVolume = (float)index/(float)mStreams[stream].mIndexMax;
 
@@ -2196,9 +2217,11 @@ status_t AudioPolicyManager::checkAndSetVolume(int stream,
             }
         }
 
-        if (voiceVolume != mLastVoiceVolume && output == mPrimaryOutput) {
+        if (voiceVolume != mLastALSAvoiceVolume && output == mPrimaryOutput) {
             mpClientInterface->setVoiceVolume(voiceVolume, delayMs);
-            mLastVoiceVolume = voiceVolume;
+            //Cache the voiceVolume only when in Call
+            if (isInCall())
+                mLastALSAvoiceVolume = voiceVolume;
         }
     }
 
@@ -2391,7 +2414,45 @@ bool AudioPolicyManager::platform_is_Fusion3()
     else
         return false;
 }
+#ifdef RESOURCE_MANAGER
+void AudioPolicyManager::checkAndSuspendOutputs() {
 
+    AudioOutputDescriptor *desc;
+    for (size_t i = 0; i < mOutputs.size(); i++) {
+        desc = mOutputs.valueAt(i);
+        if(isInCall() || desc->mFlags & ((audio_output_flags_t) AUDIO_OUTPUT_FLAG_FAST)) {
+            // TODO: Do we need to ignore voip also. voip call would be stopped otherwise?
+            /*if(desc->mFlags &
+            ((audio_output_flags_t)AUDIO_OUTPUT_FLAG_FAST) ||
+                    desc->mFlags &
+                    ((audio_output_flags_t)AUDIO_OUTPUT_FLAG_VOIP_RX)) {*/
+            ALOGD("Ignore Fast  : on suspend");
+            continue;
+        }
+        ALOGD("suspend Ouput");
+        mpClientInterface->suspendOutput(mOutputs.keyAt(i));
+    }
+}
+
+void AudioPolicyManager::checkAndRestoreOutputs() {
+
+    AudioOutputDescriptor *desc;
+    for (size_t i = 0; i < mOutputs.size(); i++) {
+        desc = mOutputs.valueAt(i);
+        if(isInCall() || desc->mFlags & ((audio_output_flags_t) AUDIO_OUTPUT_FLAG_FAST)) {
+            // TODO: Do we need to ignore voip also. voip call would be stopped otherwise?
+            /*if(desc->mFlags &
+                    ((audio_output_flags_t)AUDIO_OUTPUT_FLAG_FAST) ||
+                    desc->mFlags &
+                    ((audio_output_flags_t)AUDIO_OUTPUT_FLAG_VOIP_RX)) { */
+            ALOGD("Ignore Fast : on suspend");
+            continue;
+        }
+        ALOGD("restore Output");
+        mpClientInterface->restoreOutput(mOutputs.keyAt(i));
+    }
+}
+#endif
 extern "C" AudioPolicyInterface* createAudioPolicyManager(AudioPolicyClientInterface *clientInterface)
 {
     return new AudioPolicyManager(clientInterface);

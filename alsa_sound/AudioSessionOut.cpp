@@ -28,7 +28,7 @@
 #include <dlfcn.h>
 #include <math.h>
 
-#define LOG_TAG "AudioSessionOutALSA"
+#define LOG_TAG "AudioSessionOut"
 //#define LOG_NDEBUG 0
 #define LOG_NDDEBUG 0
 #include <utils/Log.h>
@@ -132,6 +132,13 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
         }
     }
 
+    if (mParent->mALSADevice->mADSPState == ADSP_UP_AFTER_SSR) {
+           // In-case of multiple streams only one stream will be resumed
+           // after resetting mADSPState to ADSP_UP with output device routed
+           ALOGV("We are restarting after SSR - Reset ADSP state to ADSP_UP");
+           mParent->mALSADevice->mADSPState = ADSP_UP;
+    }
+
     //open device based on the type (LPA or Tunnel) and devices
     //TODO: Check format type for linear vs non-linear to determine LPA/Tunnel
     *status = openAudioSessionDevice(type, devices);
@@ -141,6 +148,10 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
         mSessionStatus = -1;
         return;
     }
+    //start off with mute, the proper volume will be set later
+    mLock.unlock();
+    setVolume(0, 0);
+    mLock.lock();
     //Creates the event thread to poll events from LPA/Compress Driver
     createEventThread();
 
@@ -202,17 +213,17 @@ status_t AudioSessionOutALSA::setVolume(float left, float right)
     mStreamVol = lrint((volume * 0x2000)+0.5);
 #endif
 
-    ALOGD("Setting stream volume to %d (available range is 0 to 0x2000)\n", mStreamVol);
+    ALOGV("Setting stream volume to %d (available range is 0 to 0x2000)\n", mStreamVol);
     if(mAlsaHandle && mAlsaHandle->handle) {
-        if(!strcmp(mAlsaHandle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER) ||
-           !strcmp(mAlsaHandle->useCase, SND_USE_CASE_MOD_PLAY_LPA)) {
-            ALOGD("setLpaVolume(%u)\n", mStreamVol);
-            ALOGD("Setting LPA volume to %d (available range is 0 to 100)\n", mStreamVol);
+        if(!strncmp(mAlsaHandle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER, sizeof(SND_USE_CASE_VERB_HIFI_LOW_POWER)) ||
+           !strncmp(mAlsaHandle->useCase, SND_USE_CASE_MOD_PLAY_LPA, sizeof(SND_USE_CASE_MOD_PLAY_LPA))) {
+            ALOGV("setLpaVolume(%u)\n", mStreamVol);
+            ALOGV("Setting LPA volume to %d (available range is 0 to 100)\n", mStreamVol);
             mAlsaHandle->module->setLpaVolume(mAlsaHandle, mStreamVol);
             return status;
         } else if (isTunnelUseCase(mAlsaHandle->useCase)) {
-            ALOGD("setCompressedVolume(%u)\n", mStreamVol);
-            ALOGD("Setting Compressed volume to %d (available range is 0 to 100)\n", mStreamVol);
+            ALOGV("setCompressedVolume(%u)\n", mStreamVol);
+            ALOGV("Setting Compressed volume to %d (available range is 0 to 100)\n", mStreamVol);
             mAlsaHandle->module->setCompressedVolume(mAlsaHandle, mStreamVol);
             return status;
         }
@@ -237,13 +248,26 @@ status_t AudioSessionOutALSA::openAudioSessionDevice(int type, int devices)
         }
         ALOGD("openAudioSessionDevice - LPA status =%d", status);
     } else if (type == TUNNEL_MODE) {
+        char* tunnel_usecase = NULL;
         if ((use_case == NULL) || (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
                                             strlen(SND_USE_CASE_VERB_INACTIVE)))) {
             //for hifi use cases
-            status = openDevice(mParent->getTunnel(true), true, devices);
+            tunnel_usecase = mParent->getTunnel(true);
+            if (tunnel_usecase) {
+                status = openDevice(tunnel_usecase, true, devices);
+            } else {
+                ALOGE("openAudioSessionDevice getTunnel(true) failed, return BAD_VALUE:%d",BAD_VALUE);
+                return BAD_VALUE;
+            }
         } else {
             //for other than hifi use cases
-            status = openDevice(mParent->getTunnel(false), false, devices);
+            tunnel_usecase = mParent->getTunnel(false);
+            if (tunnel_usecase) {
+                status = openDevice(tunnel_usecase, false, devices);
+            } else {
+                ALOGE("openAudioSessionDevice getTunnel(false) failed, return BAD_VALUE:%d",BAD_VALUE);
+                return BAD_VALUE;
+            }
         }
         mTunnelMode = true;
     }
@@ -789,15 +813,21 @@ status_t AudioSessionOutALSA::standby()
     Acquire draining lock so that we can be sure drain is done
     Flush will cause drain to complete, but we have to wait for it
     */
-    // At this point, all the buffers with the driver should be
-    // flushed.
-    Mutex::Autolock autoLock1(mDrainingLock);
+    /*
+    At this point, all the buffers with the driver should be flushed.
+    */
+
+    mLock.lock();
+    mSessionStatus = -1;
+    mLock.unlock();
+
+    requestAndWaitForEventThreadExit();
+
     mAlsaHandle->module->standby(mAlsaHandle);
     /*
         Since ALSA Handle is closed, make sure no operations on
         ALSA handle happen after this
     */
-    mSessionStatus = -1;
 
 
     if (mParent->mRouteAudioToExtOut) {
@@ -838,9 +868,11 @@ status_t AudioSessionOutALSA::dump(int fd, const Vector<String16>& args)
 
 status_t AudioSessionOutALSA::getNextWriteTimestamp(int64_t *timestamp)
 {
+    Mutex::Autolock autoLock(mLock);
     struct snd_compr_tstamp tstamp;
     tstamp.timestamp = -1;
-    if (ioctl(mAlsaHandle->handle->fd, SNDRV_COMPRESS_TSTAMP, &tstamp)){
+    if (mAlsaHandle && mAlsaHandle->handle &&
+        ioctl(mAlsaHandle->handle->fd, SNDRV_COMPRESS_TSTAMP, &tstamp)){
         ALOGE("Failed SNDRV_COMPRESS_TSTAMP\n");
         return UNKNOWN_ERROR;
     } else {
@@ -921,7 +953,6 @@ status_t AudioSessionOutALSA::openDevice(char *useCase, bool bIsUseCase, int dev
 {
     alsa_handle_t alsa_handle;
     status_t status = NO_ERROR;
-    ALOGV("openDevice: E usecase %s", useCase);
     alsa_handle.module      = mAlsaDevice;
     alsa_handle.bufferSize  = mInputBufferSize;
     alsa_handle.devices     = devices;
@@ -939,7 +970,13 @@ SNDRV_PCM_FORMAT_S16_LE : mFormat);
     alsa_handle.rxHandle    = 0;
     alsa_handle.ucMgr       = mUcMgr;
     alsa_handle.session     = this;
-    strlcpy(alsa_handle.useCase, useCase, sizeof(alsa_handle.useCase));
+    if (useCase) {
+        ALOGV("openDevice: usecase %s bIsUseCase:%d devices:%x", useCase, bIsUseCase, devices);
+        strlcpy(alsa_handle.useCase, useCase, sizeof(alsa_handle.useCase));
+    } else {
+        ALOGE("openDevice invalid useCase, return BAD_VALUE:%x",BAD_VALUE);
+        return BAD_VALUE;
+    }
 
     if (bIsUseCase) {
        snd_use_case_set(mUcMgr, "_verb", useCase);
@@ -995,10 +1032,10 @@ status_t AudioSessionOutALSA::closeDevice(alsa_handle_t *pHandle)
     ALOGD("closeDevice: useCase %s", pHandle->useCase);
     //TODO: remove from mDeviceList
     if(pHandle) {
-        status = mAlsaDevice->close(pHandle);
-	if (mTunnelMode) {
+        if (mTunnelMode) {
             mParent->freeTunnel(pHandle->useCase);
         }
+        status = mAlsaDevice->close(pHandle);
     }
     return status;
 }
@@ -1019,7 +1056,8 @@ status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
                 mParent->mRouteAudioToExtOut = true;
                 ALOGD("setParameters(): device %#x", device);
             }
-            mParent->doRouting(device);
+            char * usecase = (mAlsaHandle != NULL )? mAlsaHandle->useCase: NULL;
+            mParent->doRouting(device,usecase);
         }
         param.remove(key);
     }
@@ -1091,6 +1129,11 @@ void AudioSessionOutALSA::reset() {
 #ifdef QCOM_USBAUDIO_ENABLED
     mParent->closeUsbPlaybackIfNothingActive();
 #endif
+   if(mAlsaHandle) {
+        ALOGD("closeDevice mAlsaHandle");
+        closeDevice(mAlsaHandle);
+    }
+
     ALOGV("Erase device list");
     for(ALSAHandleList::iterator it = mParent->mDeviceList.begin();
             it != mParent->mDeviceList.end(); ++it) {
@@ -1101,8 +1144,6 @@ void AudioSessionOutALSA::reset() {
     }
 
     if(mAlsaHandle) {
-        ALOGD("closeDevice mAlsaHandle");
-        closeDevice(mAlsaHandle);
         mAlsaHandle = NULL;
     }
     mParent->mLock.unlock();
@@ -1133,12 +1174,8 @@ status_t AudioSessionOutALSA::drainAndPostEOS_l()
     }
 
     /*
-    To indicate to other threads that we are draining
-    and we have to wait till this is done. And take this
-    lock before unlocking mLock so that ::standby() will not
-    be able to acquire the mDrainingLock
+    if alsa handle is invalid, this flag will be false
     */
-    Mutex::Autolock autoLock(mDrainingLock);
     if (mSessionStatus != 0) {
         ALOGE("ALSA Handle closed already");
         return INVALID_OPERATION;

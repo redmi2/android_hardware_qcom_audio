@@ -63,6 +63,8 @@ ALSAStreamOps::~ALSAStreamOps()
         }
         mParent->mVoipMicMute = 0;
         mParent->mVoipBitRate = 0;
+        mParent->mVoipEvrcBitRateMin = 0;
+        mParent->mVoipEvrcBitRateMax = 0;
     }
     close();
 
@@ -215,22 +217,21 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
 
     if (param.getInt(key, device) == NO_ERROR) {
         // Ignore routing if device is 0.
-        ALOGD("setParameters(): keyRouting with device 0x%x", device);
         if(device) {
             ALOGD("setParameters(): keyRouting with device %#x", device);
             if (mParent->isExtOutDevice(device)) {
                 mParent->mRouteAudioToExtOut = true;
-                ALOGD("setParameters(): device %#x", device);
+                ALOGD("setParameters(): ExtOutDevice device %#x", device);
             }
-            err = mParent->doRouting(device);
+            char * usecase = (mHandle != NULL)? mHandle->useCase: NULL;
+            err = mParent->doRouting(device,usecase);
             if(err) {
                 ALOGE("doRouting failed = %d",err);
-            }
-            else {
+            } else {
                 mDevices = device;
             }
         } else {
-            ALOGE("must not change mDevices to 0");
+            ALOGV("setParameters(): Ignore routing if device is 0");
         }
         param.remove(key);
     }
@@ -241,7 +242,26 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
             ALOGD("setParameters(): handleFm with device %d", device);
             if(device) {
                 mDevices = device;
+#ifdef RESOURCE_MANAGER
+                uint32_t state = 0;
+                mParent->handleFmConcurrency(device, state);
+                if(state ==  AudioHardwareALSA::CONCURRENCY_ACTIVE) {
+                    err =  mParent->setParameterForConcurrency(
+                            String8("USECASE_FM_PLAYBACK"), state);
+                    if(err != OK) {
+                        ALOGE("Handle FM error");
+                        param.remove(key);
+                        return err;
+                    }
+                }
+#endif
                 mParent->handleFm(device);
+#ifdef RESOURCE_MANAGER
+                if(state ==  AudioHardwareALSA::CONCURRENCY_INACTIVE) {
+                    err =  mParent->setParameterForConcurrency(
+                            String8("USECASE_FM_PLAYBACK"), state);
+                }
+#endif
             }
             param.remove(key);
         } else {
@@ -517,6 +537,8 @@ void ALSAStreamOps::close()
        (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP, strlen(SND_USE_CASE_MOD_PLAY_VOIP)))) {
        mParent->mVoipMicMute = false;
        mParent->mVoipBitRate = 0;
+       mParent->mVoipEvrcBitRateMin = 0;
+       mParent->mVoipEvrcBitRateMax = 0;
        mParent->mVoipInStreamCount = 0;
        mParent->mVoipOutStreamCount = 0;
     }

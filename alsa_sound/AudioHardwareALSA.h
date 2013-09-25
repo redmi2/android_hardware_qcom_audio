@@ -37,6 +37,9 @@
 #include "ListenHardware.h"
 #endif
 
+#ifdef RESOURCE_MANAGER
+#include "AudioResourceManager.h"
+#endif
 extern "C" {
     #include <sound/asound.h>
     #include <sound/compress_params.h>
@@ -53,8 +56,11 @@ namespace android_audio_legacy
 using android::List;
 using android::Mutex;
 using android::Condition;
-class AudioHardwareALSA;
 
+class AudioHardwareALSA;
+#ifdef RESOURCE_MANAGER
+class AudioResourceManager;
+#endif
 /**
  * The id of ALSA module
  */
@@ -81,7 +87,7 @@ class AudioHardwareALSA;
 #endif
 
 #define DEFAULT_VOICE_BUFFER_SIZE   2048
-#define PLAYBACK_LOW_LATENCY_BUFFER_SIZE   1024
+#define PLAYBACK_LOW_LATENCY_BUFFER_SIZE   960
 #define PLAYBACK_LOW_LATENCY  22000
 #define PLAYBACK_LOW_LATENCY_MEASURED  42000
 #ifdef TARGET_B_FAMILY
@@ -130,6 +136,10 @@ class AudioHardwareALSA;
 #define AUDIO_PARAMETER_KEY_FM_VOLUME "fm_volume"
 #define ECHO_SUPRESSION     "ec_supported"
 #define ALL_CALL_STATES_KEY "all_call_states"
+#define CUSTOM_STEREO_KEY   "stereo_as_dual_mono"
+#define VOIP_DTX_MODE_KEY   "dtx_on"
+#define EVRC_RATE_MIN_KEY   "evrc_rate_min"
+#define EVRC_RATE_MAX_KEY   "evrc_rate_max"
 
 #define ANC_FLAG        0x00000001
 #define DMIC_FLAG       0x00000002
@@ -463,6 +473,8 @@ public:
     void     setMicMute(int state);
     void     setVoipMicMute(int state);
     void     setVoipConfig(int mode, int rate);
+    void     setVoipEvrcMinMaxRate(int minRate, int maxRate);
+    void     enableVoipDtx(bool flag);
     status_t setFmVolume(int vol);
     void     setBtscoRate(int rate);
     status_t setLpaVolume(alsa_handle_t *handle, int vol);
@@ -491,8 +503,8 @@ public:
                                 int param_id, int param_val);
     status_t setDDPEndpParams(alsa_handle_t *handle, int device, int dev_ch_cap,
                                char *ddpEndpParams, int *length, bool send_params);
-
     status_t getRMS(int *valp);
+    void setCustomStereoOnOff(bool flag);
 #ifdef SEPERATED_AUDIO_INPUT
     void     setInput(int);
 #endif
@@ -784,7 +796,6 @@ public:
 
 private:
     Mutex               mLock;
-    Mutex               mDrainingLock;
     uint32_t            mFrameCount;
     uint32_t            mSampleRate;
     uint32_t            mChannels;
@@ -1085,7 +1096,6 @@ public:
     status_t    stopPlaybackOnExtOut_l(uint32_t activeUsecase);
     bool        suspendPlaybackOnExtOut_l(uint32_t activeUsecase);
     status_t    isExtOutDevice(int device);
-
     /**This method dumps the state of the audio hardware */
     //virtual status_t dumpState(int fd, const Vector<String16>& args);
 
@@ -1095,7 +1105,6 @@ public:
     {
         return mMode;
     }
-
     void pauseIfUseCaseTunnelOrLPA();
     void resumeIfUseCaseTunnelOrLPA();
     uint32_t getActiveSessionVSID();
@@ -1127,11 +1136,18 @@ private:
     char*        getUcmVerbForVSID(uint32_t vsid);
     char*        getUcmModForVSID(uint32_t vsid);
     alsa_handle_t* getALSADeviceHandleForVSID(uint32_t vsid);
-
+#ifdef RESOURCE_MANAGER
+    enum {
+       CONCURRENCY_INACTIVE = 0,
+       CONCURRENCY_ACTIVE,
+    };
+    status_t     handleFmConcurrency(int32_t device, uint32_t &state);
+    status_t     setParameterForConcurrency(String8 useCase, uint32_t state);
+#endif
 protected:
     virtual status_t    dump(int fd, const Vector<String16>& args);
     virtual uint32_t    getVoipMode(int format);
-    status_t            doRouting(int device);
+    status_t            doRouting(int device, char* useCase);
 #ifdef QCOM_FM_ENABLED
     void                handleFm(int device);
 #endif
@@ -1149,7 +1165,7 @@ protected:
 #endif
     void                setInChannels(int device);
     void                disableVoiceCall(int mode, int device, uint32_t vsid = 0);
-    void                enableVoiceCall(int mode, int device, uint32_t vsid = 0);
+    status_t            enableVoiceCall(int mode, int device, uint32_t vsid = 0);
     bool                routeCall(int device, int newMode, uint32_t vsid);
     friend class AudioSessionOutALSA;
     friend class AudioStreamOutALSA;
@@ -1179,6 +1195,8 @@ protected:
     uint32_t            mVoipOutStreamCount;
     bool                mVoipMicMute;
     uint32_t            mVoipBitRate;
+    uint32_t            mVoipEvrcBitRateMin;
+    uint32_t            mVoipEvrcBitRateMax;
     uint32_t            mIncallMode;
 
     bool                mMicMute;
@@ -1237,12 +1255,18 @@ protected:
 #ifdef QCOM_LISTEN_FEATURE_ENABLE
     ListenHardware *mListenHw;
 #endif
-
+#ifdef RESOURCE_MANAGER
+    AudioResourceManager *mAudioResourceManager;
+#endif
 public:
     bool mRouteAudioToExtOut;
 };
 
 static bool isTunnelUseCase(const char *useCase) {
+    if (useCase == NULL) {
+        ALOGE("isTunnelUseCase: invalid use case, return false");
+        return false;
+    }
     if ((!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
                            MAX_LEN(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL))) ||
         (!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
