@@ -1808,18 +1808,12 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
             return in;
         }
 #endif
-        err = mALSADevice->open(&(*it));
         if (*format == AUDIO_FORMAT_AMR_WB) {
              ALOGV("### Setting bufsize to 61");
              it->bufferSize = 61;
         }
-        if (err) {
-           ALOGE("Error opening pcm input device");
-           mDeviceList.erase(it);
-        } else {
-           in = new AudioStreamInALSA(this, &(*it), acoustics);
-           err = in->set(format, channels, sampleRate, devices);
-        }
+        in = new AudioStreamInALSA(this, &(*it), acoustics);
+        err = in->set(format, channels, sampleRate, devices);
         if (status) *status = err;
         return in;
       }
