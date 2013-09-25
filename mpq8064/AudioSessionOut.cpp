@@ -197,7 +197,6 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
 {
     ALOGD("write: bytes: %d", bytes);
 
-    bool continueDecode;
     ssize_t sent = 0;
     {
         Mutex::Autolock autoLock(mLock);
@@ -215,11 +214,11 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
         copyBitstreamInternalBuffer((char *)buffer, bytes);
     }
     do {
-        continueDecode = decode((char *)buffer, bytes);
+        mContinueDecode = decode((char *)buffer, bytes);
 
-        render(continueDecode);
+        render(mContinueDecode);
 
-    } while(continueDecode == true);
+    } while(mContinueDecode == true);
 
     if(bytes == 0) {
         eosHandling();
@@ -330,7 +329,6 @@ Description: flush
 status_t AudioSessionOutALSA::flush()
 {
     ALOGD("Flush");
-    Mutex::Autolock autoLock(mLock);
     return flush_l();
 }
 
@@ -341,6 +339,7 @@ status_t AudioSessionOutALSA::flush_l()
 {
     ALOGD("flush_l");
     status_t status = NO_ERROR;
+    mContinueDecode = false;
     for(int i=0; i<mNumRxHandlesActive; i++) {
         if(mRxHandle[i] &&
            mRxHandle[i]->handle &&
@@ -2279,9 +2278,11 @@ uint32_t AudioSessionOutALSA::render(bool continueDecode/* used for time stamp m
     struct pcm pTempHandle;
 
     ALOGV("render");
-    Mutex::Autolock autoLock(mLock);
-    if(mSessionState & STANDBY)
+    mLock.lock();
+    if(mSessionState & STANDBY) {
+        mLock.unlock();
         return 0;
+    }
     for(int index=0; index < mNumRxHandlesActive; index++) {
         switch(mRxHandleRouteFormat[index]) {
         case ROUTE_UNCOMPRESSED:
@@ -2326,32 +2327,34 @@ uint32_t AudioSessionOutALSA::render(bool continueDecode/* used for time stamp m
             n = mParent->hw_pcm_write(&pTempHandle,
                     mWriteTempBuffer,
                     periodSize);
-            mLock.lock();
-            if(mSessionState & STANDBY)
-                return 0;
-            if (mRxHandle[index] != NULL && mRxHandle[index]->handle != NULL)
-                memcpy(mRxHandle[index]->handle, &pTempHandle, sizeof(struct pcm));
             ALOGD("pcm_write returned with %d", n);
             if(n < 0) {
                 // Recovery is part of pcm_write. TODO split is later.
                 ALOGE("pcm_write returned n < 0");
                 return static_cast<ssize_t>(n);
-            } else {
-                if(renderType == ROUTE_UNCOMPRESSED ||
-                   (renderType == ROUTE_UNCOMPRESSED_MCH && !mOpenDecodeRoute)) {
-                    mFrameCount++;
-                }
-#ifdef DEBUG
-                    dumpInputOutput(OUTPUT,
-                                    mBitstreamSM->getOutputBufferPtr(renderType),
-                                    mOutputMetadata.bufferLength, index);
-#endif
-                renderedPcmBytes += mOutputMetadata.bufferLength;
-                mBitstreamSM->copyResidueOutputToStart(renderType,
-                        mOutputMetadata.bufferLength);
             }
+            mLock.lock();
+            if(mSessionState & STANDBY) {
+                mLock.unlock();
+                return 0;
+            }
+            if (mRxHandle[index] != NULL && mRxHandle[index]->handle != NULL)
+                memcpy(mRxHandle[index]->handle, &pTempHandle, sizeof(struct pcm));
+            if(renderType == ROUTE_UNCOMPRESSED ||
+               (renderType == ROUTE_UNCOMPRESSED_MCH && !mOpenDecodeRoute)) {
+                mFrameCount++;
+            }
+#ifdef DEBUG
+                dumpInputOutput(OUTPUT,
+                                mBitstreamSM->getOutputBufferPtr(renderType),
+                                mOutputMetadata.bufferLength, index);
+#endif
+            renderedPcmBytes += mOutputMetadata.bufferLength;
+            mBitstreamSM->copyResidueOutputToStart(renderType,
+                    mOutputMetadata.bufferLength);
         }
     }
+    mLock.unlock();
     return renderedPcmBytes;
 }
 

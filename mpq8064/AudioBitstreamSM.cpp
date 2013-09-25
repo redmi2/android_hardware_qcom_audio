@@ -305,22 +305,22 @@ void AudioBitstreamSM::copyResidueOutputToStart(int format, size_t samplesRender
     switch(format) {
     case PCM_MCH_OUT:
         remainingBytes = mPCMMChOutputBufferWritePtr-(mPCMMChOutputBuffer+samplesRendered);
-        memcpy(mPCMMChOutputBuffer, mPCMMChOutputBuffer+samplesRendered, remainingBytes);
+        memmove(mPCMMChOutputBuffer, mPCMMChOutputBuffer+samplesRendered, remainingBytes);
         mPCMMChOutputBufferWritePtr = mPCMMChOutputBuffer + remainingBytes;
         break;
     case PCM_2CH_OUT:
         remainingBytes = mPCM2ChOutputBufferWritePtr-(mPCM2ChOutputBuffer+samplesRendered);
-        memcpy(mPCM2ChOutputBuffer, mPCM2ChOutputBuffer+samplesRendered, remainingBytes);
+        memmove(mPCM2ChOutputBuffer, mPCM2ChOutputBuffer+samplesRendered, remainingBytes);
         mPCM2ChOutputBufferWritePtr = mPCM2ChOutputBuffer + remainingBytes;
         break;
     case COMPRESSED_OUT:
         remainingBytes = mEncOutputBufferWritePtr-(mEncOutputBuffer+samplesRendered);
-        memcpy(mEncOutputBuffer, mEncOutputBuffer+samplesRendered, remainingBytes);
+        memmove(mEncOutputBuffer, mEncOutputBuffer+samplesRendered, remainingBytes);
         mEncOutputBufferWritePtr = mEncOutputBuffer + remainingBytes;
         break;
     case TRANSCODE_OUT:
         remainingBytes = mPassthroughOutputBufferWritePtr-(mPassthroughOutputBuffer+samplesRendered);
-        memcpy(mPassthroughOutputBuffer, mPassthroughOutputBuffer+samplesRendered, remainingBytes);
+        memmove(mPassthroughOutputBuffer, mPassthroughOutputBuffer+samplesRendered, remainingBytes);
         mPassthroughOutputBufferWritePtr = mPassthroughOutputBuffer + remainingBytes;
         break;
     default:
@@ -402,7 +402,7 @@ void AudioBitstreamSM::stopInputBufferingMode()
 {
     size_t remainingCurrValidBytes = mInputBufferWritePtr - mInputBufferCurrPtr;
     mBufferingFactorCnt = mBufferingFactor;
-    memcpy(mInputBuffer, mInputBufferCurrPtr, remainingCurrValidBytes);
+    memmove(mInputBuffer, mInputBufferCurrPtr, remainingCurrValidBytes);
     mInputBufferCurrPtr = mInputBuffer;
     mInputBufferWritePtr = mInputBuffer+remainingCurrValidBytes;
 }

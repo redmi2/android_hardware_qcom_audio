@@ -1005,6 +1005,7 @@ private:
     void                *mDecoderConfigBuffer;
     int32_t             mDecoderConfigBufferLength;
     bool                mFirstBitstreamBuffer;
+    bool                mContinueDecode;
     // rendering
     int                 mFrameCount;
     // misc
