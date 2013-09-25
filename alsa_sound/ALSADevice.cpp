@@ -2247,6 +2247,7 @@ char* ALSADevice::getUCMDevice(uint32_t devices, alsa_handle_t *handle, char *rx
               free(snd_device);
               return snd_device_return;
           }
+          return strdup(SND_USE_CASE_DEV_HEADSET); /* HEADSET TX */
 
 #ifdef QCOM_ANC_HEADSET_ENABLED
         } else if (devices & AudioSystem::DEVICE_IN_ANC_HEADSET) {
