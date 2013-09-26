@@ -58,8 +58,8 @@ static int (*acdb_loader_get_ecrx_device)(int acdb_id);
 #define AFE_PROXY_PERIOD_COUNT 32
 #define KILL_A2DP_THREAD 1
 #define SIGNAL_A2DP_THREAD 2
-#define ADSP_UP_CHK_TRIES 5
-#define ADSP_UP_CHK_SLEEP 1*1000*1000
+#define SND_CARD_UP_CHK_TRIES 5
+#define SND_CARD_UP_CHK_SLEEP 1*1000*1000
 
 #define MAX_VOL_INDEX 5
 #define MIN_VOL_INDEX 0
@@ -89,7 +89,7 @@ ALSADevice::ALSADevice() {
 #ifdef QCOM_WFD_ENABLED
     mWFDChannelCap = 2;
 #endif
-    mADSPState = ADSP_UP;
+    mSndCardState = SND_CARD_UP;
     mBtscoSamplerate = 8000;
     mCallMode = AUDIO_MODE_NORMAL;
     mInChannels = 0;
@@ -102,6 +102,7 @@ ALSADevice::ALSADevice() {
 
     mStatus = OK;
     mMixer = NULL;
+    mSndCardNumber = -1;
 
     property_get("persist.audio.handset.mic",value,"0");
     strlcpy(mMicType, value, sizeof(mMicType));
@@ -201,9 +202,11 @@ ALSADevice::ALSADevice() {
     if (!mMixer) {
         ALOGE("Could not find a valid sound card");
         mStatus = NO_INIT;
+    } else {
+        mSndCardNumber = i;
     }
 
-    ALOGD("ALSA module opened");
+    ALOGD("ALSA module opened, mSndCardNumber %d", mSndCardNumber);
 }
 
 //static int s_device_close(hw_device_t* device)
@@ -774,7 +777,7 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
     mods_size = snd_use_case_get_list(handle->ucMgr, "_enamods", &mods_list);
     if (rxDevice != NULL) {
         if ((strncmp(mCurRxUCMDevice, "None", 4)) &&
-            ((mADSPState == ADSP_UP_AFTER_SSR) ||
+            ((mSndCardState == SND_CARD_UP_AFTER_SSR) ||
              (strncmp(rxDevice, mCurRxUCMDevice, MAX_STR_LEN)) || (inCallDevSwitch == true))) {
             if ((use_case != NULL) && (strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
                 strlen(SND_USE_CASE_VERB_INACTIVE)))) {
@@ -802,7 +805,7 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
     }
     if (txDevice != NULL) {
         if ((strncmp(mCurTxUCMDevice, "None", 4)) &&
-            ((mADSPState == ADSP_UP_AFTER_SSR) ||
+            ((mSndCardState == SND_CARD_UP_AFTER_SSR) ||
              (strncmp(txDevice, mCurTxUCMDevice, MAX_STR_LEN)) || (inCallDevSwitch == true))) {
             if ((use_case != NULL) && (strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
                 strlen(SND_USE_CASE_VERB_INACTIVE)))) {
@@ -955,7 +958,7 @@ status_t ALSADevice::init(alsa_device_t *module, ALSAHandleList &list)
 status_t ALSADevice::open(alsa_handle_t *handle)
 {
     char *devName = NULL;
-    unsigned flags = 0, maxTries = ADSP_UP_CHK_TRIES;
+    unsigned flags = 0, maxTries = SND_CARD_UP_CHK_TRIES;
     int err = NO_ERROR;
 
     mDevChannelCap = 2;
@@ -971,17 +974,17 @@ status_t ALSADevice::open(alsa_handle_t *handle)
     // is not complete.
     // Fix me: USB/proxy/a2dp
 
-    ALOGV("mADSPState: %d", mADSPState);
-    while(mADSPState == ADSP_DOWN)
+    ALOGV("mSndCardState: %d", mSndCardState);
+    while(mSndCardState == SND_CARD_DOWN)
     {
        if(maxTries--)
        {
-          ALOGD("ADSP is not UP! Sleep for 1 sec, tries: %d.", maxTries);
-          usleep(ADSP_UP_CHK_SLEEP);
+          ALOGD("Sound card is not UP! Sleep for 1 sec, tries: %d.", maxTries);
+          usleep(SND_CARD_UP_CHK_SLEEP);
        }
        else
        {
-          ALOGE("Error opening device! ADSP is not UP!");
+          ALOGE("Error opening device! Sound card is not UP!");
           return NO_INIT;
        }
     }
