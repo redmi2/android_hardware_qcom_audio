@@ -322,7 +322,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                 } else  if (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC)) {
                     strlcpy(mHandle->useCase, SND_USE_CASE_VERB_HIFI_REC, sizeof(SND_USE_CASE_VERB_HIFI_REC));
                 } else {
-                    ALOGE("No change in usecase = %d", mHandle->useCase);
+                    ALOGE("No change in usecase = %s", mHandle->useCase);
                 }
             }
         }
@@ -566,9 +566,11 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                     mHandle->handle = NULL;
                     if((!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL, strlen(SND_USE_CASE_VERB_IP_VOICECALL))) ||
                     (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP, strlen(SND_USE_CASE_MOD_PLAY_VOIP)))) {
-                        pcm_close(mHandle->rxHandle);
-                        mHandle->rxHandle = NULL;
-                        mHandle->module->startVoipCall(mHandle);
+                        if (mHandle->rxHandle) {
+                            pcm_close(mHandle->rxHandle);
+                            mHandle->rxHandle = NULL;
+                            mHandle->module->startVoipCall(mHandle);
+                        }
                     }
                     else
                     {
@@ -627,6 +629,7 @@ status_t AudioStreamInALSA::close()
 {
     Mutex::Autolock autoLock(mParent->mLock);
 
+    String8 useCase;
     ALOGD("close");
     if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
         (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
@@ -644,7 +647,16 @@ status_t AudioStreamInALSA::close()
             }
             ALOGD("mVoipInStreamCount= %d, mParent->mVoipOutStreamCount=%d",
                   mParent->mVoipInStreamCount, mParent->mVoipOutStreamCount);
-
+#ifdef RESOURCE_MANAGER
+            useCase.setTo("USECASE_VOIP_CALL");
+            if(!mParent->mVoipInStreamCount && !mParent->mVoipOutStreamCount) {
+                status_t err = mParent->setParameterForConcurrency(
+                        useCase, AudioHardwareALSA::CONCURRENCY_INACTIVE);
+                //TODO : no error here?, cleanup might not be proper
+                if(err != OK)
+                    return err;
+            }
+#endif
             return NO_ERROR;
         }
         mParent->mVoipMicMute = 0;
@@ -654,6 +666,7 @@ status_t AudioStreamInALSA::close()
         mParent->musbRecordingState &= ~USBRECBIT_REC;
 #endif
      }
+
 #ifdef QCOM_CSDCLIENT_ENABLED
     if (mParent->mFusion3Platform) {
        if((!strcmp(mHandle->useCase, SND_USE_CASE_VERB_INCALL_REC)) ||
