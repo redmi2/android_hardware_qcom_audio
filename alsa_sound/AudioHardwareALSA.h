@@ -1147,7 +1147,7 @@ private:
 protected:
     virtual status_t    dump(int fd, const Vector<String16>& args);
     virtual uint32_t    getVoipMode(int format);
-    status_t            doRouting(int device);
+    status_t            doRouting(int device, char* useCase);
 #ifdef QCOM_FM_ENABLED
     void                handleFm(int device);
 #endif
@@ -1263,6 +1263,10 @@ public:
 };
 
 static bool isTunnelUseCase(const char *useCase) {
+    if (useCase == NULL) {
+        ALOGE("isTunnelUseCase: invalid use case, return false");
+        return false;
+    }
     if ((!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
                            MAX_LEN(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL))) ||
         (!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
