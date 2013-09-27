@@ -317,12 +317,12 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
                 }
                 else
                 {
-                    if (mParent->mALSADevice->mADSPState == ADSP_UP_AFTER_SSR) {
+                    if (mParent->mALSADevice->mSndCardState == SND_CARD_UP_AFTER_SSR) {
                         ALOGD("SSR Case: Call device switch to apply AMIX controls.");
                         mHandle->module->route(mHandle, mParent->mCurRxDevice  , mParent->mode());
                         // In-case of multiple streams only one stream will be resumed
-                        // after resetting mADSPState to ADSP_UP with output device routed
-                        mParent->mALSADevice->mADSPState = ADSP_UP;
+                        // after resetting mSndCardState to SND_CARD_UP with output device routed
+                        mParent->mALSADevice->mSndCardState = SND_CARD_UP;
 
                         if(mParent->isExtOutDevice(mParent->mCurRxDevice)) {
                            ALOGV("StreamOut write - mRouteAudioToExtOut = %d ", mParent->mRouteAudioToExtOut);
