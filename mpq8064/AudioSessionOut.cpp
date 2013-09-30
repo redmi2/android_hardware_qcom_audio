@@ -450,10 +450,6 @@ status_t AudioSessionOutALSA::standby()
     reset();
     if (mRouteAudioToA2dp)
         status = a2dpRenderingControl(A2DP_RENDER_STOP);
-    if (mPowerLock) {
-        release_wake_lock ("AudioSessionOutLock");
-        mPowerLock = false;
-    }
     return status;
 }
 
