@@ -96,6 +96,7 @@ ALSADevice::ALSADevice() {
     mTxACDBID = 0;
     mRxACDBID = 0;
     mIsFmEnabled = false;
+    mCurDevice = 0;
     //Initialize fm volume to value corresponding to unity volume
     mFmVolume = lrint((0.0 * 0x2000) + 0.5);
     char value[128], platform[128], baseband[128];
