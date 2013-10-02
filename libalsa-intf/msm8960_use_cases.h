@@ -80,6 +80,7 @@ extern "C" {
 #define DEVICE_USB_TX_ACDB_ID                           44// USB_Tx
 #define DEVICE_CAMCORDER_TX_ACDB_ID                     61// CAMCORDER_TX
 #define DEVICE_VOICE_RECOGNITION_ACDB_ID                62// VOICE_RECOGNITION
+#define DEVICE_SPEAKER_PROTECTED_RX_ACDB_ID             101// SPKR_PHONE_SPKR_PROTECTED
 
 /* mixer control type */
 #define TYPE_INT            0
