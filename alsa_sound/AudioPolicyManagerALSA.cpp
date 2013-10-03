@@ -158,7 +158,12 @@ uint32_t AudioPolicyManager::checkDeviceMuteStrategies(AudioOutputDescriptor *ou
     // audioflinger mixer. We must account for the delay between now and the next time
     // the audioflinger thread for this output will process a buffer (which corresponds to
     // one buffer size, usually 1/2 or 1/4 of the latency).
-    muteWaitMs *= 2;
+    if ( (device & AUDIO_DEVICE_OUT_ALL_A2DP) || (device & AUDIO_DEVICE_OUT_ALL_SCO) ) {
+        ALOGD("Changing muteWaitMs to %d / 2", muteWaitMs);
+        muteWaitMs = muteWaitMs / 2;
+    } else {
+        muteWaitMs *= 2;
+    }
     // wait for the PCM output buffers to empty before proceeding with the rest of the command
     if (muteWaitMs > delayMs) {
         muteWaitMs -= delayMs;
