@@ -132,11 +132,11 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
         }
     }
 
-    if (mParent->mALSADevice->mADSPState == ADSP_UP_AFTER_SSR) {
+    if (mParent->mALSADevice->mSndCardState == SND_CARD_UP_AFTER_SSR) {
            // In-case of multiple streams only one stream will be resumed
            // after resetting mADSPState to ADSP_UP with output device routed
-           ALOGV("We are restarting after SSR - Reset ADSP state to ADSP_UP");
-           mParent->mALSADevice->mADSPState = ADSP_UP;
+           ALOGV("We are restarting after SSR - Reset card state to UP");
+           mParent->mALSADevice->mSndCardState = SND_CARD_UP;
     }
 
     //open device based on the type (LPA or Tunnel) and devices
@@ -847,9 +847,13 @@ uint32_t AudioSessionOutALSA::latency() const
 {
     // Android wants latency in milliseconds.
     uint32_t latency = mAlsaHandle->latency;
-    if ((mParent->mExtOutStream == mParent->mA2dpStream) && mParent->mExtOutStream != NULL) {
+    if ( ((mParent->mCurRxDevice & AudioSystem::DEVICE_OUT_ALL_A2DP) &&
+         (mParent->mExtOutStream == mParent->mA2dpStream)) &&
+         (mParent->mA2dpStream != NULL) ) {
         uint32_t bt_latency = mParent->mExtOutStream->get_latency(mParent->mExtOutStream);
-        latency += bt_latency*1000;
+        uint32_t proxy_latency = mParent->mALSADevice->avail_in_ms;
+        latency += bt_latency*1000 + proxy_latency*1000;
+        ALOGV("latency = %d, bt_latency = %d, proxy_latency = %d", latency, bt_latency, proxy_latency);
     }
     return USEC_TO_MSEC (latency);
 }
@@ -1061,15 +1065,27 @@ status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
         }
         param.remove(key);
     }
-    key = String8(AUDIO_PARAMETER_KEY_ADSP_STATUS);
+    key = String8(AUDIO_PARAMETER_KEY_SND_CARD_STATUS);
     if (param.get(key, value) == NO_ERROR) {
-       if (value == "ONLINE"){
+       ssize_t pos;
+       int cardNumber;
+       String8 cardStatus;
+
+       pos = value.find(",");
+       if (pos <= 0) {
+           ALOGE("%s(), invalid format %s", __func__,keyValuePairs.string());
+           return BAD_VALUE;
+       }
+
+       cardStatus.setTo(value.string(), pos);
+       cardStatus = value.string() + pos + 1;
+       if (cardStatus == "ONLINE"){
            mReachedEOS = true;
            mSkipWrite = true;
            mWriteCv.signal();
            mObserver->postEOS(1);
        }
-       else if (value == "OFFLINE") {
+       else if (cardStatus == "OFFLINE") {
            mParent->mLock.lock();
            requestAndWaitForEventThreadExit();
            mParent->mLock.unlock();

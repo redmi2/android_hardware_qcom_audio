@@ -317,12 +317,12 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
                 }
                 else
                 {
-                    if (mParent->mALSADevice->mADSPState == ADSP_UP_AFTER_SSR) {
+                    if (mParent->mALSADevice->mSndCardState == SND_CARD_UP_AFTER_SSR) {
                         ALOGD("SSR Case: Call device switch to apply AMIX controls.");
                         mHandle->module->route(mHandle, mParent->mCurRxDevice  , mParent->mode());
                         // In-case of multiple streams only one stream will be resumed
-                        // after resetting mADSPState to ADSP_UP with output device routed
-                        mParent->mALSADevice->mADSPState = ADSP_UP;
+                        // after resetting mSndCardState to SND_CARD_UP with output device routed
+                        mParent->mALSADevice->mSndCardState = SND_CARD_UP;
 
                         if(mParent->isExtOutDevice(mParent->mCurRxDevice)) {
                            ALOGV("StreamOut write - mRouteAudioToExtOut = %d ", mParent->mRouteAudioToExtOut);
@@ -482,9 +482,13 @@ uint32_t AudioStreamOutALSA::latency() const
 {
     // Android wants latency in milliseconds.
     uint32_t latency = mHandle->latency;
-    if ((mParent->mExtOutStream == mParent->mA2dpStream) && mParent->mExtOutStream != NULL) {
+    if ( ((mParent->mCurRxDevice & AudioSystem::DEVICE_OUT_ALL_A2DP) &&
+         (mParent->mExtOutStream == mParent->mA2dpStream)) &&
+         (mParent->mA2dpStream != NULL) ) {
         uint32_t bt_latency = mParent->mExtOutStream->get_latency(mParent->mExtOutStream);
-        latency += bt_latency*1000;
+        uint32_t proxy_latency = mParent->mALSADevice->avail_in_ms;
+        latency += bt_latency*1000 + proxy_latency*1000;
+        ALOGV("latency = %d, bt_latency = %d, proxy_latency = %d", latency, bt_latency, proxy_latency);
     }
 
     return USEC_TO_MSEC (latency);

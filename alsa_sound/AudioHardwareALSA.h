@@ -199,6 +199,7 @@ static int USBRECBIT_FM = (1 << 3);
 #define AFE_PROXY_SAMPLE_RATE 48000
 #define AFE_PROXY_CHANNEL_COUNT 2
 #define AFE_PROXY_PERIOD_SIZE 3072
+#define AFE_PROXY_HIGH_WATER_MARK_FRAME_COUNT 40000
 
 #define MAX_SLEEP_RETRY 100  /*  Will check 100 times before continuing */
 #define AUDIO_INIT_SLEEP_WAIT 50 /* 50 ms */
@@ -373,11 +374,11 @@ enum {
     INCALL_REC_STEREO,
 };
 
-/* ADSP States */
+/* Sound card States */
 enum {
-    ADSP_UP = 0x0,
-    ADSP_DOWN = 0x1,
-    ADSP_UP_AFTER_SSR = 0x2,
+    SND_CARD_UP = 0x0,
+    SND_CARD_DOWN = 0x1,
+    SND_CARD_UP_AFTER_SSR = 0x2,
 };
 
 /* Call States */
@@ -406,8 +407,8 @@ enum call_state {
 /* Query if a2dp  is supported */
 #define AUDIO_PARAMETER_KEY_HANDLE_A2DP_DEVICE "isA2dpDeviceSupported"
 
-/* Query ADSP Status */
-#define AUDIO_PARAMETER_KEY_ADSP_STATUS "ADSP_STATUS"
+/* Query sound card status */
+#define AUDIO_PARAMETER_KEY_SND_CARD_STATUS "SND_CARD_STATUS"
 
 /* Query if Proxy can be Opend */
 #define AUDIO_CAN_OPEN_PROXY "can_open_proxy"
@@ -518,8 +519,9 @@ public:
 #endif
     void     setSpkrProtHandle(AudioSpeakerProtection*);
 
-    int mADSPState;
+    int mSndCardState;
     int mCurDevice;
+    long avail_in_ms;
 public:
 #ifdef QCOM_WFD_ENABLED
     status_t setProxyPortChannelCount(int channels);
@@ -585,6 +587,7 @@ private:
 #endif
 
     struct snd_ctl_card_info mSndCardInfo;
+    int mSndCardNumber;
     status_t mStatus;
 
 //   ALSAHandleList  *mDeviceList;
@@ -1233,6 +1236,7 @@ protected:
     volatile bool       mExtOutThreadAlive;
     pthread_t           mExtOutThread;
     Mutex               mExtOutMutex;
+    Mutex               mExtOutMutexWrite;
     Condition           mExtOutCv;
     volatile bool       mIsExtOutEnabled;
 
