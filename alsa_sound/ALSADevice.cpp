@@ -643,6 +643,7 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
     const char **mods_list;
     use_case_t useCaseNode;
     unsigned usecase_type = 0;
+    int temp_TxACBDID;
     bool inCallDevSwitch = false;
     char *rxDevice, *txDevice, ident[70], *use_case = NULL;
     int err = 0, index, mods_size;
@@ -870,25 +871,29 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
         setFmVolume(mFmVolume);
     }
 #endif
-    ALOGD("switchDevice: mCurTxUCMDevivce %s mCurRxDevDevice %s", mCurTxUCMDevice, mCurRxUCMDevice);
+    ALOGD("switchDevice: mCurTxUCMDevice %s mCurRxDevDevice %s", mCurTxUCMDevice, mCurRxUCMDevice);
 #ifdef QCOM_ACDB_ENABLED
     /* Use speaker phone mic if in voice call using speakerphone */
-    if (((mRxACDBID == DEVICE_SPEAKER_RX_ACDB_ID) && (mTxACDBID == DEVICE_HANDSET_TX_ACDB_ID)) &&
-       ((mCallMode == AUDIO_MODE_IN_CALL) || (mCallMode == AUDIO_MODE_IN_COMMUNICATION))) {
-
-        mTxACDBID = DEVICE_SPEAKER_TX_ACDB_ID;
-    } else {
-        memset(&ident,0,sizeof(ident));
-        strlcpy(ident, "ACDBID/", sizeof(ident));
-        strlcat(ident, mCurTxUCMDevice, sizeof(ident));
-        mTxACDBID = snd_use_case_get(handle->ucMgr, ident, NULL);
-    }
+    memset(&ident,0,sizeof(ident));
+    strlcpy(ident, "ACDBID/", sizeof(ident));
+    strlcat(ident, mCurTxUCMDevice, sizeof(ident));
+    temp_TxACBDID = snd_use_case_get(handle->ucMgr, ident, NULL);
 
     memset(&ident,0,sizeof(ident));
     strlcpy(ident, "ACDBID/", sizeof(ident));
     strlcat(ident, mCurRxUCMDevice, sizeof(ident));
     mRxACDBID = snd_use_case_get(handle->ucMgr, ident, NULL);
-    ALOGD("rx_dev_id=%d, tx_dev_id=%d\n", mRxACDBID, mTxACDBID);
+
+     /* Use speaker phone mic if in voice call using speakerphone */
+    if (((mRxACDBID == DEVICE_SPEAKER_RX_ACDB_ID) || (mRxACDBID == DEVICE_SPEAKER_MONO_RX_ACDB_ID)) &&
+       (temp_TxACBDID == DEVICE_HANDSET_TX_ACDB_ID) &&
+       ((mCallMode == AUDIO_MODE_IN_CALL) || (mCallMode == AUDIO_MODE_IN_COMMUNICATION))) {
+
+        mTxACDBID = DEVICE_SPEAKER_TX_ACDB_ID;
+    } else {
+        mTxACDBID = temp_TxACBDID;
+    }
+    ALOGD("rx_ACDB_id=%d, tx_ACDB_id=%d\n", mRxACDBID, mTxACDBID);
 
     if (((devices & AudioSystem::DEVICE_IN_BUILTIN_MIC) || (devices & AudioSystem::DEVICE_IN_BACK_MIC))
         && (mInChannels == 1)) {
@@ -2971,6 +2976,7 @@ ssize_t  ALSADevice::readFromProxy(void **captureBuffer , ssize_t *bufferSize) {
         }
 
         mProxyParams.mAvail = pcm_avail(capture_handle);
+        avail_in_ms = (mProxyParams.mAvail*4)*1000/(AFE_PROXY_SAMPLE_RATE*AFE_PROXY_CHANNEL_COUNT*2);
         ALOGV("avail is = %d frames = %ld, avai_min = %d\n",\
                       mProxyParams.mAvail,  mProxyParams.mFrames,(int)capture_handle->sw_p->avail_min);
         if (mProxyParams.mAvail < capture_handle->sw_p->avail_min) {
@@ -3004,32 +3010,67 @@ ssize_t  ALSADevice::readFromProxy(void **captureBuffer , ssize_t *bufferSize) {
         *bufferSize = 0;
         return err;
     }
-    if (mProxyParams.mX.frames > mProxyParams.mAvail)
-        mProxyParams.mFrames = mProxyParams.mAvail;
-    void *data  = dst_address(capture_handle);
-    //TODO: Return a pointer to AudioHardware
-    if(mProxyParams.mCaptureBuffer == NULL)
-        mProxyParams.mCaptureBuffer =  malloc(mProxyParams.mCaptureBufferSize);
-    memcpy(mProxyParams.mCaptureBuffer, (char *)data,
-             mProxyParams.mCaptureBufferSize);
-    mProxyParams.mX.frames -= mProxyParams.mFrames;
-    capture_handle->sync_ptr->c.control.appl_ptr += mProxyParams.mFrames;
-    capture_handle->sync_ptr->flags = 0;
-    ALOGV("Calling sync_ptr for proxy after sync");
-    err = sync_ptr(capture_handle);
-    if(err == EPIPE) {
-        ALOGV("Failed in sync_ptr \n");
-        capture_handle->running = 0;
+
+    //Copy only if we have data
+    if(mProxyParams.mAvail > 0) {
+        /* if we have reached high watermark, flush data */
+        if(mProxyParams.mAvail > AFE_PROXY_HIGH_WATER_MARK_FRAME_COUNT) {
+            /* throw out everything over here */
+            ALOGE("available buffers in proxy %d has reached high water mark %d, throw it out ", mProxyParams.mAvail, AFE_PROXY_HIGH_WATER_MARK_FRAME_COUNT);
+            capture_handle->sync_ptr->c.control.appl_ptr += mProxyParams.mAvail;
+            capture_handle->sync_ptr->flags = 0;
+            err = sync_ptr(capture_handle);
+            if(err == EPIPE) {
+                ALOGV("Failed in sync_ptr \n");
+                capture_handle->running = 0;
+                err = sync_ptr(capture_handle);
+            }
+            err = FAILED_TRANSACTION;
+            *captureBuffer = NULL;
+            *bufferSize = 0;
+            return err;
+        }
+        if (mProxyParams.mX.frames > mProxyParams.mAvail) {
+            mProxyParams.mFrames = mProxyParams.mAvail;
+            ALOGE("Error mProxyParams.mFrames = %d", mProxyParams.mFrames);
+            /* Always copy only the data thats available */
+            /* case when we wake up with lesser no of bytes than 1 period */
+        } else {
+            mProxyParams.mFrames = mProxyParams.mX.frames;
+        }
+        void *data  = dst_address(capture_handle);
+        //TODO: Return a pointer to AudioHardware
+        if(mProxyParams.mCaptureBuffer == NULL)
+            mProxyParams.mCaptureBuffer =  malloc(mProxyParams.mCaptureBufferSize);
+
+        memcpy(mProxyParams.mCaptureBuffer, (char *)data,
+               mProxyParams.mFrames*2*2);
+
+        capture_handle->sync_ptr->c.control.appl_ptr += mProxyParams.mFrames;
+        capture_handle->sync_ptr->flags = 0;
+        *bufferSize = (mProxyParams.mFrames*2*2);
+        mProxyParams.mFrames -= mProxyParams.mFrames;
+        ALOGV("Calling sync_ptr for proxy after sync with MFrames is %d", mProxyParams.mFrames);
         err = sync_ptr(capture_handle);
-    }
-    if(err != NO_ERROR ) {
-        ALOGE("Error: Sync ptr end returned %d", err);
+        if(err == EPIPE) {
+            ALOGV("Failed in sync_ptr \n");
+            capture_handle->running = 0;
+            err = sync_ptr(capture_handle);
+        }
+        if(err != NO_ERROR ) {
+            ALOGE("Error: Sync ptr end returned %d", err);
+            *captureBuffer = NULL;
+            *bufferSize = 0;
+            return err;
+        }
+        *captureBuffer = mProxyParams.mCaptureBuffer;
+    } else {
+        /* If we dont have data to copy just return 0 */
         *captureBuffer = NULL;
         *bufferSize = 0;
-        return err;
+        err = FAILED_TRANSACTION;
+        ALOGE("Error Nothing copied from Proxy");
     }
-    *captureBuffer = mProxyParams.mCaptureBuffer;
-    *bufferSize = mProxyParams.mCaptureBufferSize;
     return err;
 }
 
@@ -3064,6 +3105,8 @@ status_t ALSADevice::startProxy() {
                    capture_handle->underruns++;
                    capture_handle->running = 0;
                    capture_handle->start = 0;
+                   /* sleeping for 10 ms before retrying */
+                   usleep(10000);
                    continue;
                 } else {
                    ALOGE("IGNORE - IOCTL_START failed for proxy err: %d \n", errno);

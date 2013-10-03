@@ -97,7 +97,7 @@ AudioHardwareInterface *AudioHardwareALSA::create() {
 
 AudioHardwareALSA::AudioHardwareALSA() :
     mALSADevice(0),mVoipInStreamCount(0),mVoipOutStreamCount(0),mVoipMicMute(false),
-    mVoipBitRate(0),mCallState(0),mAcdbHandle(NULL),mCsdHandle(NULL),mMicMute(0),
+    mVoipBitRate(0),mCallState(CALL_INACTIVE),mAcdbHandle(NULL),mCsdHandle(NULL),mMicMute(0),
     mVoipEvrcBitRateMin(0),mVoipEvrcBitRateMax(0)
 {
     FILE *fp;
@@ -1008,13 +1008,15 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
 
     key = String8(VSID_KEY);
     if (param.getInt(key, (int &)vsid) == NO_ERROR) {
-        mVSID = vsid;
         param.remove(key);
         key = String8(CALL_STATE_KEY);
         if (param.getInt(key, (int &)call_state) == NO_ERROR) {
             param.remove(key);
-            mCallState = call_state;
-            ALOGD("%s() vsid:%x, callstate:%x", __func__, mVSID, call_state);
+            if ((mMode == AUDIO_MODE_IN_CALL) || (call_state == CALL_ACTIVE)) {
+               mVSID = vsid;
+               mCallState = call_state;
+               ALOGD("%s() vsid:%x, callstate:%x", __func__, mVSID, call_state);
+            }
 
             if(isAnyCallActive())
                 doRouting(0, NULL);
@@ -1405,7 +1407,8 @@ status_t AudioHardwareALSA::doRouting(int device, char* useCase)
            mQchatCallState %x", device, newMode, mVoiceCallState,
           mVolteCallState, mVoice2CallState, mIsFmActive, mQchatCallState);
 
-    isRouted = routeCall(device, newMode, mVSID);
+    if (mVSID)
+       isRouted = routeCall(device, newMode, mVSID);
 
     if(!isRouted) {
 #ifdef QCOM_USBAUDIO_ENABLED
@@ -3344,6 +3347,7 @@ status_t AudioHardwareALSA::closeExtOutput(int device) {
     ALOGD("closeExtOutput");
     status_t err = NO_ERROR;
     Mutex::Autolock autolock1(mExtOutMutex);
+    Mutex::Autolock autolock2(mExtOutMutexWrite);
     if (device & AudioSystem::DEVICE_OUT_ALL_A2DP) {
         if(mExtOutStream == mA2dpStream)
             mExtOutStream = NULL;
@@ -3553,7 +3557,7 @@ void AudioHardwareALSA::extOutThreadFunc() {
     }
 
     pid_t tid  = gettid();
-    androidSetThreadPriority(tid, ANDROID_PRIORITY_AUDIO);
+    androidSetThreadPriority(tid, ANDROID_PRIORITY_URGENT_AUDIO);
     prctl(PR_SET_NAME, (unsigned long)"ExtOutThread", 0, 0, 0);
 
     int ionBufCount = 0;
@@ -3562,7 +3566,7 @@ void AudioHardwareALSA::extOutThreadFunc() {
     uint32_t bytesAvailInBuffer = 0;
     uint32_t proxyBufferTime = 0;
     void  *data;
-    int err = NO_ERROR;
+    status_t err = NO_ERROR;
     ssize_t size = 0;
     void * outbuffer= malloc(AFE_PROXY_PERIOD_SIZE);
 
@@ -3592,8 +3596,13 @@ void AudioHardwareALSA::extOutThreadFunc() {
             }
         }
         err = mALSADevice->readFromProxy(&data, &size);
-        if(err < 0) {
-           ALOGE("ALSADevice readFromProxy returned err = %d,data = %p,\
+        if(err == (status_t) FAILED_TRANSACTION) {
+            ALOGE("readFromProxy returned an error, mostly a flush or an under run continuing");
+            err = NO_ERROR;
+            continue;
+        }
+        if(err < 0  || size <= 0) {
+            ALOGE("ALSADevice readFromProxy returned err = %d,data = %p,\
                     size = %ld", err, data, size);
            continue;
         }
@@ -3625,26 +3634,26 @@ void AudioHardwareALSA::extOutThreadFunc() {
         while (err == OK && (numBytesRemaining  > 0) && !mKillExtOutThread
                 && mIsExtOutEnabled ) {
             {
-                mExtOutMutex.lock();
+                mExtOutMutexWrite.lock();
                 if(mExtOutStream != NULL ) {
                     bytesAvailInBuffer = mExtOutStream->common.get_buffer_size(&mExtOutStream->common);
                     uint32_t writeLen = bytesAvailInBuffer > numBytesRemaining ?
                                     numBytesRemaining : bytesAvailInBuffer;
                     ALOGV("Writing %d bytes to External Output ", writeLen);
                     bytesWritten = mExtOutStream->write(mExtOutStream,copyBuffer, writeLen);
+                    mExtOutMutexWrite.unlock();
                 } else {
                     //unlock the mutex before sleep
-                    mExtOutMutex.unlock();
+                    mExtOutMutexWrite.unlock();
                     ALOGV(" No External output to write  ");
                     usleep(proxyBufferTime*1000);
                     bytesWritten = numBytesRemaining;
                 }
-                mExtOutMutex.unlock();
             }
             //If the write fails make this thread sleep and let other
             //thread (eg: stopA2DP) to acquire lock to prevent a deadlock.
-            if(bytesWritten == -1 || bytesWritten == 0) {
-                ALOGV("bytesWritten = %d",bytesWritten);
+            if(bytesWritten < 0 || bytesWritten == 0) {
+                ALOGE("bytesWritten = %d",bytesWritten);
                 usleep(10000);
                 break;
             }
