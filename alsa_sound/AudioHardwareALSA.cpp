@@ -3539,7 +3539,7 @@ void AudioHardwareALSA::extOutThreadFunc() {
     }
 
     pid_t tid  = gettid();
-    androidSetThreadPriority(tid, ANDROID_PRIORITY_AUDIO);
+    androidSetThreadPriority(tid, ANDROID_PRIORITY_URGENT_AUDIO);
     prctl(PR_SET_NAME, (unsigned long)"ExtOutThread", 0, 0, 0);
 
     int ionBufCount = 0;
@@ -3548,7 +3548,7 @@ void AudioHardwareALSA::extOutThreadFunc() {
     uint32_t bytesAvailInBuffer = 0;
     uint32_t proxyBufferTime = 0;
     void  *data;
-    int err = NO_ERROR;
+    status_t err = NO_ERROR;
     ssize_t size = 0;
     void * outbuffer= malloc(AFE_PROXY_PERIOD_SIZE);
 
@@ -3578,8 +3578,13 @@ void AudioHardwareALSA::extOutThreadFunc() {
             }
         }
         err = mALSADevice->readFromProxy(&data, &size);
-        if(err < 0) {
-           ALOGE("ALSADevice readFromProxy returned err = %d,data = %p,\
+        if(err == (status_t) FAILED_TRANSACTION) {
+            ALOGE("readFromProxy returned an error, mostly a flush or an under run continuing");
+            err = NO_ERROR;
+            continue;
+        }
+        if(err < 0  || size <= 0) {
+            ALOGE("ALSADevice readFromProxy returned err = %d,data = %p,\
                     size = %ld", err, data, size);
            continue;
         }
@@ -3618,6 +3623,7 @@ void AudioHardwareALSA::extOutThreadFunc() {
                                     numBytesRemaining : bytesAvailInBuffer;
                     ALOGV("Writing %d bytes to External Output ", writeLen);
                     bytesWritten = mExtOutStream->write(mExtOutStream,copyBuffer, writeLen);
+                    mExtOutMutex.unlock();
                 } else {
                     //unlock the mutex before sleep
                     mExtOutMutex.unlock();
@@ -3625,7 +3631,6 @@ void AudioHardwareALSA::extOutThreadFunc() {
                     usleep(proxyBufferTime*1000);
                     bytesWritten = numBytesRemaining;
                 }
-                mExtOutMutex.unlock();
             }
             //If the write fails make this thread sleep and let other
             //thread (eg: stopA2DP) to acquire lock to prevent a deadlock.
