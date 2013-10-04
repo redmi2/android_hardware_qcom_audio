@@ -50,8 +50,9 @@
 // As device output for pcm is always 48Khz, the minumum
 // time comes as approx 21us.
 #define MIN_DRIFT_CORRECTION 21 // In Micorseconds
+#define ACTUAL_DRIFT_CORRECTION 20 // In Micorseconds
 #define BUFFERS_SAMPLED_FOR_DRIFT_MEASUREMENT 1000
-#define MAX_SUPPORTED_DRIFT_CORRECTION_PPM 105
+#define MAX_SUPPORTED_DRIFT_CORRECTION_PPM 100
 #define DIFF_BUFFERS 4 // Differenc between hw_ptr and appl_ptr after
                        // overflow on the capture path.
 #define COMPRE_CAPTURE_NUM_PERIODS 16
@@ -1585,7 +1586,9 @@ void AudioBroadcastStreamALSA::adjustClockThreadEntry()
     uint64_t drift_correction = 0;
     int32_t maxSamplesCorrectionPerSec = 0;
     int32_t minTimeBetweenTwoSampleCorrection = 0;
+    int32_t noOfIterationsRequired = 0;
     uint64_t timeForDriftAccumulate = 0;
+    int64_t driftInPPM = 0;
 
     if(mCaptureHandle){
          // timeForDriftAccumulate is the time required to capture
@@ -1598,12 +1601,19 @@ void AudioBroadcastStreamALSA::adjustClockThreadEntry()
 
          // For now we limit to support only MAX_SUPPORTED_DRIFT_CORRECTION_PPM of drift.
          // Now to correct 100ppm drift, it corresponds to correction of 100us/sec.
-         // Hence we need to apply MIN_DRIFT_CORRECTION(microsec) every
-         // MIN_DRIFT_CORRECTION/
-         maxSamplesCorrectionPerSec = MAX_SUPPORTED_DRIFT_CORRECTION_PPM / MIN_DRIFT_CORRECTION ;
-         minTimeBetweenTwoSampleCorrection = 1000 / maxSamplesCorrectionPerSec; // In miliSeconds
-         ALOGE("maxSamplesCorrectionPerSec %d timeBetweenTwoSampleCorrection %d ",
-                maxSamplesCorrectionPerSec, minTimeBetweenTwoSampleCorrection );
+         // Hence we need to apply ACTUAL_DRIFT_CORRECTION(microsec)
+ 
+         maxSamplesCorrectionPerSec = MAX_SUPPORTED_DRIFT_CORRECTION_PPM / ACTUAL_DRIFT_CORRECTION;
+
+         // noOfIterationsRequired is the maximum number of iterations required to apply drift correction
+         // equal to MAX_SUPPORTED_DRIFT_CORRECTION_PPM.
+         noOfIterationsRequired = (timeForDriftAccumulate/1000000) * maxSamplesCorrectionPerSec;
+
+         minTimeBetweenTwoSampleCorrection = (timeForDriftAccumulate - 2000000)/(noOfIterationsRequired * 1000);
+
+         ALOGE("maxSamplesCorrectionPerSec %d timeBetweenTwoSampleCorrection %dms noOfIterationsRequired %d",
+                maxSamplesCorrectionPerSec, minTimeBetweenTwoSampleCorrection, noOfIterationsRequired);
+
     }
     mResidueAdjustTime = 0;
  
@@ -1623,33 +1633,40 @@ void AudioBroadcastStreamALSA::adjustClockThreadEntry()
         adjust_time = timeStampOri - mEndTimeStamp + mResidueAdjustTime;
         ALOGE("timeStampOri  %lld mStartTimeStamp %lld timeForDriftAccumulate %ld", timeStampOri, mStartTimeStamp, timeForDriftAccumulate);
         ALOGE("mEndTimeStamp %lld adjust_time %lld", mEndTimeStamp, adjust_time);
+        driftInPPM = (adjust_time) / ((int64_t)timeForDriftAccumulate/1000000);
+        ALOGE("Drift is %lld ppm", driftInPPM);
         // Spread the drift correction across the next drift calucaltion period
         // Hence we apply only approx two samples of drift correction
         // in one iteration This way we reduce the probablity of noise which could be heard
         // due to drift correction.
-        mResidueAdjustTime = ((abs(adjust_time)) % MIN_DRIFT_CORRECTION);
+        mResidueAdjustTime = ((abs(adjust_time)) % ACTUAL_DRIFT_CORRECTION);
 
         if(adjust_time < 0 )
            mResidueAdjustTime *= -1;
 
-        ALOGE("mResidueAdjustTime %d", mResidueAdjustTime);
         if ( adjust_time != 0)
-           iterations = (abs(adjust_time)) / MIN_DRIFT_CORRECTION ;
+           iterations = (abs(adjust_time)) / ACTUAL_DRIFT_CORRECTION;
         else
            iterations = 0;
+        ALOGE("mResidueAdjustTime %d iterations %d", mResidueAdjustTime, iterations);
         // Sleep between two consecutive drift corrections.
         // Should be in miliseconds.
         // ((timeForDriftAccumulate - 4000000) ensure that we have enough time left
         // between appllying correction for the previous cycle and end of the current
         // Drift measurement cycle.
-        if ( iterations > 0 )
-           sleep_time = ((timeForDriftAccumulate - 4000000)/ iterations)/1000 ;
-        else {
+        if ( iterations > 0 && iterations <= noOfIterationsRequired)
+           sleep_time = ((timeForDriftAccumulate - 2000000)/ iterations)/1000 ;
+        else if ( iterations == 0){
            sleep_time = 0;
+        }
+        else{
+           ALOGE("Drfit more than 100ppm hence correcting only 100ppm error");
+           sleep_time = minTimeBetweenTwoSampleCorrection;
+           iterations = noOfIterationsRequired;
         }
 
         ALOGE("Drift correction at %dms interval", sleep_time);
-        if( sleep_time > minTimeBetweenTwoSampleCorrection ){
+        if( sleep_time >= minTimeBetweenTwoSampleCorrection ){
             for (i = 0 ; (i < iterations && !mKillAdjustClockThread); i++)
             {
                  if ( adjust_time != 0 && mPcmRxHandle ) {
@@ -1676,7 +1693,7 @@ void AudioBroadcastStreamALSA::adjustClockThreadEntry()
             }
        }
        else
-            ALOGE("Either the drift is more than 100ppm or less than min correction possible");
+            ALOGE("Drift is less than min correction possible");
     }
     ALOGE("Adjust Clock Thread dying");
 }
