@@ -2327,6 +2327,25 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         alsa_handle.rxHandle = 0;
         alsa_handle.ucMgr = mUcMgr;
         snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
+        for (it = mDeviceList.begin(); it != mDeviceList.end(); ++it) {
+            if ((!strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL,
+                 sizeof (SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL))) ||
+                (!strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL,
+                 sizeof (SND_USE_CASE_MOD_CAPTURE_VOICE_UL))) ||
+                (!strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_DL,
+                 sizeof (SND_USE_CASE_MOD_CAPTURE_VOICE_DL))) ||
+                (!strncmp(it->useCase, SND_USE_CASE_VERB_UL_REC,
+                 sizeof (SND_USE_CASE_VERB_UL_REC))) ||
+                (!strncmp(it->useCase, SND_USE_CASE_VERB_DL_REC,
+                 sizeof (SND_USE_CASE_VERB_DL_REC))) ||
+                (!strncmp(it->useCase, SND_USE_CASE_VERB_UL_DL_REC,
+                 sizeof (SND_USE_CASE_VERB_UL_DL_REC))) ||
+                (!strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC,
+                 sizeof (SND_USE_CASE_MOD_CAPTURE_MUSIC)))) {
+                ALOGE("error:Input stream already opened for voice recording");
+                return in;
+            }
+        }
         if ((use_case != NULL) && (strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
             if ((devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
                 (newMode == AUDIO_MODE_IN_CALL)) {
