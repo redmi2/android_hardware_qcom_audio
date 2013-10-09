@@ -391,10 +391,7 @@ status_t AudioStreamOutALSA::standby_l()
          return NO_ERROR;
      }
 
-    if(mHandle->handle != NULL)
-        mHandle->module->standby(mHandle);
     ALOGD("mRouteAudioToA2dp = %d", mParent->mRouteAudioToA2dp);
-
     if (mParent->mRouteAudioToA2dp) {
         ALOGD("standby-stopA2dpPlayback_l- usecase %x", mA2dpUseCase);
         status_t err = mParent->stopA2dpPlayback_l(mA2dpUseCase);
@@ -403,6 +400,10 @@ status_t AudioStreamOutALSA::standby_l()
             return err;
         }
     }
+
+    if(mHandle->handle != NULL)
+        mHandle->module->standby(mHandle);
+
     if (mPowerLock) {
         release_wake_lock ("AudioOutLock");
         mPowerLock = false;
