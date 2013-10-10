@@ -1937,7 +1937,7 @@ char* ALSADevice::getUCMDevice(uint32_t devices, alsa_handle_t *handle, char *rx
                    devices & AudioSystem::DEVICE_OUT_SPEAKER) {
             return strdup(SND_USE_CASE_DEV_PROXY_RX_SPEAKER);
         } else if (devices & AudioSystem::DEVICE_OUT_ALL_A2DP) {
-            return strdup(SND_USE_CASE_DEV_PROXY_RX);
+            return strdup(SND_USE_CASE_DEV_BT_A2DP_PROXY_RX);
         } else if (devices & AUDIO_DEVICE_OUT_ALL_USB &&
                    devices & AudioSystem::DEVICE_OUT_SPEAKER) {
             return strdup(SND_USE_CASE_DEV_PROXY_RX_SPEAKER);

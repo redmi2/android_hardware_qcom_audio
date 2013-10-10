@@ -302,6 +302,7 @@ static card_mapping_t card_mapping_list[] = {
 #define SND_USE_CASE_DEV_SSR_QUAD_MIC "SSR QMIC"
 #define SND_USE_CASE_DEV_PROXY_RX     "PROXY Rx"
 #define SND_USE_CASE_DEV_PROXY_TX     "PROXY Tx"
+#define SND_USE_CASE_DEV_BT_A2DP_PROXY_RX     "BT_A2DP PROXY Rx"
 #define SND_USE_CASE_DEV_USB_PROXY_RX     "USB PROXY Rx"
 #define SND_USE_CASE_DEV_USB_PROXY_TX     "USB PROXY Tx"
 #define SND_USE_CASE_DEV_SPDIF_SPEAKER     "SPDIF Speaker"
