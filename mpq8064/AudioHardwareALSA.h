@@ -843,6 +843,7 @@ private:
     bool                mDDFirstFrameBuffered;
     bool                mPlaybackReachedEOS;
     bool                isSessionPaused;
+    bool                mPaused;
 
     bool                mRouteAudioToA2dp;
     bool                mCaptureFromProxy;
@@ -860,6 +861,7 @@ private:
     char                *mPcmWriteTempBuffer;
     char                *mCompreWriteTempBuffer;
     uint32_t            mA2dpUseCase;
+    bool                mDevSwtReq;
 
     // ALSA device handle to route PCM 2.0 playback
     alsa_handle_t      *mPcmRxHandle;
@@ -932,6 +934,7 @@ private:
     //Timer
     pthread_t           mTimerThread;
     Mutex               mTimerMutex;
+    Condition           mTimerCv;
     int                 mTimerfd;
     bool                mTimerThreadAlive;
     bool                mKillTimerThread;
@@ -944,6 +947,9 @@ private:
     status_t            doRouting(int devices);
     status_t            pause_l();
     status_t            resume_l();
+    status_t            flush();
+    status_t            resetBufferQueue();
+    status_t            drainTunnel();
     //Capture
     void                setCaptureFlagsBasedOnConfig();
     status_t            openPCMCapturePath();
