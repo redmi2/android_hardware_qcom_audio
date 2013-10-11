@@ -886,7 +886,8 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
         mRxACDBID = snd_use_case_get(handle->ucMgr, ident, NULL);
 
         if ((mRxACDBID == DEVICE_SPEAKER_RX_ACDB_ID ||
-             mRxACDBID == DEVICE_SPEAKER_MONO_RX_ACDB_ID) &&
+             mRxACDBID == DEVICE_SPEAKER_MONO_RX_ACDB_ID ||
+             mRxACDBID == DEVICE_SPEAKER_PROTECTED_RX_ACDB_ID) &&
              mTxACDBID == DEVICE_HANDSET_TX_ACDB_ID) {
             mTxACDBID = DEVICE_SPEAKER_TX_ACDB_ID;
         }
@@ -938,7 +939,8 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
     mRxACDBID = snd_use_case_get(handle->ucMgr, ident, NULL);
 
      /* Use speaker phone mic if in voice call using speakerphone */
-    if (((mRxACDBID == DEVICE_SPEAKER_RX_ACDB_ID) || (mRxACDBID == DEVICE_SPEAKER_MONO_RX_ACDB_ID)) &&
+    if ((mRxACDBID == DEVICE_SPEAKER_RX_ACDB_ID || mRxACDBID == DEVICE_SPEAKER_MONO_RX_ACDB_ID ||
+        mRxACDBID == DEVICE_SPEAKER_PROTECTED_RX_ACDB_ID) &&
        (temp_TxACBDID == DEVICE_HANDSET_TX_ACDB_ID) &&
        ((mCallMode == AUDIO_MODE_IN_CALL) || (mCallMode == AUDIO_MODE_IN_COMMUNICATION))) {
 
