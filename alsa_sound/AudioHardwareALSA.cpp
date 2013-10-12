@@ -1014,7 +1014,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         key = String8(CALL_STATE_KEY);
         if (param.getInt(key, (int &)call_state) == NO_ERROR) {
             param.remove(key);
-            if ((mMode == AUDIO_MODE_IN_CALL) || (call_state == CALL_ACTIVE)) {
+            if (isAnyCallActive() || (call_state == CALL_ACTIVE)) {
                mVSID = vsid;
                mCallState = call_state;
                ALOGD("%s() vsid:%x, callstate:%x", __func__, mVSID, call_state);
