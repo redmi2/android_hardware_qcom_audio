@@ -837,7 +837,12 @@ uint32_t AudioSessionOutALSA::latency() const
     if ((mParent->mExtOutStream == mParent->mA2dpStream) && mParent->mExtOutStream != NULL) {
         uint32_t bt_latency = mParent->mExtOutStream->get_latency(mParent->mExtOutStream);
         latency += bt_latency*1000;
+    } else if( mParent->mCurRxDevice & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)
+               {
+        // Offsetting latency contributed by USB HAL. Latency value seen on the headset, I've tested.
+        latency += 300000;
     }
+
     return USEC_TO_MSEC (latency);
 }
 
