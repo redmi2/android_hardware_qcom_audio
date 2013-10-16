@@ -50,6 +50,7 @@ static int (*acdb_loader_get_ecrx_device)(int acdb_id);
 #define USECASE_TYPE_RX 1
 #define USECASE_TYPE_TX 2
 #define MAX_HDMI_CHANNEL_CNT 8
+#define LPA_PERIOD_COUNT 4
 
 #define AFE_PROXY_PERIOD_SIZE 3072
 // Increasing the ring buffer size in driver for 6 channel usb
@@ -548,6 +549,12 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     param_set_mask(params, SNDRV_PCM_HW_PARAM_SUBFORMAT,
                    SNDRV_PCM_SUBFORMAT_STD);
     param_set_int(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, reqBuffSize);
+
+    if ((!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER, sizeof(SND_USE_CASE_VERB_HIFI_LOW_POWER))) ||
+        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_LPA, sizeof(SND_USE_CASE_MOD_PLAY_LPA)))) {
+        param_set_int(params, SNDRV_PCM_HW_PARAM_PERIODS, LPA_PERIOD_COUNT);
+    }
+
     param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 16);
     param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS,
                    channels * 16);
