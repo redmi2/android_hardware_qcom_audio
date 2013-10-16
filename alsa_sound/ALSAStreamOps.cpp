@@ -199,8 +199,9 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
 {
     AudioParameter param = AudioParameter(keyValuePairs);
     String8 key = String8(AudioParameter::keyRouting),value;
-    int device;
+    int device, camcorder_enabled;
     status_t err = NO_ERROR;
+    int mMode = mParent->mode();
 
 #ifdef SEPERATED_AUDIO_INPUT
     String8 key_input = String8(AudioParameter::keyInputSource);
@@ -216,18 +217,32 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
     if (param.getInt(key, device) == NO_ERROR) {
         // Ignore routing if device is 0.
         if(device) {
-            ALOGD("setParameters(): keyRouting with device %#x", device);
-            if (mParent->isExtOutDevice(device)) {
-                mParent->mRouteAudioToExtOut = true;
-                ALOGD("setParameters(): ExtOutDevice device %#x", device);
-            }
-            char * usecase = (mHandle != NULL)? mHandle->useCase: NULL;
-            err = mParent->doRouting(device,usecase);
-            if(err) {
-                ALOGE("doRouting failed = %d",err);
-            } else {
-                mDevices = device;
-            }
+           //Select appropriate input device for camcorder-mode and in-call mode
+           key = String8("camcorder_mode");
+           if (param.getInt(key, camcorder_enabled) == NO_ERROR) {
+               ALOGV("setParameters(): camcorder_enabled %d, camcorder_enabled");
+              if (camcorder_enabled == 1) {
+                  if ((mMode == AudioSystem::MODE_IN_CALL) ||
+                       (mMode == AudioSystem::MODE_IN_COMMUNICATION)) {
+                       ALOGD("Ignoring routing for CAMCORDER recording while in call");
+
+                       return NO_ERROR;
+                  }
+              }
+           } else {
+               ALOGE("setParameters(): keyRouting with device2 %#x", device);
+               if (mParent->isExtOutDevice(device)) {
+                   mParent->mRouteAudioToExtOut = true;
+                   ALOGD("setParameters(): device %#x", device);
+               }
+               char * usecase = (mHandle != NULL)? mHandle->useCase: NULL;
+               err = mParent->doRouting(device,usecase);
+           }
+           if(err) {
+              ALOGE("doRouting failed = %d",err);
+           } else {
+               mDevices = device;
+           }
         } else {
             ALOGV("setParameters(): Ignore routing if device is 0");
         }
