@@ -250,6 +250,8 @@ AudioHardwareALSA::AudioHardwareALSA() :
         snd_use_case_mgr_create(&mUcMgr, "snd_soc_msm_TapanLite_SKUF", cardInfo->card);
     } else if (!strcmp((const char*)cardInfo->name, "msmsamarium-tapan-snd-card")) {
         snd_use_case_mgr_create(&mUcMgr, "snd_soc_msm_samarium_Tapan", cardInfo->card);
+    } else if (!strcmp((const char*)cardInfo->name, "msmsamarium-tapan-mtp-snd-card")) {
+        snd_use_case_mgr_create(&mUcMgr, "snd_soc_msm_samarium_Tapan_MTP", cardInfo->card);
     } else if (!strcmp((const char*)cardInfo->name, "msm8960-tabla1x-snd-card") ||
                !strcmp((const char*)cardInfo->name, "apq8064-tabla-snd-card") ||
                !strcmp((const char*)cardInfo->name, "msm8960-snd-card") ||
