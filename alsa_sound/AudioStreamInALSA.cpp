@@ -948,54 +948,63 @@ init_fail:
 // coeff array member variable
 status_t AudioStreamInALSA::readCoeffsFromFile()
 {
-    FILE    *flt1r;
-    FILE    *flt2r;
-    FILE    *flt3r;
-    FILE    *flt4r;
-    FILE    *flt1i;
-    FILE    *flt2i;
-    FILE    *flt3i;
-    FILE    *flt4i;
+    uint32_t filesOpenedSuccessfully = 0;
+    FILE    *flt1r = NULL;
+    FILE    *flt2r = NULL;
+    FILE    *flt3r = NULL;
+    FILE    *flt4r = NULL;
+    FILE    *flt1i = NULL;
+    FILE    *flt2i = NULL;
+    FILE    *flt3i = NULL;
+    FILE    *flt4i = NULL;
 
     if ( (flt1r = fopen(SURROUND_FILE_1R, "rb")) == NULL ) {
         ALOGE("Cannot open filter co-efficient file %s", SURROUND_FILE_1R);
-        return NAME_NOT_FOUND;
+        goto closeFD;
     }
+    filesOpenedSuccessfully |= 0x1;
 
     if ( (flt2r = fopen(SURROUND_FILE_2R, "rb")) == NULL ) {
         ALOGE("Cannot open filter co-efficient file %s", SURROUND_FILE_2R);
-        return NAME_NOT_FOUND;
+        goto closeFD;
     }
+    filesOpenedSuccessfully |= 0x10;
 
     if ( (flt3r = fopen(SURROUND_FILE_3R, "rb")) == NULL ) {
         ALOGE("Cannot open filter co-efficient file %s", SURROUND_FILE_3R);
-        return  NAME_NOT_FOUND;
+        goto closeFD;
     }
+    filesOpenedSuccessfully |= 0x100;
 
     if ( (flt4r = fopen(SURROUND_FILE_4R, "rb")) == NULL ) {
         ALOGE("Cannot open filter co-efficient file %s", SURROUND_FILE_4R);
-        return  NAME_NOT_FOUND;
+        goto closeFD;
     }
+    filesOpenedSuccessfully |= 0x1000;
 
     if ( (flt1i = fopen(SURROUND_FILE_1I, "rb")) == NULL ) {
         ALOGE("Cannot open filter co-efficient file %s", SURROUND_FILE_1I);
-        return NAME_NOT_FOUND;
+        goto closeFD;
     }
+    filesOpenedSuccessfully |= 0x10000;
 
     if ( (flt2i = fopen(SURROUND_FILE_2I, "rb")) == NULL ) {
         ALOGE("Cannot open filter co-efficient file %s", SURROUND_FILE_2I);
-        return NAME_NOT_FOUND;
+        goto closeFD;
     }
+    filesOpenedSuccessfully |= 0x100000;
 
     if ( (flt3i = fopen(SURROUND_FILE_3I, "rb")) == NULL ) {
         ALOGE("Cannot open filter co-efficient file %s", SURROUND_FILE_3I);
-        return NAME_NOT_FOUND;
+        goto closeFD;
     }
+    filesOpenedSuccessfully |= 0x1000000;
 
     if ( (flt4i = fopen(SURROUND_FILE_4I, "rb")) == NULL ) {
         ALOGE("Cannot open filter co-efficient file %s", SURROUND_FILE_4I);
-        return NAME_NOT_FOUND;
+        goto closeFD;
     }
+    filesOpenedSuccessfully |= 0x10000000;
     ALOGV("readCoeffsFromFile all filter files opened");
 
     for (int i=0; i<COEFF_ARRAY_SIZE; i++) {
@@ -1043,6 +1052,27 @@ status_t AudioStreamInALSA::readCoeffsFromFile()
     fclose(flt4i);
 
     return NO_ERROR;
+
+closeFD:
+
+    if(filesOpenedSuccessfully & 0x1)
+        fclose(flt1r);
+    if(filesOpenedSuccessfully & 0x10)
+        fclose(flt2r);
+    if(filesOpenedSuccessfully & 0x100)
+        fclose(flt3r);
+    if(filesOpenedSuccessfully & 0x1000)
+        fclose(flt4r);
+    if(filesOpenedSuccessfully & 0x10000)
+        fclose(flt1i);
+    if(filesOpenedSuccessfully & 0x100000)
+        fclose(flt2i);
+    if(filesOpenedSuccessfully & 0x1000000)
+        fclose(flt3i);
+    if(filesOpenedSuccessfully & 0x10000000)
+        fclose(flt4i);
+
+    return NAME_NOT_FOUND;
 }
 #endif
 
