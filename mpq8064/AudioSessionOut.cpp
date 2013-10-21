@@ -255,12 +255,12 @@ status_t AudioSessionOutALSA::start()
                         ALOGVV("baseDelay = %lld\n", baseDelay);
                         if (mRxHandleBaseTime[i] == ULLONG_MAX) {
                             // populate basetime if dirty, and handle started(timestamp>0)
-                            if (tstamp.timestamp > 0 && i > 0) {
+                            if (i > 0) {
                                 mRxHandleBaseTime[i] = delay[i-1] - tstamp.timestamp;
                                 baseDelay = mRxHandleBaseTime[i];
                             } else {
                                 ALOGW("improper basetime for handle[%d], time %lld\n",
-                                                                     i, tstamp.timestamp);
+                                        i, tstamp.timestamp);
                                 baseDelay = 0;
                             }
                         }
@@ -278,7 +278,7 @@ status_t AudioSessionOutALSA::start()
         for(int i = 0; i < mNumRxHandlesActive; i++) {
             if(mRxHandle[i] && mRxHandle[i]->handle &&
                     mRxHandleRouteFormat[i] != ROUTE_DSP_TRANSCODED_COMPRESSED) {
-                ALOGVV("Apply a delay of %lld ms", delay[i]/1000);
+                ALOGD("Apply a delay of %lld ms", delay[i]/1000);
                 if (ioctl(mRxHandle[i]->handle->fd, SNDRV_COMPRESS_SET_START_DELAY, &delay[i]))
                     ALOGE("Setting delay failed for use case %s", mRxHandle[i]->useCase);
                 if ((ret = ioctl(mRxHandle[i]->handle->fd, SNDRV_PCM_IOCTL_PAUSE,0)) < 0) {
