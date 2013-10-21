@@ -1547,6 +1547,7 @@ status_t AudioHardwareALSA::closeA2dpOutput()
 {
     ALOGD("closeA2dpOutput");
     Mutex::Autolock autolock1(mA2dpMutex);
+    Mutex::Autolock autolock(mA2dpWriteMutex);
 
     if(!mA2dpDevice){
         ALOGE("No Aactive A2dp output found");
@@ -1654,14 +1655,16 @@ void AudioHardwareALSA::a2dpThreadFunc() {
         while (err == OK && (numBytesRemaining  > 0) && !mKillA2DPThread
                 && mIsA2DPEnabled) {
             {
-                Mutex::Autolock autolock1(mA2dpMutex);
+                mA2dpWriteMutex.lock();
                 if(mA2dpStream != NULL  && mIsA2DPSuspended == false && mA2DPActiveUseCases!=0) {
                     bytesAvailInBuffer = mA2dpStream->common.get_buffer_size(&mA2dpStream->common);
                     uint32_t writeLen = bytesAvailInBuffer > numBytesRemaining ?
                     numBytesRemaining : bytesAvailInBuffer;
                     ALOGD("Writing %d bytes to A2DP ", writeLen);
                     bytesWritten = mA2dpStream->write(mA2dpStream,copyBuffer, writeLen);
+                    mA2dpWriteMutex.unlock();
                 } else {
+                    mA2dpWriteMutex.unlock();
                     ALOGW("No valid External output to write");
                     ALOGW(":mA2dpStream= %p, mIsA2DPSuspended=%d, mA2DPActiveUseCases=%x",
                                           mA2dpStream, mIsA2DPSuspended, mA2DPActiveUseCases);

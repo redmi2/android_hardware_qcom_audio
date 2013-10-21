@@ -1190,7 +1190,7 @@ void AudioSessionOutALSA::updateDecodeTypeAndRoutingStates()
                     mDecodeFormatDevices &= ~(mDevices &
                                               ~(AudioSystem::DEVICE_OUT_SPDIF |
                                                 AudioSystem::DEVICE_OUT_AUX_DIGITAL));
-                    mDecodeMCHFormatDevices |= ~(mDevices &
+                    mDecodeMCHFormatDevices |= (mDevices &
                                                  ~(AudioSystem::DEVICE_OUT_SPDIF |
                                                    AudioSystem::DEVICE_OUT_AUX_DIGITAL));
                     break;
