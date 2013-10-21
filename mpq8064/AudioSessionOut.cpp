@@ -465,7 +465,13 @@ status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
     String8 keyResume = String8(RESUME_DEVICES_KEY);
     String8 value;
     int device;
-    if (param.getInt(key, device) == NO_ERROR && device) {
+    if (param.getInt(key, device) == NO_ERROR) {
+        // if session is paused and the HDMI device is connected, deroute the
+        // HDMI as the device needs to be closed in case the HDMI is disconnected in
+        // between the pause.
+        if(device == 0 && (mDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL))
+            device = mDevices & ~AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+
         // Ignore routing if device is 0.
         if(device) {
             Mutex::Autolock autoLock(mControlLock);
