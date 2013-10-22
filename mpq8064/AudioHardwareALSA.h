@@ -1591,6 +1591,7 @@ protected:
     Condition           mA2dpCv;
     volatile bool       mIsA2DPEnabled;
     volatile bool       mIsA2DPSuspended;
+    Mutex               mA2dpWriteMutex;
 
     enum {
       USECASE_NONE = 0x00,
