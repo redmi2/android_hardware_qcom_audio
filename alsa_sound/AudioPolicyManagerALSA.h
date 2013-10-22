@@ -162,6 +162,8 @@ private:
 #ifdef RESOURCE_MANAGER
         void checkAndSuspendOutputs();
         void checkAndRestoreOutputs();
+        void clearComboDevice(routing_strategy &strategy,
+                                 audio_devices_t &device);
 #endif
 };
 };

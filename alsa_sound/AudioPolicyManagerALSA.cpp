@@ -1898,6 +1898,10 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
 
             // device is DEVICE_OUT_SPEAKER if we come from case STRATEGY_SONIFICATION or
             // STRATEGY_ENFORCED_AUDIBLE, AUDIO_DEVICE_NONE otherwise
+#ifdef RESOURCE_MANAGER
+            clearComboDevice(strategy, device2);
+#endif
+
             device |= device2;
             if (!device) {
                 device = mDefaultOutputDevice;
@@ -2457,6 +2461,34 @@ void AudioPolicyManager::checkAndRestoreOutputs() {
         }
         ALOGD("restore Output");
         mpClientInterface->restoreOutput(mOutputs.keyAt(i));
+    }
+}
+
+void AudioPolicyManager::clearComboDevice(routing_strategy &strategy, audio_devices_t &device) {
+
+    if(strategy == STRATEGY_ENFORCED_AUDIBLE ||
+        strategy == STRATEGY_SONIFICATION) {
+
+        switch(device) {
+            case AUDIO_DEVICE_OUT_BLUETOOTH_A2DP:
+            case AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES:
+            case AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER:
+            case AUDIO_DEVICE_OUT_USB_ACCESSORY:
+            case AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET:
+            case AUDIO_DEVICE_OUT_USB_DEVICE:
+            case AUDIO_DEVICE_OUT_DGTL_DOCK_HEADSET:
+            case AUDIO_DEVICE_OUT_AUX_DIGITAL:
+            case AUDIO_DEVICE_OUT_FM_TX:
+            case AUDIO_DEVICE_OUT_PROXY:
+                ALOGW("clearComboDevice - No Combo device use case  with ULL\
+                    for device with two differnet backends");
+                device = mAvailableOutputDevices & ~device;
+                break;
+            default:
+                ALOGV("Combo device supported: Device that shares same\
+                    backend = %d", device);
+                break;
+        }
     }
 }
 #endif
