@@ -1984,6 +1984,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
                }
           } else {
               ALOGV("Invalid incall music usecase, return NULL");
+              free(use_case);
               return NULL;
           }
 #endif
@@ -2344,6 +2345,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                 ALOGD("openInputStream: into incall recording, channels %d", *channels);
 
                 if ((!sessionVsid) && (mExternalModem == false)) {
+                    free(use_case);
                     return NULL;
                 }
                 mIncallMode = *channels;

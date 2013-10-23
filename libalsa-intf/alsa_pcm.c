@@ -1055,6 +1055,9 @@ int pcm_set_channel_map(struct pcm *pcm, struct mixer *mixer,
                 sprintf(set_values[i],"%d",chmap[i]);
             } else {
                 ALOGE("memory allocation for set channel map failed");
+                while(i > 0) {
+                    free(set_values[--i]);
+                }
                 return -1;
             }
         }
