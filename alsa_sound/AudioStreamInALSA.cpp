@@ -604,7 +604,8 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
             else {
                 read += static_cast<ssize_t>((period_size));
                 read_pending -= period_size;
-                if (mParent->mMicMute || mParent->mVoipMicMute) {
+                if ((mParent->mMicMute || mParent->mVoipMicMute) &&
+                    !(mParent->mIncallMode & AUDIO_CHANNEL_IN_VOICE_DNLINK)) {
                     memset(buffer, 0, period_size);
                 }
                 buffer += period_size;
