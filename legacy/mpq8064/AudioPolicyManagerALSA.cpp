@@ -163,7 +163,7 @@ status_t AudioPolicyManager::setDeviceConnectionState(AudioSystem::audio_devices
             }
         }
 
-        updateDeviceForStrategy();
+        updateDevicesAndOutputs();
 
         if (state == AudioSystem::DEVICE_STATE_AVAILABLE &&
             AudioSystem::isA2dpDevice(device) &&
@@ -314,7 +314,7 @@ void AudioPolicyManager::setPhoneState(int state)
     newDevice = getNewDevice(mPrimaryOutput, false /*fromCache*/);
     checkA2dpSuspend();
     checkOutputForAllStrategies();
-    updateDeviceForStrategy();
+    updateDevicesAndOutputs();
 
     AudioOutputDescriptor *hwOutputDesc = mOutputs.valueFor(mPrimaryOutput);
 
@@ -416,7 +416,7 @@ void AudioPolicyManager::setForceUse(AudioSystem::force_use usage, AudioSystem::
     // check for device and output changes triggered by new force usage
     checkA2dpSuspend();
     checkOutputForAllStrategies();
-    updateDeviceForStrategy();
+    updateDevicesAndOutputs();
     for (size_t i = 0; i < mOutputs.size(); i++) {
         audio_io_handle_t output = mOutputs.keyAt(i);
         audio_devices_t newDevice = getNewDevice(output, true /*fromCache*/);
@@ -1276,7 +1276,7 @@ void AudioPolicyManager::handleNotificationRoutingForStream(AudioSystem::stream_
     switch(stream) {
     case AudioSystem::MUSIC:
         checkOutputForStrategy(STRATEGY_SONIFICATION_RESPECTFUL);
-        updateDeviceForStrategy();
+        updateDevicesAndOutputs();
         break;
     default:
         break;
