@@ -63,6 +63,8 @@ ALSAStreamOps::~ALSAStreamOps()
         }
         mParent->mVoipMicMute = 0;
         mParent->mVoipBitRate = 0;
+        mParent->mVoipEvrcBitRateMin = 0;
+        mParent->mVoipEvrcBitRateMax = 0;
     }
     close();
 
@@ -215,22 +217,21 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
 
     if (param.getInt(key, device) == NO_ERROR) {
         // Ignore routing if device is 0.
-        ALOGD("setParameters(): keyRouting with device 0x%x", device);
         if(device) {
             ALOGD("setParameters(): keyRouting with device %#x", device);
             if (mParent->isExtOutDevice(device)) {
                 mParent->mRouteAudioToExtOut = true;
-                ALOGD("setParameters(): device %#x", device);
+                ALOGD("setParameters(): ExtOutDevice device %#x", device);
             }
-            err = mParent->doRouting(device);
+            char * usecase = (mHandle != NULL)? mHandle->useCase: NULL;
+            err = mParent->doRouting(device,usecase);
             if(err) {
                 ALOGE("doRouting failed = %d",err);
-            }
-            else {
+            } else {
                 mDevices = device;
             }
         } else {
-            ALOGE("must not change mDevices to 0");
+            ALOGV("setParameters(): Ignore routing if device is 0");
         }
         param.remove(key);
     }
@@ -536,6 +537,8 @@ void ALSAStreamOps::close()
        (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP, strlen(SND_USE_CASE_MOD_PLAY_VOIP)))) {
        mParent->mVoipMicMute = false;
        mParent->mVoipBitRate = 0;
+       mParent->mVoipEvrcBitRateMin = 0;
+       mParent->mVoipEvrcBitRateMax = 0;
        mParent->mVoipInStreamCount = 0;
        mParent->mVoipOutStreamCount = 0;
     }

@@ -482,9 +482,27 @@ long pcm_avail(struct pcm *pcm)
      }
 }
 
+void appl_pt_forward(struct pcm *pcm)
+{
+	struct snd_pcm_sync_ptr *sync_ptr = pcm->sync_ptr;
+	snd_pcm_uframes_t appl_ptr = sync_ptr->c.control.appl_ptr;
+
+	if (appl_ptr >= pcm->sw_p->boundary) {
+		appl_ptr -= pcm->sw_p->boundary;
+		ALOGE("appl_ptr %ld set to ld",
+		sync_ptr->c.control.appl_ptr, appl_ptr);
+		sync_ptr->c.control.appl_ptr = appl_ptr;
+	}
+}
+
+
 int sync_ptr(struct pcm *pcm)
 {
     int err;
+
+    if (pcm->flags & PCM_MMAP)
+	appl_pt_forward(pcm);
+
     err = ioctl(pcm->fd, SNDRV_PCM_IOCTL_SYNC_PTR, pcm->sync_ptr);
     if (err < 0) {
         err = errno;
@@ -876,8 +894,10 @@ static int disable_timer(struct pcm *pcm) {
 
 int pcm_close(struct pcm *pcm)
 {
-    if (pcm == &bad_pcm)
+    if ((pcm == &bad_pcm) || (pcm == NULL)) {
+        ALOGE("pcm_close invalid pcm handle:%p",pcm);
         return 0;
+    }
 
     if (pcm->flags & PCM_MMAP) {
         disable_timer(pcm);
@@ -943,7 +963,7 @@ struct pcm *pcm_open(unsigned flags, char *device)
         strlcat(dname, "D", (sizeof("D")+strlen(dname)));
         tmp = device+5;
         pcm->device_no = atoi(tmp);
-	/* should be safe to assume pcm dev ID never exceed 99 */
+    /* should be safe to assume pcm dev ID never exceed 99 */
         if (pcm->device_no > 9)
             strlcat(dname, tmp, (3+strlen(dname)));
         else
@@ -957,7 +977,7 @@ struct pcm *pcm_open(unsigned flags, char *device)
         strlcat(dname, "D", (sizeof("D")+strlen(dname)));
         tmp = device+5;
         pcm->device_no = atoi(tmp);
-	/* should be safe to assume pcm dev ID never exceed 99 */
+    /* should be safe to assume pcm dev ID never exceed 99 */
         if (pcm->device_no > 9)
             strlcat(dname, tmp, (3+strlen(dname)));
         else
