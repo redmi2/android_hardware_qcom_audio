@@ -50,6 +50,7 @@ static int (*acdb_loader_get_ecrx_device)(int acdb_id);
 #define USECASE_TYPE_RX 1
 #define USECASE_TYPE_TX 2
 #define MAX_HDMI_CHANNEL_CNT 8
+#define LPA_PERIOD_COUNT 4
 
 #define AFE_PROXY_PERIOD_SIZE 3072
 // Increasing the ring buffer size in driver for 6 channel usb
@@ -58,8 +59,8 @@ static int (*acdb_loader_get_ecrx_device)(int acdb_id);
 #define AFE_PROXY_PERIOD_COUNT 32
 #define KILL_A2DP_THREAD 1
 #define SIGNAL_A2DP_THREAD 2
-#define ADSP_UP_CHK_TRIES 5
-#define ADSP_UP_CHK_SLEEP 1*1000*1000
+#define SND_CARD_UP_CHK_TRIES 5
+#define SND_CARD_UP_CHK_SLEEP 1*1000*1000
 
 #define MAX_VOL_INDEX 5
 #define MIN_VOL_INDEX 0
@@ -89,19 +90,21 @@ ALSADevice::ALSADevice() {
 #ifdef QCOM_WFD_ENABLED
     mWFDChannelCap = 2;
 #endif
-    mADSPState = ADSP_UP;
+    mSndCardState = SND_CARD_UP;
     mBtscoSamplerate = 8000;
     mCallMode = AUDIO_MODE_NORMAL;
     mInChannels = 0;
     mTxACDBID = 0;
     mRxACDBID = 0;
     mIsFmEnabled = false;
+    mCurDevice = 0;
     //Initialize fm volume to value corresponding to unity volume
     mFmVolume = lrint((0.0 * 0x2000) + 0.5);
     char value[128], platform[128], baseband[128];
 
     mStatus = OK;
     mMixer = NULL;
+    mSndCardNumber = -1;
 
     property_get("persist.audio.handset.mic",value,"0");
     strlcpy(mMicType, value, sizeof(mMicType));
@@ -201,9 +204,11 @@ ALSADevice::ALSADevice() {
     if (!mMixer) {
         ALOGE("Could not find a valid sound card");
         mStatus = NO_INIT;
+    } else {
+        mSndCardNumber = i;
     }
 
-    ALOGD("ALSA module opened");
+    ALOGD("ALSA module opened, mSndCardNumber %d", mSndCardNumber);
 }
 
 //static int s_device_close(hw_device_t* device)
@@ -544,6 +549,12 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     param_set_mask(params, SNDRV_PCM_HW_PARAM_SUBFORMAT,
                    SNDRV_PCM_SUBFORMAT_STD);
     param_set_int(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, reqBuffSize);
+
+    if ((!strncmp(handle->useCase, SND_USE_CASE_VERB_HIFI_LOW_POWER, sizeof(SND_USE_CASE_VERB_HIFI_LOW_POWER))) ||
+        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_LPA, sizeof(SND_USE_CASE_MOD_PLAY_LPA)))) {
+        param_set_int(params, SNDRV_PCM_HW_PARAM_PERIODS, LPA_PERIOD_COUNT);
+    }
+
     param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 16);
     param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS,
                    channels * 16);
@@ -640,6 +651,7 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
     const char **mods_list;
     use_case_t useCaseNode;
     unsigned usecase_type = 0;
+    int temp_TxACBDID;
     bool inCallDevSwitch = false;
     char *rxDevice, *txDevice, ident[70], *use_case = NULL;
     int err = 0, index, mods_size;
@@ -774,7 +786,7 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
     mods_size = snd_use_case_get_list(handle->ucMgr, "_enamods", &mods_list);
     if (rxDevice != NULL) {
         if ((strncmp(mCurRxUCMDevice, "None", 4)) &&
-            ((mADSPState == ADSP_UP_AFTER_SSR) ||
+            ((mSndCardState == SND_CARD_UP_AFTER_SSR) ||
              (strncmp(rxDevice, mCurRxUCMDevice, MAX_STR_LEN)) || (inCallDevSwitch == true))) {
             if ((use_case != NULL) && (strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
                 strlen(SND_USE_CASE_VERB_INACTIVE)))) {
@@ -802,7 +814,7 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
     }
     if (txDevice != NULL) {
         if ((strncmp(mCurTxUCMDevice, "None", 4)) &&
-            ((mADSPState == ADSP_UP_AFTER_SSR) ||
+            ((mSndCardState == SND_CARD_UP_AFTER_SSR) ||
              (strncmp(txDevice, mCurTxUCMDevice, MAX_STR_LEN)) || (inCallDevSwitch == true))) {
             if ((use_case != NULL) && (strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
                 strlen(SND_USE_CASE_VERB_INACTIVE)))) {
@@ -867,25 +879,29 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
         setFmVolume(mFmVolume);
     }
 #endif
-    ALOGD("switchDevice: mCurTxUCMDevivce %s mCurRxDevDevice %s", mCurTxUCMDevice, mCurRxUCMDevice);
+    ALOGD("switchDevice: mCurTxUCMDevice %s mCurRxDevDevice %s", mCurTxUCMDevice, mCurRxUCMDevice);
 #ifdef QCOM_ACDB_ENABLED
     /* Use speaker phone mic if in voice call using speakerphone */
-    if (((mRxACDBID == DEVICE_SPEAKER_RX_ACDB_ID) && (mTxACDBID == DEVICE_HANDSET_TX_ACDB_ID)) &&
-       ((mCallMode == AUDIO_MODE_IN_CALL) || (mCallMode == AUDIO_MODE_IN_COMMUNICATION))) {
-
-        mTxACDBID = DEVICE_SPEAKER_TX_ACDB_ID;
-    } else {
-        memset(&ident,0,sizeof(ident));
-        strlcpy(ident, "ACDBID/", sizeof(ident));
-        strlcat(ident, mCurTxUCMDevice, sizeof(ident));
-        mTxACDBID = snd_use_case_get(handle->ucMgr, ident, NULL);
-    }
+    memset(&ident,0,sizeof(ident));
+    strlcpy(ident, "ACDBID/", sizeof(ident));
+    strlcat(ident, mCurTxUCMDevice, sizeof(ident));
+    temp_TxACBDID = snd_use_case_get(handle->ucMgr, ident, NULL);
 
     memset(&ident,0,sizeof(ident));
     strlcpy(ident, "ACDBID/", sizeof(ident));
     strlcat(ident, mCurRxUCMDevice, sizeof(ident));
     mRxACDBID = snd_use_case_get(handle->ucMgr, ident, NULL);
-    ALOGD("rx_dev_id=%d, tx_dev_id=%d\n", mRxACDBID, mTxACDBID);
+
+     /* Use speaker phone mic if in voice call using speakerphone */
+    if (((mRxACDBID == DEVICE_SPEAKER_RX_ACDB_ID) || (mRxACDBID == DEVICE_SPEAKER_MONO_RX_ACDB_ID)) &&
+       (temp_TxACBDID == DEVICE_HANDSET_TX_ACDB_ID) &&
+       ((mCallMode == AUDIO_MODE_IN_CALL) || (mCallMode == AUDIO_MODE_IN_COMMUNICATION))) {
+
+        mTxACDBID = DEVICE_SPEAKER_TX_ACDB_ID;
+    } else {
+        mTxACDBID = temp_TxACBDID;
+    }
+    ALOGD("rx_ACDB_id=%d, tx_ACDB_id=%d\n", mRxACDBID, mTxACDBID);
 
     if (((devices & AudioSystem::DEVICE_IN_BUILTIN_MIC) || (devices & AudioSystem::DEVICE_IN_BACK_MIC))
         && (mInChannels == 1)) {
@@ -955,7 +971,7 @@ status_t ALSADevice::init(alsa_device_t *module, ALSAHandleList &list)
 status_t ALSADevice::open(alsa_handle_t *handle)
 {
     char *devName = NULL;
-    unsigned flags = 0, maxTries = ADSP_UP_CHK_TRIES;
+    unsigned flags = 0, maxTries = SND_CARD_UP_CHK_TRIES;
     int err = NO_ERROR;
 
     mDevChannelCap = 2;
@@ -971,17 +987,17 @@ status_t ALSADevice::open(alsa_handle_t *handle)
     // is not complete.
     // Fix me: USB/proxy/a2dp
 
-    ALOGV("mADSPState: %d", mADSPState);
-    while(mADSPState == ADSP_DOWN)
+    ALOGV("mSndCardState: %d", mSndCardState);
+    while(mSndCardState == SND_CARD_DOWN)
     {
        if(maxTries--)
        {
-          ALOGD("ADSP is not UP! Sleep for 1 sec, tries: %d.", maxTries);
-          usleep(ADSP_UP_CHK_SLEEP);
+          ALOGD("Sound card is not UP! Sleep for 1 sec, tries: %d.", maxTries);
+          usleep(SND_CARD_UP_CHK_SLEEP);
        }
        else
        {
-          ALOGE("Error opening device! ADSP is not UP!");
+          ALOGE("Error opening device! Sound card is not UP!");
           return NO_INIT;
        }
     }
@@ -2468,19 +2484,64 @@ void ALSADevice::setVoipConfig(int mode, int rate)
 
     setValues[1] = (char*)malloc(8*sizeof(char));
     if (setValues[1] == NULL) {
-          free(setValues);
           free(setValues[0]);
+          free(setValues);
           return;
     }
 
-    sprintf(setValues[0], "%d",mode);
-    sprintf(setValues[1], "%d",rate);
+    snprintf(setValues[0], (4*sizeof(char)), "%d", mode);
+    snprintf(setValues[1], (8*sizeof(char)), "%d", rate);
 
     setMixerControlExt("Voip Mode Rate Config", 2, setValues);
-    free(setValues[1]);
+
     free(setValues[0]);
+    free(setValues[1]);
     free(setValues);
     return;
+}
+
+void ALSADevice::setVoipEvrcMinMaxRate(int minRate, int maxRate)
+{
+    char** setValues;
+    ALOGD("setVoipEvrcMinMaxRate(): minRate %d, maxRate %d", minRate, maxRate);
+
+    setValues = (char**)malloc(2*sizeof(char*));
+    if (setValues == NULL) {
+          return;
+    }
+    setValues[0] = (char*)malloc(8*sizeof(char));
+    if (setValues[0] == NULL) {
+          free(setValues);
+          return;
+    }
+
+    setValues[1] = (char*)malloc(8*sizeof(char));
+    if (setValues[1] == NULL) {
+          free(setValues[0]);
+          free(setValues);
+          return;
+    }
+
+    snprintf(setValues[0], (8*sizeof(char)), "%d", minRate);
+    snprintf(setValues[1], (8*sizeof(char)), "%d", maxRate);
+
+    setMixerControlExt("Voip Evrc Min Max Rate Config", 2, setValues);
+
+    free(setValues[0]);
+    free(setValues[1]);
+    free(setValues);
+    return;
+}
+
+void ALSADevice::enableVoipDtx(bool enable)
+{
+    status_t err = NO_ERROR;
+
+    ALOGD("enableVoipDtx(): enable=%d", enable);
+
+    err = setMixerControl("Voip Dtx Mode", enable, 0);
+    if (err != NO_ERROR)
+        ALOGE("enableVoipDtx(): enable DTX failed");
 }
 
 status_t ALSADevice::setVocSessionId(uint32_t sessionId)
@@ -2923,6 +2984,7 @@ ssize_t  ALSADevice::readFromProxy(void **captureBuffer , ssize_t *bufferSize) {
         }
 
         mProxyParams.mAvail = pcm_avail(capture_handle);
+        avail_in_ms = (mProxyParams.mAvail*4)*1000/(AFE_PROXY_SAMPLE_RATE*AFE_PROXY_CHANNEL_COUNT*2);
         ALOGV("avail is = %d frames = %ld, avai_min = %d\n",\
                       mProxyParams.mAvail,  mProxyParams.mFrames,(int)capture_handle->sw_p->avail_min);
         if (mProxyParams.mAvail < capture_handle->sw_p->avail_min) {
@@ -2956,32 +3018,67 @@ ssize_t  ALSADevice::readFromProxy(void **captureBuffer , ssize_t *bufferSize) {
         *bufferSize = 0;
         return err;
     }
-    if (mProxyParams.mX.frames > mProxyParams.mAvail)
-        mProxyParams.mFrames = mProxyParams.mAvail;
-    void *data  = dst_address(capture_handle);
-    //TODO: Return a pointer to AudioHardware
-    if(mProxyParams.mCaptureBuffer == NULL)
-        mProxyParams.mCaptureBuffer =  malloc(mProxyParams.mCaptureBufferSize);
-    memcpy(mProxyParams.mCaptureBuffer, (char *)data,
-             mProxyParams.mCaptureBufferSize);
-    mProxyParams.mX.frames -= mProxyParams.mFrames;
-    capture_handle->sync_ptr->c.control.appl_ptr += mProxyParams.mFrames;
-    capture_handle->sync_ptr->flags = 0;
-    ALOGV("Calling sync_ptr for proxy after sync");
-    err = sync_ptr(capture_handle);
-    if(err == EPIPE) {
-        ALOGV("Failed in sync_ptr \n");
-        capture_handle->running = 0;
+
+    //Copy only if we have data
+    if(mProxyParams.mAvail > 0) {
+        /* if we have reached high watermark, flush data */
+        if(mProxyParams.mAvail > AFE_PROXY_HIGH_WATER_MARK_FRAME_COUNT) {
+            /* throw out everything over here */
+            ALOGE("available buffers in proxy %d has reached high water mark %d, throw it out ", mProxyParams.mAvail, AFE_PROXY_HIGH_WATER_MARK_FRAME_COUNT);
+            capture_handle->sync_ptr->c.control.appl_ptr += mProxyParams.mAvail;
+            capture_handle->sync_ptr->flags = 0;
+            err = sync_ptr(capture_handle);
+            if(err == EPIPE) {
+                ALOGV("Failed in sync_ptr \n");
+                capture_handle->running = 0;
+                err = sync_ptr(capture_handle);
+            }
+            err = FAILED_TRANSACTION;
+            *captureBuffer = NULL;
+            *bufferSize = 0;
+            return err;
+        }
+        if (mProxyParams.mX.frames > mProxyParams.mAvail) {
+            mProxyParams.mFrames = mProxyParams.mAvail;
+            ALOGE("Error mProxyParams.mFrames = %d", mProxyParams.mFrames);
+            /* Always copy only the data thats available */
+            /* case when we wake up with lesser no of bytes than 1 period */
+        } else {
+            mProxyParams.mFrames = mProxyParams.mX.frames;
+        }
+        void *data  = dst_address(capture_handle);
+        //TODO: Return a pointer to AudioHardware
+        if(mProxyParams.mCaptureBuffer == NULL)
+            mProxyParams.mCaptureBuffer =  malloc(mProxyParams.mCaptureBufferSize);
+
+        memcpy(mProxyParams.mCaptureBuffer, (char *)data,
+               mProxyParams.mFrames*2*2);
+
+        capture_handle->sync_ptr->c.control.appl_ptr += mProxyParams.mFrames;
+        capture_handle->sync_ptr->flags = 0;
+        *bufferSize = (mProxyParams.mFrames*2*2);
+        mProxyParams.mFrames -= mProxyParams.mFrames;
+        ALOGV("Calling sync_ptr for proxy after sync with MFrames is %d", mProxyParams.mFrames);
         err = sync_ptr(capture_handle);
-    }
-    if(err != NO_ERROR ) {
-        ALOGE("Error: Sync ptr end returned %d", err);
+        if(err == EPIPE) {
+            ALOGV("Failed in sync_ptr \n");
+            capture_handle->running = 0;
+            err = sync_ptr(capture_handle);
+        }
+        if(err != NO_ERROR ) {
+            ALOGE("Error: Sync ptr end returned %d", err);
+            *captureBuffer = NULL;
+            *bufferSize = 0;
+            return err;
+        }
+        *captureBuffer = mProxyParams.mCaptureBuffer;
+    } else {
+        /* If we dont have data to copy just return 0 */
         *captureBuffer = NULL;
         *bufferSize = 0;
-        return err;
+        err = FAILED_TRANSACTION;
+        ALOGE("Error Nothing copied from Proxy");
     }
-    *captureBuffer = mProxyParams.mCaptureBuffer;
-    *bufferSize = mProxyParams.mCaptureBufferSize;
     return err;
 }
 
@@ -3016,6 +3113,8 @@ status_t ALSADevice::startProxy() {
                    capture_handle->underruns++;
                    capture_handle->running = 0;
                    capture_handle->start = 0;
+                   /* sleeping for 10 ms before retrying */
+                   usleep(10000);
                    continue;
                 } else {
                    ALOGE("IGNORE - IOCTL_START failed for proxy err: %d \n", errno);
@@ -3032,7 +3131,7 @@ status_t ALSADevice::startProxy() {
            break;
        }
    }
-   ALOGD("startProxy - Proxy started");
+   ALOGV("startProxy - Proxy started");
    capture_handle->start = 1;
    capture_handle->sync_ptr->flags = SNDRV_PCM_SYNC_PTR_APPL |
                SNDRV_PCM_SYNC_PTR_AVAIL_MIN;

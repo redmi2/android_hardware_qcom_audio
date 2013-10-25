@@ -322,7 +322,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                 } else  if (!strcmp(mHandle->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC)) {
                     strlcpy(mHandle->useCase, SND_USE_CASE_VERB_HIFI_REC, sizeof(SND_USE_CASE_VERB_HIFI_REC));
                 } else {
-                    ALOGE("No change in usecase = %d", mHandle->useCase);
+                    ALOGE("No change in usecase = %s", mHandle->useCase);
                 }
             }
         }
@@ -566,18 +566,20 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
                     mHandle->handle = NULL;
                     if((!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL, strlen(SND_USE_CASE_VERB_IP_VOICECALL))) ||
                     (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP, strlen(SND_USE_CASE_MOD_PLAY_VOIP)))) {
-                        pcm_close(mHandle->rxHandle);
-                        mHandle->rxHandle = NULL;
-                        mHandle->module->startVoipCall(mHandle);
+                        if (mHandle->rxHandle) {
+                            pcm_close(mHandle->rxHandle);
+                            mHandle->rxHandle = NULL;
+                            mHandle->module->startVoipCall(mHandle);
+                        }
                     }
                     else
                     {
-                        if (mParent->mALSADevice->mADSPState == ADSP_UP_AFTER_SSR) {
+                        if (mParent->mALSADevice->mSndCardState == SND_CARD_UP_AFTER_SSR) {
                             ALOGD("SSR Case: Call device switch to apply AMIX controls.");
                             mHandle->module->route(mHandle, mDevices , mParent->mode());
                             // In-case of multiple streams only one stream will be resumed
-                            // after resetting mADSPState to ADSP_UP with output device routed
-                            mParent->mALSADevice->mADSPState = ADSP_UP;
+                            // after resetting mSndCardState to SND_CARD_UP with output device routed
+                            mParent->mALSADevice->mSndCardState = SND_CARD_UP;
                         }
                         mHandle->module->open(mHandle);
                     }

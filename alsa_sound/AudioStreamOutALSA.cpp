@@ -36,6 +36,7 @@
 #include <hardware_legacy/power.h>
 
 #include "AudioHardwareALSA.h"
+#include "AudioUtil.h"
 
 #ifndef ALSA_DEFAULT_SAMPLE_RATE
 #define ALSA_DEFAULT_SAMPLE_RATE 44100 // in Hz
@@ -116,6 +117,22 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
     if((strcmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) &&
        (strcmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP))) {
         mParent->mLock.lock();
+        /*
+          We can have scenario where the HDMI is current active device in HAL,
+          but the device switch might have happened and the notificaiton is
+          received with one sec delay from AudioService
+          Skip writing data to DSP so that no data is fed to HDMI core to
+          avoid obtain buffer timeout and the ADSP crashes
+        */
+        if(mParent->mCurRxDevice == AudioSystem::DEVICE_OUT_AUX_DIGITAL &&
+            mHandle->handle == NULL && mHandle->rxHandle == NULL &&
+            AudioUtil::isDeviceDisconnectedReceivedHDMICoreDriver()) {
+            ALOGD("HDMI is disconnected, skip writing data to HDMI device!!");
+            uint32_t sleepTimeUs = (uint32_t) ((bytes * 1000000 /*for us*/) / (48000 * 2 /*channel*/));
+            mParent->mLock.unlock();
+            usleep(sleepTimeUs);
+            return bytes;
+        }
         /* PCM handle might be closed and reopened immediately to flush
          * the buffers, recheck and break if PCM handle is valid */
         if (mHandle->handle == NULL && mHandle->rxHandle == NULL) {
@@ -309,18 +326,20 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
                 mHandle->handle = NULL;
                 if((!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL, strlen(SND_USE_CASE_VERB_IP_VOICECALL))) ||
                   (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP, strlen(SND_USE_CASE_MOD_PLAY_VOIP)))) {
-                     pcm_close(mHandle->rxHandle);
-                     mHandle->rxHandle = NULL;
-                     mHandle->module->startVoipCall(mHandle);
+                    if (mHandle->rxHandle) {
+                        pcm_close(mHandle->rxHandle);
+                        mHandle->rxHandle = NULL;
+                        mHandle->module->startVoipCall(mHandle);
+                    }
                 }
                 else
                 {
-                    if (mParent->mALSADevice->mADSPState == ADSP_UP_AFTER_SSR) {
+                    if (mParent->mALSADevice->mSndCardState == SND_CARD_UP_AFTER_SSR) {
                         ALOGD("SSR Case: Call device switch to apply AMIX controls.");
                         mHandle->module->route(mHandle, mParent->mCurRxDevice  , mParent->mode());
                         // In-case of multiple streams only one stream will be resumed
-                        // after resetting mADSPState to ADSP_UP with output device routed
-                        mParent->mALSADevice->mADSPState = ADSP_UP;
+                        // after resetting mSndCardState to SND_CARD_UP with output device routed
+                        mParent->mALSADevice->mSndCardState = SND_CARD_UP;
 
                         if(mParent->isExtOutDevice(mParent->mCurRxDevice)) {
                            ALOGV("StreamOut write - mRouteAudioToExtOut = %d ", mParent->mRouteAudioToExtOut);
@@ -480,9 +499,17 @@ uint32_t AudioStreamOutALSA::latency() const
 {
     // Android wants latency in milliseconds.
     uint32_t latency = mHandle->latency;
-    if ((mParent->mExtOutStream == mParent->mA2dpStream) && mParent->mExtOutStream != NULL) {
+    if ( ((mParent->mCurRxDevice & AudioSystem::DEVICE_OUT_ALL_A2DP) &&
+         (mParent->mExtOutStream == mParent->mA2dpStream)) &&
+         (mParent->mA2dpStream != NULL) ) {
         uint32_t bt_latency = mParent->mExtOutStream->get_latency(mParent->mExtOutStream);
-        latency += bt_latency*1000;
+        uint32_t proxy_latency = mParent->mALSADevice->avail_in_ms;
+        latency += bt_latency*1000 + proxy_latency*1000;
+        ALOGV("latency = %d, bt_latency = %d, proxy_latency = %d", latency, bt_latency, proxy_latency);
+    } else if( mParent->mCurRxDevice & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)
+               {
+        // Offsetting latency contributed by USB HAL. The value is based on headset I've tested.
+        latency += 300000;
     }
 
     return USEC_TO_MSEC (latency);

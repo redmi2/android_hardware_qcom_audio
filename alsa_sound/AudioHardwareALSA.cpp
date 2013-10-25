@@ -97,7 +97,8 @@ AudioHardwareInterface *AudioHardwareALSA::create() {
 
 AudioHardwareALSA::AudioHardwareALSA() :
     mALSADevice(0),mVoipInStreamCount(0),mVoipOutStreamCount(0),mVoipMicMute(false),
-    mVoipBitRate(0),mCallState(0),mAcdbHandle(NULL),mCsdHandle(NULL),mMicMute(0)
+    mVoipBitRate(0),mCallState(CALL_INACTIVE),mAcdbHandle(NULL),mCsdHandle(NULL),mMicMute(0),
+    mVoipEvrcBitRateMin(0),mVoipEvrcBitRateMax(0)
 {
     FILE *fp;
     char soundCardInfo[200];
@@ -179,12 +180,12 @@ AudioHardwareALSA::AudioHardwareALSA() :
            acdb_init();
 
            acdb_reload_vocvol = (int (*)(int, int, int))::dlsym(mAcdbHandle,"acdb_loader_reload_vocvoltable");
-	   if (acdb_reload_vocvol == NULL)
-	       ALOGE("dlsym:Error:%s Loading acdb_reload_vocvol");
+       if (acdb_reload_vocvol == NULL)
+           ALOGE("dlsym:Error:%s Loading acdb_reload_vocvol");
 
            acdb_deallocate = (void (*)())::dlsym(mAcdbHandle,"acdb_loader_deallocate_ACDB");
-	   if (acdb_deallocate == NULL)
-	       ALOGE("dlsym:Error:%s Loading acdb_deallocate");
+       if (acdb_deallocate == NULL)
+           ALOGE("dlsym:Error:%s Loading acdb_deallocate");
            acdb_send_audio_cal =
            (void (*)(int, int))::dlsym(mAcdbHandle,"acdb_loader_send_audio_cal");
         }
@@ -376,7 +377,7 @@ AudioHardwareALSA::AudioHardwareALSA() :
         ALOGD("Speaker Protection disabled");
 
 #ifdef QCOM_LISTEN_FEATURE_ENABLE
-    mListenHw = new ListenHardware(mUcMgr, mAcdbHandle);
+    mListenHw = new ListenHardware(mUcMgr, mAcdbHandle, (const char*)cardInfo->name);
     if (mListenHw == NULL) {
         ALOGE("Failed to create ListenHardware");
     }
@@ -409,9 +410,9 @@ AudioHardwareALSA::~AudioHardwareALSA()
         delete mALSADevice;
     }
     for(ALSAHandleList::iterator it = mDeviceList.begin();
-            it != mDeviceList.end(); ++it) {
+            it != mDeviceList.end();) {
         it->useCase[0] = 0;
-        mDeviceList.erase(it);
+        it = mDeviceList.erase(it);
     }
     if (mResampler) {
         release_resampler(mResampler);
@@ -588,7 +589,7 @@ status_t  AudioHardwareALSA::setFmVolume(float value)
     vol  = lrint((value * 0x2000) + 0.5);
 
     ALOGV("setFmVolume(%f)\n", value);
-    ALOGD("Setting FM volume to %d (available range is 0 to 0x2000)\n", vol);
+    ALOGV("Setting FM volume to %d (available range is 0 to 0x2000)\n", vol);
 
     mALSADevice->setFmVolume(vol);
 
@@ -717,27 +718,41 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
     enum call_state  call_state = CALL_INVALID;
     uint32_t vsid = 0;
     float fm_volume;
+    ssize_t pos;
+    int cardNumber;
+    String8 cardStatus;
 
     ALOGV("%s() ,%s", __func__, keyValuePairs.string());
 
 #ifdef QCOM_ADSP_SSR_ENABLED
-    key = String8(AUDIO_PARAMETER_KEY_ADSP_STATUS);
+    key = String8(AUDIO_PARAMETER_KEY_SND_CARD_STATUS);
     if (param.get(key, value) == NO_ERROR) {
     #ifdef QCOM_LISTEN_FEATURE_ENABLE
         if (mListenHw) {
             status = mListenHw->setParameters(keyValuePairs);
         }
     #endif
-       if (value == "ONLINE") {
-           ALOGV("ADSP online set SSRcomplete");
-           mALSADevice->mADSPState = ADSP_UP_AFTER_SSR;
-           return status;
+       pos = value.find(",");
+       if (pos <= 0) {
+           ALOGE("%s(), invalid format %s", __func__, keyValuePairs.string());
+           return BAD_VALUE;
        }
-       else if (value == "OFFLINE") {
-           ALOGV("ADSP online re-set SSRcomplete");
-           mALSADevice->mADSPState = ADSP_DOWN;
+       cardStatus.setTo(value.string(), pos);
+       cardNumber = atoi(cardStatus.string());
+       cardStatus = value.string() + pos + 1;
+
+       if (cardNumber != mALSADevice->mSndCardNumber) {
+           ALOGV("Ignore status change for card number %d mSndCardNumber %d",
+                 cardNumber, mSndCardNumber);
+       } else if (cardStatus == "ONLINE") {
+           ALOGV("Sound card online set SSRcomplete");
+           mALSADevice->mSndCardState = SND_CARD_UP_AFTER_SSR;
+           return status;
+       } else if (cardStatus == "OFFLINE") {
+           ALOGV("Sound card online re-set SSRcomplete");
+           mALSADevice->mSndCardState = SND_CARD_DOWN;
            if ( mRouteAudioToExtOut==true) {
-               ALOGV("ADSP offline close EXT output");
+               ALOGV("Sound card offline close EXT output");
                uint32_t activeUsecase = getExtOutActiveUseCases_l();
                stopPlaybackOnExtOut_l(activeUsecase);
            }
@@ -771,7 +786,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         if(mMode != AUDIO_MODE_IN_CALL){
            return NO_ERROR;
         }
-        doRouting(0);
+        doRouting(0,NULL);
     }
 #ifdef QCOM_FLUENCE_ENABLED
     key = String8(AUDIO_PARAMETER_KEY_FLUENCE_TYPE);
@@ -797,7 +812,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
             ALOGV("Fluence feature Disabled");
         }
         mALSADevice->setFlags(mDevSettingsFlag);
-        doRouting(0);
+        doRouting(0, NULL);
     }
 #endif
 
@@ -835,7 +850,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
             mDevSettingsFlag &= (~ANC_FLAG);
         }
         mALSADevice->setFlags(mDevSettingsFlag);
-        doRouting(0);
+        doRouting(0, NULL);
     }
 #endif
 
@@ -843,7 +858,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
     if (param.getInt(key, device) == NO_ERROR) {
         // Ignore routing if device is 0.
         if(device)
-            doRouting(device);
+            doRouting(device, NULL);
         param.remove(key);
     }
 
@@ -950,7 +965,9 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
 
     key = String8(VOIPRATE_KEY);
     if (param.get(key, value) == NO_ERROR) {
-            mVoipBitRate = atoi(value);
+        mVoipBitRate = atoi(value);
+        mVoipEvrcBitRateMin = mVoipBitRate;
+        mVoipEvrcBitRateMax = mVoipBitRate;
         param.remove(key);
     }
 
@@ -991,16 +1008,18 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
 
     key = String8(VSID_KEY);
     if (param.getInt(key, (int &)vsid) == NO_ERROR) {
-        mVSID = vsid;
         param.remove(key);
         key = String8(CALL_STATE_KEY);
         if (param.getInt(key, (int &)call_state) == NO_ERROR) {
             param.remove(key);
-            mCallState = call_state;
-            ALOGD("%s() vsid:%x, callstate:%x", __func__, mVSID, call_state);
+            if (isAnyCallActive() || (call_state == CALL_ACTIVE)) {
+               mVSID = vsid;
+               mCallState = call_state;
+               ALOGD("%s() vsid:%x, callstate:%x", __func__, mVSID, call_state);
+            }
 
             if(isAnyCallActive())
-                doRouting(0);
+                doRouting(0, NULL);
         }
         param.remove(key);
     }
@@ -1053,6 +1072,35 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
 
         if(mALSADevice) {
             mALSADevice->setCustomStereoOnOff(flag);
+        }
+        param.remove(key);
+    }
+
+    key = String8(VOIP_DTX_MODE_KEY);
+    if (param.get(key, value) == NO_ERROR) {
+        bool flag = false;
+        if (value == "true") {
+            flag = true;
+        }
+        ALOGV("%s(): voip dtx mode: %d", __func__, flag);
+
+        mALSADevice->enableVoipDtx(flag);
+        param.remove(key);
+    }
+
+    key = String8(EVRC_RATE_MIN_KEY);
+    if (param.get(key, value) == NO_ERROR) {
+        uint32_t minRate;
+        minRate = atoi(value);
+        param.remove(key);
+        key = String8(EVRC_RATE_MAX_KEY);
+        if (param.get(key, value) == NO_ERROR) {
+            mVoipEvrcBitRateMax = atoi(value);
+            mVoipEvrcBitRateMin = minRate;
+            ALOGV("%s(): EVRC min rate %d, max rate %d",
+                   __func__, mVoipEvrcBitRateMin, mVoipEvrcBitRateMax);
+
+            mALSADevice->setVoipEvrcMinMaxRate(mVoipEvrcBitRateMin, mVoipEvrcBitRateMax);
         }
         param.remove(key);
     }
@@ -1328,7 +1376,7 @@ void AudioHardwareALSA::getWFDAudioSinkCaps( int32_t &channelCount, int32_t &sam
 }
 #endif
 
-status_t AudioHardwareALSA::doRouting(int device)
+status_t AudioHardwareALSA::doRouting(int device, char* useCase)
 {
     Mutex::Autolock autoLock(mLock);
     int newMode = mode();
@@ -1359,7 +1407,8 @@ status_t AudioHardwareALSA::doRouting(int device)
            mQchatCallState %x", device, newMode, mVoiceCallState,
           mVolteCallState, mVoice2CallState, mIsFmActive, mQchatCallState);
 
-    isRouted = routeCall(device, newMode, mVSID);
+    if (mVSID)
+       isRouted = routeCall(device, newMode, mVSID);
 
     if(!isRouted) {
 #ifdef QCOM_USBAUDIO_ENABLED
@@ -1453,7 +1502,17 @@ status_t AudioHardwareALSA::doRouting(int device)
             ALSAHandleList::iterator it = mDeviceList.end();
             it--;
             status_t err = NO_ERROR;
+            if (useCase != NULL) {
+                //if required usecase is not null, go through mDeviceList to find last matching alsa_handle_t
+                for(ALSAHandleList::iterator it2 = mDeviceList.begin(); it2 != mDeviceList.end(); it2++) {
+                    if (!strncmp(useCase, it2->useCase,sizeof(useCase))) {
+                            it = it2;
+                            ALOGV("found matching required usecase:%s device:%x",it->useCase,it->devices);
+                        }
+                }
+            }
             uint32_t activeUsecase = useCaseStringToEnum(it->useCase);
+            ALOGV("Dorouting updated usecase:%s device:%x activeUsecase",it->useCase, it->devices, activeUsecase);
             if (!((device & AudioSystem::DEVICE_OUT_ALL_A2DP) &&
                   (mCurRxDevice & AUDIO_DEVICE_OUT_ALL_USB))) {
                 if ((activeUsecase == USECASE_HIFI_LOW_POWER) ||
@@ -1707,6 +1766,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
           alsa_handle.rxHandle = 0;
           alsa_handle.ucMgr = mUcMgr;
           mALSADevice->setVoipConfig(getVoipMode(*format), mVoipBitRate);
+          mALSADevice->setVoipEvrcMinMaxRate(mVoipEvrcBitRateMin, mVoipEvrcBitRateMax);
           char *use_case;
           snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
           if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
@@ -2188,7 +2248,8 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
            alsa_handle.latency = VOIP_RECORD_LATENCY;
            alsa_handle.rxHandle = 0;
            alsa_handle.ucMgr = mUcMgr;
-          mALSADevice->setVoipConfig(getVoipMode(*format), mVoipBitRate);
+           mALSADevice->setVoipConfig(getVoipMode(*format), mVoipBitRate);
+           mALSADevice->setVoipEvrcMinMaxRate(mVoipEvrcBitRateMin, mVoipEvrcBitRateMax);
            snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
            if ((use_case != NULL) && (strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
                 strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_PLAY_VOIP, sizeof(alsa_handle.useCase));
@@ -2283,6 +2344,25 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         alsa_handle.rxHandle = 0;
         alsa_handle.ucMgr = mUcMgr;
         snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
+        for (it = mDeviceList.begin(); it != mDeviceList.end(); ++it) {
+            if ((!strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL,
+                 sizeof (SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL))) ||
+                (!strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL,
+                 sizeof (SND_USE_CASE_MOD_CAPTURE_VOICE_UL))) ||
+                (!strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_DL,
+                 sizeof (SND_USE_CASE_MOD_CAPTURE_VOICE_DL))) ||
+                (!strncmp(it->useCase, SND_USE_CASE_VERB_UL_REC,
+                 sizeof (SND_USE_CASE_VERB_UL_REC))) ||
+                (!strncmp(it->useCase, SND_USE_CASE_VERB_DL_REC,
+                 sizeof (SND_USE_CASE_VERB_DL_REC))) ||
+                (!strncmp(it->useCase, SND_USE_CASE_VERB_UL_DL_REC,
+                 sizeof (SND_USE_CASE_VERB_UL_DL_REC))) ||
+                (!strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC,
+                 sizeof (SND_USE_CASE_MOD_CAPTURE_MUSIC)))) {
+                ALOGE("error:Input stream already opened for voice recording");
+                return in;
+            }
+        }
         if ((use_case != NULL) && (strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
             if ((devices == AudioSystem::DEVICE_IN_VOICE_CALL) &&
                 (newMode == AUDIO_MODE_IN_CALL)) {
@@ -3286,6 +3366,7 @@ status_t AudioHardwareALSA::closeExtOutput(int device) {
     ALOGD("closeExtOutput");
     status_t err = NO_ERROR;
     Mutex::Autolock autolock1(mExtOutMutex);
+    Mutex::Autolock autolock2(mExtOutMutexWrite);
     if (device & AudioSystem::DEVICE_OUT_ALL_A2DP) {
         if(mExtOutStream == mA2dpStream)
             mExtOutStream = NULL;
@@ -3495,7 +3576,7 @@ void AudioHardwareALSA::extOutThreadFunc() {
     }
 
     pid_t tid  = gettid();
-    androidSetThreadPriority(tid, ANDROID_PRIORITY_AUDIO);
+    androidSetThreadPriority(tid, ANDROID_PRIORITY_URGENT_AUDIO);
     prctl(PR_SET_NAME, (unsigned long)"ExtOutThread", 0, 0, 0);
 
     int ionBufCount = 0;
@@ -3504,7 +3585,7 @@ void AudioHardwareALSA::extOutThreadFunc() {
     uint32_t bytesAvailInBuffer = 0;
     uint32_t proxyBufferTime = 0;
     void  *data;
-    int err = NO_ERROR;
+    status_t err = NO_ERROR;
     ssize_t size = 0;
     void * outbuffer= malloc(AFE_PROXY_PERIOD_SIZE);
 
@@ -3534,8 +3615,13 @@ void AudioHardwareALSA::extOutThreadFunc() {
             }
         }
         err = mALSADevice->readFromProxy(&data, &size);
-        if(err < 0) {
-           ALOGE("ALSADevice readFromProxy returned err = %d,data = %p,\
+        if(err == (status_t) FAILED_TRANSACTION) {
+            ALOGE("readFromProxy returned an error, mostly a flush or an under run continuing");
+            err = NO_ERROR;
+            continue;
+        }
+        if(err < 0  || size <= 0) {
+            ALOGE("ALSADevice readFromProxy returned err = %d,data = %p,\
                     size = %ld", err, data, size);
            continue;
         }
@@ -3567,26 +3653,26 @@ void AudioHardwareALSA::extOutThreadFunc() {
         while (err == OK && (numBytesRemaining  > 0) && !mKillExtOutThread
                 && mIsExtOutEnabled ) {
             {
-                mExtOutMutex.lock();
+                mExtOutMutexWrite.lock();
                 if(mExtOutStream != NULL ) {
                     bytesAvailInBuffer = mExtOutStream->common.get_buffer_size(&mExtOutStream->common);
                     uint32_t writeLen = bytesAvailInBuffer > numBytesRemaining ?
                                     numBytesRemaining : bytesAvailInBuffer;
                     ALOGV("Writing %d bytes to External Output ", writeLen);
                     bytesWritten = mExtOutStream->write(mExtOutStream,copyBuffer, writeLen);
+                    mExtOutMutexWrite.unlock();
                 } else {
                     //unlock the mutex before sleep
-                    mExtOutMutex.unlock();
+                    mExtOutMutexWrite.unlock();
                     ALOGV(" No External output to write  ");
                     usleep(proxyBufferTime*1000);
                     bytesWritten = numBytesRemaining;
                 }
-                mExtOutMutex.unlock();
             }
             //If the write fails make this thread sleep and let other
             //thread (eg: stopA2DP) to acquire lock to prevent a deadlock.
-            if(bytesWritten == -1 || bytesWritten == 0) {
-                ALOGV("bytesWritten = %d",bytesWritten);
+            if(bytesWritten < 0 || bytesWritten == 0) {
+                ALOGE("bytesWritten = %d",bytesWritten);
                 usleep(10000);
                 break;
             }
@@ -3604,27 +3690,31 @@ void AudioHardwareALSA::extOutThreadFunc() {
 
 void AudioHardwareALSA::setExtOutActiveUseCases_l(uint32_t activeUsecase)
 {
-   mExtOutActiveUseCases |= activeUsecase;
-   ALOGD("mExtOutActiveUseCases = %u, activeUsecase = %u", mExtOutActiveUseCases, activeUsecase);
+    mExtOutActiveUseCases |= activeUsecase;
+    ALOGV("mExtOutActiveUseCases = %u, activeUsecase = %u", mExtOutActiveUseCases, activeUsecase);
 }
 
 uint32_t AudioHardwareALSA::getExtOutActiveUseCases_l()
 {
-   ALOGD("getExtOutActiveUseCases_l: mExtOutActiveUseCases = %u", mExtOutActiveUseCases);
-   return mExtOutActiveUseCases;
+    ALOGV("getExtOutActiveUseCases_l: mExtOutActiveUseCases = %u", mExtOutActiveUseCases);
+    return mExtOutActiveUseCases;
 }
 
 void AudioHardwareALSA::clearExtOutActiveUseCases_l(uint32_t activeUsecase) {
 
-   mExtOutActiveUseCases &= ~activeUsecase;
-   ALOGD("clear - mExtOutActiveUseCases = %u, activeUsecase = %u", mExtOutActiveUseCases, activeUsecase);
+    mExtOutActiveUseCases &= ~activeUsecase;
+    ALOGV("clear - mExtOutActiveUseCases = %u, activeUsecase = %u", mExtOutActiveUseCases, activeUsecase);
 
 }
 
 uint32_t AudioHardwareALSA::useCaseStringToEnum(const char *usecase)
 {
-   ALOGV("useCaseStringToEnum usecase:%s",usecase);
-   uint32_t activeUsecase = USECASE_NONE;
+    ALOGV("useCaseStringToEnum usecase:%s",usecase);
+    uint32_t activeUsecase = USECASE_NONE;
+    if (usecase == NULL) {
+        ALOGE("useCaseStringToEnum: invalid input usecase return USECASE_NONE");
+        return USECASE_NONE;
+    }
 
    if ((!strncmp(usecase, SND_USE_CASE_VERB_HIFI_LOW_POWER,
                     strlen(SND_USE_CASE_VERB_HIFI_LOW_POWER))) ||

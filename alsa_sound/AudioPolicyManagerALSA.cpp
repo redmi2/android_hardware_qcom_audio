@@ -70,6 +70,7 @@ namespace android_audio_legacy {
 // ----------------------------------------------------------------------------
 
 AudioParameter param;
+static float mLastALSAvoiceVolume = -1.0f ;
 
 
 uint32_t AudioPolicyManager::checkDeviceMuteStrategies(AudioOutputDescriptor *outputDesc,
@@ -942,6 +943,9 @@ status_t AudioPolicyManager::startOutput(audio_io_handle_t output,
                             (strategy == STRATEGY_SONIFICATION_RESPECTFUL);
         uint32_t waitMs = 0;
         uint32_t muteWaitMs = 0;
+#ifdef QCOM_APM_VERSION_JBMR2
+        bool isStreamActive = false;
+#endif
 #ifndef QCOM_APM_VERSION_JBMR2
         uint32_t RefCount = 0;
 #endif
@@ -960,6 +964,10 @@ status_t AudioPolicyManager::startOutput(audio_io_handle_t output,
 #ifndef QCOM_APM_VERSION_JBMR2
                 RefCount += desc->refCount();
 #endif
+#ifdef QCOM_APM_VERSION_JBMR2
+        isStreamActive = desc->isStreamActive(AudioSystem::MUSIC);
+        ALOGD("isStreamActive: %u", isStreamActive);
+#endif
                 // wait for audio on other active outputs to be presented when starting
                 // a notification so that audio focus effect can propagate.
 #ifdef QCOM_APM_VERSION_JBMR2
@@ -975,6 +983,11 @@ status_t AudioPolicyManager::startOutput(audio_io_handle_t output,
         }
 #ifndef QCOM_APM_VERSION_JBMR2
         if(RefCount==0){
+           force = true;
+        }
+#endif
+#ifdef QCOM_APM_VERSION_JBMR2
+        if (isStreamActive == false) {
            force = true;
         }
 #endif
@@ -1713,7 +1726,8 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
             // FALL THROUGH
 
         default:    // FORCE_NONE
-            // when not in a phone call, phone strategy should route STREAM_VOICE_CALL to A2DP
+            // when not in a phone call, phone strategy should route STREAM_VOICE_CALL to A2DP and
+            // STREAM_BLUETOOTH_SCO to SCO
             if (!isInCall())
             {
                 if ((mForceUse[AudioSystem::FOR_MEDIA] != AudioSystem::FORCE_NO_BT_A2DP) &&
@@ -1723,6 +1737,10 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
                     device = mAvailableOutputDevices & AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES;
                     if (device) break;
                 }
+                device = mAvailableOutputDevices & AUDIO_DEVICE_OUT_BLUETOOTH_SCO_HEADSET;
+                if (device) break;
+                device = mAvailableOutputDevices & AUDIO_DEVICE_OUT_BLUETOOTH_SCO;
+                if (device) break;
             }
             device = mAvailableOutputDevices & AUDIO_DEVICE_OUT_WIRED_HEADPHONE;
             if (device) break;
@@ -1872,7 +1890,7 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
                 device2 = mAvailableOutputDevices & AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET;
             }
 #ifdef QCOM_FM_ENABLED
-            if (device2 == AUDIO_DEVICE_NONE) {
+            if ((strategy != STRATEGY_SONIFICATION) && (device2 == AUDIO_DEVICE_NONE)) {
                 device2 = mAvailableOutputDevices & AUDIO_DEVICE_OUT_FM_TX;
             }
 #endif
@@ -1977,12 +1995,6 @@ uint32_t AudioPolicyManager::setOutputDevice(audio_io_handle_t output,
     }
     // update stream volumes according to new device
     applyStreamVolumes(output, device, delayMs);
-
-#ifdef QCOM_FM_ENABLED
-    //if changing from a combined headset + speaker + FM  route, unmute media streams
-    if (mAvailableOutputDevices & AUDIO_DEVICE_OUT_FM)
-        muteWaitMs = checkDeviceMuteStrategies(outputDesc, prevDevice, delayMs);
-#endif
 
     return muteWaitMs;
 }
@@ -2195,12 +2207,6 @@ status_t AudioPolicyManager::checkAndSetVolume(int stream,
     if (stream == AudioSystem::VOICE_CALL ||
         stream == AudioSystem::BLUETOOTH_SCO) {
         float voiceVolume;
-        // Force voice volume to max for bluetooth SCO as volume is managed by the headset
-        if (stream == AudioSystem::VOICE_CALL) {
-            voiceVolume = (float)index/(float)mStreams[stream].mIndexMax;
-        } else {
-            voiceVolume = 1.0;
-        }
 
         voiceVolume = (float)index/(float)mStreams[stream].mIndexMax;
 
@@ -2216,9 +2222,11 @@ status_t AudioPolicyManager::checkAndSetVolume(int stream,
             }
         }
 
-        if (voiceVolume != mLastVoiceVolume && output == mPrimaryOutput) {
+        if (voiceVolume != mLastALSAvoiceVolume && output == mPrimaryOutput) {
             mpClientInterface->setVoiceVolume(voiceVolume, delayMs);
-            mLastVoiceVolume = voiceVolume;
+            //Cache the voiceVolume only when in Call
+            if (isInCall())
+                mLastALSAvoiceVolume = voiceVolume;
         }
     }
 
