@@ -506,10 +506,16 @@ uint32_t AudioStreamOutALSA::latency() const
         uint32_t proxy_latency = mParent->mALSADevice->avail_in_ms;
         latency += bt_latency*1000 + proxy_latency*1000;
         ALOGV("latency = %d, bt_latency = %d, proxy_latency = %d", latency, bt_latency, proxy_latency);
-    } else if( mParent->mCurRxDevice & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)
-               {
+    } else if( mParent->mCurRxDevice & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET) {
         // Offsetting latency contributed by USB HAL. The value is based on headset I've tested.
         latency += 300000;
+    } else if( ((mParent->mCurRxDevice & AudioSystem::DEVICE_OUT_ALL_USB) &&
+               (mParent->mExtOutStream == mParent->mUsbStream))
+               && (mParent->mUsbStream != NULL) ) {
+        uint32_t usb_latency = mParent->mUsbStream->get_latency(mParent->mUsbStream);
+        // Offsetting latency contributed by USB HAL. The value is based on AoA device I've tested.
+        latency += usb_latency*1000 + 250000;
+        ALOGV("latency = %d, usb_latency = %d", latency, usb_latency);
     }
 
     return USEC_TO_MSEC (latency);
