@@ -1502,16 +1502,20 @@ status_t AudioHardwareALSA::doRouting(int device, char* useCase)
             ALSAHandleList::iterator it = mDeviceList.end();
             it--;
             status_t err = NO_ERROR;
-            if (useCase != NULL) {
-                //if required usecase is not null, go through mDeviceList to find last matching alsa_handle_t
+            uint32_t activeUsecase = useCaseStringToEnum(it->useCase);
+
+            //If required usecase is not null, go through mDeviceList to find last matching alsa_handle_t.
+            //For FM we don't open an output stream. Hence required usecase shouldn't be considered.
+            if ( (useCase != NULL) && (activeUsecase != USECASE_FM) ) {
                 for(ALSAHandleList::iterator it2 = mDeviceList.begin(); it2 != mDeviceList.end(); it2++) {
                     if (!strncmp(useCase, it2->useCase,sizeof(useCase))) {
                             it = it2;
                             ALOGV("found matching required usecase:%s device:%x",it->useCase,it->devices);
+                            activeUsecase = useCaseStringToEnum(it->useCase);
+                            break;
                         }
                 }
             }
-            uint32_t activeUsecase = useCaseStringToEnum(it->useCase);
             ALOGV("Dorouting updated usecase:%s device:%x activeUsecase",it->useCase, it->devices, activeUsecase);
             if (!((device & AudioSystem::DEVICE_OUT_ALL_A2DP) &&
                   (mCurRxDevice & AUDIO_DEVICE_OUT_ALL_USB))) {
