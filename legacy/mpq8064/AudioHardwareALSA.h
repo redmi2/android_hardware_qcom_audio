@@ -127,6 +127,8 @@ static int USBRECBIT_VOIPCALL = (1 << 2);
 static int USBRECBIT_FM = (1 << 3);
 #endif
 
+#define MS11_OUTPUT_FRAME_DURATION      32000 // (In microSeconds)MS11 PCM output is always at one AC3 frame boundary
+                                              // Hence it is fixed at 32ms.
 #define SAMPLES_PER_CHANNEL             1536*2
 #define MAX_INPUT_CHANNELS_SUPPORTED    8
 #define FACTOR_FOR_BUFFERING            2
@@ -155,8 +157,13 @@ static int USBRECBIT_FM = (1 << 3);
 #define TUNNEL_DECODER_BUFFER_SIZE 4800
 #define TUNNEL_DECODER_BUFFER_COUNT 256
 // To accommodate worst size frame of  AC3 and DTS and meta data
-#define TUNNEL_DECODER_BUFFER_SIZE_BROADCAST  9600
-#define TUNNEL_DECODER_BUFFER_COUNT_BROADCAST 128
+#define TUNNEL_DECODER_BUFFER_SIZE_BROADCAST 9600
+// Multiple of MS11 MultiChanell Output which fits in a buffer
+// size of TUNNEL_DECODER_BUFFER_SIZE_BROADCAST.
+//#define MS11_MCH_OUTPUT_BYTES  18432
+#define MS11_MCH_OUTPUT_BYTES  9216
+#define MS11_STEREO_OUTPUT_BYTES 6144  // 1536 * channels * BITS_PER_SAMPLE
+#define TUNNEL_DECODER_BUFFER_COUNT_BROADCAST 64
 #define SIGNAL_EVENT_THREAD 2
 #define SIGNAL_PLAYBACK_THREAD 2
 //Values to exit poll via eventfd
@@ -286,6 +293,7 @@ struct input_metadata_handle_t {
     uint64_t            timestamp;
     uint32_t            bufferLength;
     uint32_t            consumedLength;
+    uint32_t            bufNo;
 };
 
 struct output_metadata_handle_t {
@@ -833,6 +841,7 @@ private:
     int                 mSecDevices;
     int                 mPCMDevices;
     int                 mTranscodeDevices;
+    bool                mCloseSession;
     // Capture and Routing Flags
     bool                mCapturePCMFromDSP;
     bool                mCaptureCompressedFromDSP;
@@ -869,6 +878,7 @@ private:
     // Avsync Specifics
     bool                mTimeStampModeSet;
     uint32_t            mCompleteBufferTimePcm;
+    uint64_t            mLastDecodedFrameTimeStamp;
     uint32_t            mCompleteBufferTimeCompre;
     uint32_t            mPartialBufferTimePcm;
     uint32_t            mPartialBufferTimeCompre;
@@ -963,6 +973,7 @@ private:
     status_t            openCapturingAndRoutingDevices();
     status_t            closeDevice(alsa_handle_t *pHandle);
     status_t            doRouting(int devices);
+    void                fixUpHdmiFormatBasedOnEDID();
     status_t            pause();
     status_t            resume();
     status_t            flush();
@@ -1009,6 +1020,7 @@ private:
     bool                decode(char *buffer, size_t bytes);
     uint32_t            render(bool continueDecode);
     int32_t             writeToCompressedDriver(char *buffer, int bytes);
+    int32_t             writeToCompressedDriver(char *buffer, int bytes, alsa_handle_t * compreRxHandle);
     void                resetPlaybackPathVariables();
     void                exitFromPlaybackThread();
     //Timer

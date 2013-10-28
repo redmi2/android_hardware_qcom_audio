@@ -296,7 +296,10 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
         }  else if(format == AUDIO_FORMAT_MP2) {
              ALOGV("MP2 CODEC");
              compr_params.codec.id = compr_cap.codecs[12];
-        }else {
+        } else if(format == SNDRV_PCM_FORMAT_S16_LE) {
+             ALOGV("PCM FORMAT");
+             compr_params.codec.id = compr_cap.codecs[11];
+        } else {
              ALOGE("format not supported to open tunnel device");
              if (params)
                  free(params);
@@ -322,18 +325,23 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
                 free(params);
             return err;
         }
-        handle->handle->flags &= ~(PCM_STEREO | PCM_MONO | PCM_QUAD | PCM_5POINT1 | PCM_TRIPLE | PCM_PENTA | PCM_7POINT );
-        handle->handle->flags |= PCM_7POINT1;
+
+        if(format != SNDRV_PCM_FORMAT_S16_LE){
+            handle->handle->flags &= ~(PCM_STEREO | PCM_MONO | PCM_QUAD | PCM_5POINT1 | PCM_TRIPLE | PCM_PENTA | PCM_7POINT );
+            handle->handle->flags |= PCM_7POINT1;
+        }
+        
         if (handle->type == COMPRESSED_FORMAT &&
             ((handle->devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL && hdmiChannels == 2) ||
             !(handle->devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL))) {
             handle->handle->flags &= ~PCM_7POINT1;
             handle->handle->flags |= PCM_STEREO;
             handle->channels = 2;
-        } else {
+        } else if(format != SNDRV_PCM_FORMAT_S16_LE){
             handle->channels = 8;
         }
         handle->handle->flags |= PCM_TUNNEL;
+
     } else if(handle->type & TRANSCODE_FORMAT) {
         struct snd_pcm_transcode_param transcode_param;
         property_get("ro.build.modelid",dtsModelId,"0");
