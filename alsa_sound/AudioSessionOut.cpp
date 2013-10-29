@@ -845,6 +845,8 @@ status_t AudioSessionOutALSA::standby()
 
 uint32_t AudioSessionOutALSA::latency() const
 {
+    // Latency offset. The value is based on AoA device I've tested.
+    const uint32_t usbLatencyOffset = 300000;
     // Android wants latency in milliseconds.
     uint32_t latency = mAlsaHandle->latency;
     if ((mParent->mExtOutStream == mParent->mA2dpStream) && mParent->mExtOutStream != NULL) {
@@ -854,6 +856,12 @@ uint32_t AudioSessionOutALSA::latency() const
                {
         // Offsetting latency contributed by USB HAL. Latency value seen on the headset, I've tested.
         latency += 300000;
+    } else if( ((mParent->mCurRxDevice & AudioSystem::DEVICE_OUT_ALL_USB) &&
+               (mParent->mExtOutStream == mParent->mUsbStream))
+               && (mParent->mUsbStream != NULL) ) {
+        uint32_t usb_latency = mParent->mUsbStream->get_latency(mParent->mUsbStream);
+        latency += usb_latency*1000 + usbLatencyOffset;
+        ALOGV("latency = %d, usb_latency = %d", latency, usb_latency);
     }
 
     return USEC_TO_MSEC (latency);
