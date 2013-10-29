@@ -395,7 +395,7 @@ AudioHardwareALSA::AudioHardwareALSA() :
         ALOGD("Speaker Protection disabled");
 
 #ifdef QCOM_LISTEN_FEATURE_ENABLE
-    mListenHw = new ListenHardware(mUcMgr, mAcdbHandle);
+    mListenHw = new ListenHardware(mUcMgr, mAcdbHandle, (const char*)cardInfo->name);
     if (mListenHw == NULL) {
         ALOGE("Failed to create ListenHardware");
     }
