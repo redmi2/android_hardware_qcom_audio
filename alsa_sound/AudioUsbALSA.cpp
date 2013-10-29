@@ -153,10 +153,12 @@ status_t AudioUsbALSA::queryUSBSoundCards() {
         }
         mixer_close(mixer);
         mixer = NULL;
-        if(mUsbSoundCard != -1)
+        if(mUsbSoundCard != -1) {
+            fclose(fp);
             return err;
+        }
     }
-
+    fclose(fp);
     return NO_INIT;
 }
 
