@@ -463,7 +463,8 @@ uint32_t AudioStreamOutALSA::latency() const
 {
     // Android wants latency in milliseconds.
     uint32_t latency = mHandle->latency;
-    if ((mParent->mExtOutStream == mParent->mA2dpStream) && mParent->mExtOutStream != NULL) {
+    if ((mParent->mCurRxDevice & AudioSystem::DEVICE_OUT_ALL_A2DP) &&
+        (mParent->mExtOutStream == mParent->mA2dpStream) && mParent->mExtOutStream != NULL) {
         uint32_t bt_latency = mParent->mExtOutStream->get_latency(mParent->mExtOutStream);
         latency += bt_latency*1000;
     } else if( mParent->mCurRxDevice & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)
