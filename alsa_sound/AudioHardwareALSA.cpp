@@ -98,7 +98,7 @@ AudioHardwareInterface *AudioHardwareALSA::create() {
 AudioHardwareALSA::AudioHardwareALSA() :
     mALSADevice(0),mVoipInStreamCount(0),mVoipOutStreamCount(0),mVoipMicMute(false),
     mVoipBitRate(0),mCallState(CALL_INACTIVE),mAcdbHandle(NULL),mCsdHandle(NULL),mMicMute(0),
-    mVoipEvrcBitRateMin(0),mVoipEvrcBitRateMax(0)
+    mVoipEvrcBitRateMin(0),mVoipEvrcBitRateMax(0),mIncallMode(0)
 {
     FILE *fp;
     char soundCardInfo[200];
@@ -2359,7 +2359,13 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                 (!strncmp(it->useCase, SND_USE_CASE_VERB_UL_DL_REC,
                  sizeof (SND_USE_CASE_VERB_UL_DL_REC))) ||
                 (!strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC,
-                 sizeof (SND_USE_CASE_MOD_CAPTURE_MUSIC)))) {
+                 sizeof (SND_USE_CASE_MOD_CAPTURE_MUSIC))) ||
+                (!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC,
+                 sizeof (SND_USE_CASE_VERB_HIFI_REC))) ||
+                (!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_LOWLATENCY_REC,
+                 sizeof (SND_USE_CASE_VERB_HIFI_LOWLATENCY_REC))) ||
+                (!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED,
+                 sizeof (SND_USE_CASE_VERB_HIFI_REC_COMPRESSED)))) {
                 ALOGE("error:Input stream already opened for voice recording");
                 return in;
             }
