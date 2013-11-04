@@ -198,7 +198,15 @@ bool AudioUtil::getHDMIAudioSinkCaps(EDID_AUDIO_INFO* pInfo) {
             pInfo->AudioBlocksArray[i].nBitsPerSample = getBitsPerSampleFromEDID(bitrate[i],formats[i]);
             ALOGV("pInfo->AudioBlocksArray[i].nBitsPerSample %d",pInfo->AudioBlocksArray[i].nBitsPerSample);
         }
-            getSpeakerAllocation(pInfo);
+
+        // clip the number of channels to the speakers
+        unsigned int sa_chan = getSpeakerAllocation(pInfo);
+        for (int i = 0; i < pInfo->nAudioBlocks; i++) {
+            if (pInfo->AudioBlocksArray[i].nFormatId == LPCM && pInfo->AudioBlocksArray[i].nChannels > sa_chan) {
+                pInfo->AudioBlocksArray[i].nChannels = sa_chan;
+                ALOGV("clipped nChannels for block %d to %d\n", i, pInfo->AudioBlocksArray[i].nChannels);
+            }
+        }
     }
     if (original_data_ptr)
         free(original_data_ptr);
@@ -238,17 +246,20 @@ bool AudioUtil::getHDMIAudioSinkCaps(EDID_AUDIO_INFO* pInfo, char *hdmiEDIDData)
 
         updateChannelMap(pInfo);
         updateChannelAllocation(pInfo);
-        updateChannelMapLPASS(pInfo);
+        unsigned int sa_chan = updateChannelMapLPASS(pInfo);
 
         for (int i = 0; i < pInfo->nAudioBlocks; i++) {
             ALOGV("AUDIO DESC BLOCK # %d\n",i);
 
-            pInfo->AudioBlocksArray[i].nChannels = channels[i];
-            ALOGV("pInfo->AudioBlocksArray[i].nChannels %d\n", pInfo->AudioBlocksArray[i].nChannels);
-
             ALOGV("Format Byte %d\n", formats[i]);
             pInfo->AudioBlocksArray[i].nFormatId = (EDID_AUDIO_FORMAT_ID)printFormatFromEDID(formats[i]);
             ALOGV("pInfo->AudioBlocksArray[i].nFormatId %d",pInfo->AudioBlocksArray[i].nFormatId);
+
+            if (pInfo->AudioBlocksArray[i].nFormatId == LPCM && channels[i] > sa_chan)
+                pInfo->AudioBlocksArray[i].nChannels = sa_chan;
+            else
+                pInfo->AudioBlocksArray[i].nChannels = channels[i];
+            ALOGV("pInfo->AudioBlocksArray[i].nChannels %d\n", pInfo->AudioBlocksArray[i].nChannels);
 
             ALOGV("Frequency Byte %d\n", frequency[i]);
             pInfo->AudioBlocksArray[i].nSamplingFreq = getSamplingFrequencyFromEDID(frequency[i]);
@@ -266,9 +277,9 @@ bool AudioUtil::getHDMIAudioSinkCaps(EDID_AUDIO_INFO* pInfo, char *hdmiEDIDData)
     }
 }
 
-bool AudioUtil::getSpeakerAllocation(EDID_AUDIO_INFO* pInfo) {
+unsigned int AudioUtil::getSpeakerAllocation(EDID_AUDIO_INFO* pInfo) {
     int count = 0;
-    bool bRet = false;
+    unsigned int cRet = 0;
     unsigned char* data = NULL;
     unsigned char* original_data_ptr = NULL;
     const char* spkrfile = "/sys/class/graphics/fb1/spkr_alloc_data_block";
@@ -298,7 +309,7 @@ bool AudioUtil::getSpeakerAllocation(EDID_AUDIO_INFO* pInfo) {
         ALOGV("Total length is %d",length);
         data+= sizeof(int);
         ALOGV("Total speaker allocation Block count # %d\n",count);
-        bRet = true;
+        cRet = 0;
         for (int i = 0; i < count; i++) {
             ALOGV("Speaker Allocation BLOCK # %d\n",i);
             pInfo->nSpeakerAllocation[0] = data[0];
@@ -307,33 +318,55 @@ bool AudioUtil::getSpeakerAllocation(EDID_AUDIO_INFO* pInfo) {
             ALOGV("pInfo->nSpeakerAllocation %x %x %x\n", data[0],data[1],data[2]);
 
 
-            if (pInfo->nSpeakerAllocation[0] & BIT(7))
-                 ALOGV("FLW/FRW");
-            if (pInfo->nSpeakerAllocation[0] & BIT(6))
-                 ALOGV("RLC/RRC");
-            if (pInfo->nSpeakerAllocation[0] & BIT(5))
-                 ALOGV("FLC/FRC");
-            if (pInfo->nSpeakerAllocation[0] & BIT(4))
+            if (pInfo->nSpeakerAllocation[0] & BIT(7)) {
+                cRet += 2;
+                ALOGV("FLW/FRW");
+            }
+            if (pInfo->nSpeakerAllocation[0] & BIT(6)) {
+                cRet += 2;
+                ALOGV("RLC/RRC");
+            }
+            if (pInfo->nSpeakerAllocation[0] & BIT(5)) {
+                cRet += 2;
+                ALOGV("FLC/FRC");
+            }
+            if (pInfo->nSpeakerAllocation[0] & BIT(4)) {
+                cRet += 1;
                 ALOGV("RC");
-            if (pInfo->nSpeakerAllocation[0] & BIT(3))
+            }
+            if (pInfo->nSpeakerAllocation[0] & BIT(3)) {
+                cRet += 2;
                 ALOGV("RL/RR");
-            if (pInfo->nSpeakerAllocation[0] & BIT(2))
+            }
+            if (pInfo->nSpeakerAllocation[0] & BIT(2)) {
+                cRet += 1;
                 ALOGV("FC");
-            if (pInfo->nSpeakerAllocation[0] & BIT(1))
+            }
+            if (pInfo->nSpeakerAllocation[0] & BIT(1)) {
+                cRet += 1;
                 ALOGV("LFE");
-            if (pInfo->nSpeakerAllocation[0] & BIT(0))
+            }
+            if (pInfo->nSpeakerAllocation[0] & BIT(0)) {
+                cRet += 2;
                 ALOGV("FL/FR");
-            if (pInfo->nSpeakerAllocation[1] & BIT(2))
+            }
+            if (pInfo->nSpeakerAllocation[1] & BIT(2)) {
+                cRet += 1;
                 ALOGV("FCH");
-            if (pInfo->nSpeakerAllocation[1] & BIT(1))
+            }
+            if (pInfo->nSpeakerAllocation[1] & BIT(1)) {
+                cRet += 1;
                 ALOGV("TC");
-            if (pInfo->nSpeakerAllocation[1] & BIT(0))
+            }
+            if (pInfo->nSpeakerAllocation[1] & BIT(0)) {
+                cRet += 2;
                 ALOGV("FLH/FRH");
+            }
         }
     }
     if (original_data_ptr)
         free(original_data_ptr);
-    return bRet;
+    return cRet;
 }
 
 void AudioUtil::updateChannelMap(EDID_AUDIO_INFO* pInfo)
@@ -488,8 +521,9 @@ void AudioUtil::updateChannelAllocation(EDID_AUDIO_INFO* pInfo)
     }
 }
 
-void AudioUtil::updateChannelMapLPASS(EDID_AUDIO_INFO* pInfo)
+unsigned int AudioUtil::updateChannelMapLPASS(EDID_AUDIO_INFO* pInfo)
 {
+    unsigned int cRet = 0;
     if(pInfo) {
         if(pInfo->channelAllocation <= 0x1f)
             memset(pInfo->channelMap, 0, MAX_CHANNELS_SUPPORTED);
@@ -733,7 +767,14 @@ void AudioUtil::updateChannelMapLPASS(EDID_AUDIO_INFO* pInfo)
         default:
             break;
         }
+
+        for (int i = 0; i < MAX_CHANNELS_SUPPORTED; ++i) {
+            if (pInfo->channelMap[i] > 0)
+                ++cRet;
+        }
     }
+
+    return cRet;
 }
 
 bool AudioUtil::isDeviceDisconnectedReceivedHDMICoreDriver()

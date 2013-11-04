@@ -106,9 +106,9 @@ private:
     static int getSamplingFrequencyFromEDID(unsigned char byte);
     static int getBitsPerSampleFromEDID(unsigned char byte,
                                         unsigned char format);
-    static bool getSpeakerAllocation(EDID_AUDIO_INFO* pInfo);
+    static unsigned int getSpeakerAllocation(EDID_AUDIO_INFO* pInfo);
     static void updateChannelMap(EDID_AUDIO_INFO* pInfo);
-    static void updateChannelMapLPASS(EDID_AUDIO_INFO* pInfo);
+    static unsigned int updateChannelMapLPASS(EDID_AUDIO_INFO* pInfo);
     static void updateChannelAllocation(EDID_AUDIO_INFO* pInfo);
     static void printSpeakerAllocation(EDID_AUDIO_INFO* pInfo);
     static int32_t getHdmiDispDevFbIndex();
