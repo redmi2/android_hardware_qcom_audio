@@ -56,7 +56,7 @@ static int (*acdb_loader_get_ecrx_device)(int acdb_id);
 // Increasing the ring buffer size in driver for 6 channel usb
 // will cause increase in period count. Set the existing value
 // returned from the driver.
-#define AFE_PROXY_PERIOD_COUNT 32
+#define AFE_PROXY_PERIOD_COUNT 128
 #define KILL_A2DP_THREAD 1
 #define SIGNAL_A2DP_THREAD 2
 #define SND_CARD_UP_CHK_TRIES 5
