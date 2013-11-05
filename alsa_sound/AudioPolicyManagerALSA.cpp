@@ -1216,6 +1216,10 @@ status_t AudioPolicyManager::startInput(audio_io_handle_t input)
     param.addInt(String8("vr_mode"), vr_enabled);
     ALOGV("AudioPolicyManager::startInput(%d), setting vr_mode to %d", inputDesc->mInputSource, vr_enabled);
 
+    //Checking whether camcorder-mode is enabled or not and pass the info to HAL
+    int camcorder_enabled = (inputDesc->mInputSource == AUDIO_SOURCE_CAMCORDER) ? 1 : 0;
+    param.addInt(String8("camcorder_mode"), camcorder_enabled);
+
     mpClientInterface->setParameters(input, param.toString());
 
     inputDesc->mRefCount = 1;
@@ -1996,6 +2000,12 @@ audio_devices_t AudioPolicyManager::getDeviceForInputSource(int inputSource)
     case AUDIO_SOURCE_CAMCORDER:
         if (mAvailableInputDevices & AUDIO_DEVICE_IN_BACK_MIC) {
             device = AUDIO_DEVICE_IN_BACK_MIC;
+        } else if (mAvailableInputDevices & AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET) {
+            device = AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET;
+        } else if (mAvailableInputDevices & AUDIO_DEVICE_IN_WIRED_HEADSET) {
+            device = AUDIO_DEVICE_IN_WIRED_HEADSET;
+        } else if (mAvailableInputDevices & AUDIO_DEVICE_IN_AUX_DIGITAL) {
+            device = AUDIO_DEVICE_IN_AUX_DIGITAL;
         } else if (mAvailableInputDevices & AUDIO_DEVICE_IN_BUILTIN_MIC) {
             device = AUDIO_DEVICE_IN_BUILTIN_MIC;
         }
