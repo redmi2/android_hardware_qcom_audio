@@ -63,7 +63,7 @@ extern "C"
         return android_audio_legacy::AudioHardwareALSA::create();
     }
 #ifdef QCOM_ACDB_ENABLED
-    static int (*acdb_init)(unsigned char*);
+    static int (*acdb_init)();
     static int (*acdb_reload_vocvol)(int, int, int);
     static void (*acdb_deallocate)();
     static void (*acdb_send_audio_cal)(int, int);
@@ -167,6 +167,32 @@ AudioHardwareALSA::AudioHardwareALSA() :
         return;
     }
 
+#ifdef QCOM_ACDB_ENABLED
+    mAcdbHandle = ::dlopen("/vendor/lib/libacdbloader.so", RTLD_NOW);
+    if (mAcdbHandle == NULL) {
+        ALOGE("AudioHardware: DLOPEN not successful for ACDBLOADER");
+    } else {
+        ALOGD("AudioHardware: DLOPEN successful for ACDBLOADER");
+        acdb_init = (int (*)())::dlsym(mAcdbHandle,"acdb_loader_init_ACDB");
+        if (acdb_init == NULL) {
+            ALOGE("dlsym:Error:%s Loading acdb_loader_init_ACDB");
+        }else {
+           acdb_init();
+
+           acdb_reload_vocvol = (int (*)(int, int, int))::dlsym(mAcdbHandle,"acdb_loader_reload_vocvoltable");
+       if (acdb_reload_vocvol == NULL)
+           ALOGE("dlsym:Error:%s Loading acdb_reload_vocvol");
+
+           acdb_deallocate = (void (*)())::dlsym(mAcdbHandle,"acdb_loader_deallocate_ACDB");
+       if (acdb_deallocate == NULL)
+           ALOGE("dlsym:Error:%s Loading acdb_deallocate");
+           acdb_send_audio_cal =
+           (void (*)(int, int))::dlsym(mAcdbHandle,"acdb_loader_send_audio_cal");
+        }
+    }
+    mALSADevice->setACDBHandle(mAcdbHandle);
+#endif
+
     cardInfo = mALSADevice->getSoundCardInfo();
 
 #ifdef QCOM_USBAUDIO_ENABLED
@@ -265,32 +291,6 @@ AudioHardwareALSA::AudioHardwareALSA() :
             snd_use_case_mgr_create(&mUcMgr, "snd_soc_msm_2x", cardInfo->card);
         }
     }
-
-#ifdef QCOM_ACDB_ENABLED
-    mAcdbHandle = ::dlopen("/vendor/lib/libacdbloader.so", RTLD_NOW);
-    if (mAcdbHandle == NULL) {
-        ALOGE("AudioHardware: DLOPEN not successful for ACDBLOADER");
-    } else {
-        ALOGD("AudioHardware: DLOPEN successful for ACDBLOADER");
-        acdb_init = (int (*)(unsigned char*))::dlsym(mAcdbHandle,"acdb_loader_init_ACDB");
-        if (acdb_init == NULL) {
-            ALOGE("dlsym:Error:%s Loading acdb_loader_init_ACDB");
-        }else {
-           acdb_init(cardInfo->name);
-
-           acdb_reload_vocvol = (int (*)(int, int, int))::dlsym(mAcdbHandle,"acdb_loader_reload_vocvoltable");
-       if (acdb_reload_vocvol == NULL)
-           ALOGE("dlsym:Error:%s Loading acdb_reload_vocvol");
-
-           acdb_deallocate = (void (*)())::dlsym(mAcdbHandle,"acdb_loader_deallocate_ACDB");
-       if (acdb_deallocate == NULL)
-           ALOGE("dlsym:Error:%s Loading acdb_deallocate");
-           acdb_send_audio_cal =
-           (void (*)(int, int))::dlsym(mAcdbHandle,"acdb_loader_send_audio_cal");
-        }
-    }
-    mALSADevice->setACDBHandle(mAcdbHandle);
-#endif
 
     property_get("ro.board.platform", platform, "");
     property_get("ro.baseband", baseband, "");
