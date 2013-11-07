@@ -1116,6 +1116,7 @@ public:
     void resumeIfUseCaseTunnelOrLPA();
     uint32_t getActiveSessionVSID();
     bool isVoipValidFormat(int format);
+    bool isVoipCallAllowed(int format);
 private:
     AudioSpeakerProtection mspkrProtection;
     status_t     openExtOutput(int device);
