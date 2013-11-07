@@ -255,6 +255,8 @@ status_t AudioSessionOutALSA::openAudioSessionDevice(int type, int devices)
             tunnel_usecase = mParent->getTunnel(true);
             if (tunnel_usecase) {
                 status = openDevice(tunnel_usecase, true, devices);
+                if (status)
+                    mParent->freeTunnel(tunnel_usecase);
             } else {
                 ALOGE("openAudioSessionDevice getTunnel(true) failed, return BAD_VALUE:%d",BAD_VALUE);
                 return BAD_VALUE;
@@ -264,6 +266,8 @@ status_t AudioSessionOutALSA::openAudioSessionDevice(int type, int devices)
             tunnel_usecase = mParent->getTunnel(false);
             if (tunnel_usecase) {
                 status = openDevice(tunnel_usecase, false, devices);
+                if (status)
+                    mParent->freeTunnel(tunnel_usecase);
             } else {
                 ALOGE("openAudioSessionDevice getTunnel(false) failed, return BAD_VALUE:%d",BAD_VALUE);
                 return BAD_VALUE;
@@ -881,6 +885,7 @@ status_t AudioSessionOutALSA::getNextWriteTimestamp(int64_t *timestamp)
     struct snd_compr_tstamp tstamp;
     tstamp.timestamp = -1;
     if (mAlsaHandle && mAlsaHandle->handle &&
+        mParent->mALSADevice->mSndCardState == SND_CARD_UP &&
         ioctl(mAlsaHandle->handle->fd, SNDRV_COMPRESS_TSTAMP, &tstamp)){
         ALOGE("Failed SNDRV_COMPRESS_TSTAMP\n");
         return UNKNOWN_ERROR;
