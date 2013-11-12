@@ -667,24 +667,23 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
                       AudioSystem::DEVICE_IN_BUILTIN_MIC);
         } else if ((devices & AudioSystem::DEVICE_OUT_EARPIECE) ||
                   (devices & AudioSystem::DEVICE_IN_BUILTIN_MIC)) {
-            if((mode == AudioSystem::MODE_IN_COMMUNICATION)
-                    && devices & AudioSystem::DEVICE_IN_BUILTIN_MIC) {
+            if (devices & AudioSystem::DEVICE_IN_BUILTIN_MIC) {
                 ALOGV("Current Rx device %s",mCurRxUCMDevice);
                 if(!strncmp(mCurRxUCMDevice, SND_USE_CASE_DEV_SPEAKER ,
-                        strlen(SND_USE_CASE_DEV_SPEAKER))) {
+                            strlen(SND_USE_CASE_DEV_SPEAKER))) {
                     devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
-                    AudioSystem::DEVICE_OUT_SPEAKER);
+                              AudioSystem::DEVICE_OUT_SPEAKER);
                     ALOGV("Selecting Speaker: device %d",devices);
                 }
                 else{
-                    ALOGV("Selecting earpiece: device %d",devices);
                     devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
-                    AudioSystem::DEVICE_OUT_EARPIECE);
+                              AudioSystem::DEVICE_OUT_EARPIECE);
+                    ALOGV("Selecting earpiece: device %d",devices);
                 }
             }
             else{
                 devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
-                AudioSystem::DEVICE_OUT_EARPIECE);
+                          AudioSystem::DEVICE_OUT_EARPIECE);
             }
         } else if (devices & AudioSystem::DEVICE_OUT_SPEAKER) {
             devices = devices | (AudioSystem::DEVICE_IN_BUILTIN_MIC |
