@@ -171,6 +171,21 @@ static int USBRECBIT_FM = (1 << 3);
 #define AFE_PROXY_SAMPLE_RATE 48000
 #define AFE_PROXY_CHANNEL_COUNT 2
 
+/*
+FOR AUDIO MASTER MODE
+INFINITE RENDER WINDOW DEFINES
+TODO:These values should be same as
+the ones set by MPQ-Platform
+*/
+#define RENDER_WINDOWS_START_MSW  0xBFFFFFFF
+#define RENDER_WINDOWS_START_LSW  0xFFFFFFFF
+#define RENDER_WINDOWS_END_MSW    0x0FFFFFFF
+#define RENDER_WINDOWS_END_LSW    0xFFFFFFFF
+
+#define RUN_IMMEDIATE 0x0
+#define RUN_AT_ABSOLUTE_TIME 0x1
+#define RUN_AT_RELATIVE_TIME 0x2
+
 #define PCM_CHANNEL_FL    1
 /* Front right channel. */
 #define PCM_CHANNEL_FR    2
@@ -948,8 +963,11 @@ private:
     status_t            openCapturingAndRoutingDevices();
     status_t            closeDevice(alsa_handle_t *pHandle);
     status_t            doRouting(int devices);
-    status_t            pause_l();
-    status_t            resume_l();
+    status_t            pause();
+    status_t            resume();
+    status_t            flush();
+    status_t            resetBufferQueue();
+    status_t            drainTunnel();
     //Capture
     void                setCaptureFlagsBasedOnConfig();
     status_t            openPCMCapturePath();
@@ -1005,6 +1023,7 @@ private:
     void                exitFromAdjustClockThread();
     void                allocateAdjustClockPollFd();
     // Avsync Specifics
+    int                 mRunMode;
     void                update_input_meta_data_list_pre_decode(uint32_t type);
     void                update_input_meta_data_list_post_decode(uint32_t type,
                             uint32_t bytesConsumedInDecode);

@@ -392,7 +392,6 @@ ssize_t AudioBroadcastStreamALSA::write(const void *buffer, size_t bytes,
     ALOGV("write");
     int period_size;
     char *use_case;
-    uint64_t start_delay =0;
 
     ALOGV("write:: buffer %p, bytes %d", buffer, bytes);
     if (!mPowerLock) {
@@ -440,14 +439,10 @@ ssize_t AudioBroadcastStreamALSA::write(const void *buffer, size_t bytes,
         } while ((mPcmRxHandle->handle) && (sent < bytes));
     }
 #endif
-    start_delay = 0;
+    mFrameCount++;
     mReadMetaData.frameSize = bytes;
     mReadMetaData.timestampMsw = (uint32_t)((uint64_t)timestamp >> 32);
     mReadMetaData.timestampLsw = (uint32_t)(timestamp & 0x00000000FFFFFFFF);
-    if(mFirstBuffer && mCompreRxHandle){
-       ioctl( mCompreRxHandle->handle->fd,SNDRV_COMPRESS_SET_START_DELAY, &start_delay);
-       mFirstBuffer = false;
-    }
     return write_l((char*)buffer,bytes);
 }
 
@@ -512,23 +507,61 @@ status_t AudioBroadcastStreamALSA::setAvsyncWindow(int windowId, int ws_msw, int
 
     ALOGD("setAvsyncWindow1: Enter, ws_msw=%d, ws_lsw=%d, we_msw=%d, we_lsw=%d",
          ws_msw, ws_lsw, we_msw, we_lsw);
-    if(mPcmRxHandle) {
-        ALOGD("setAvsyncWindow: Inside PCM");
-        rxHandle = mPcmRxHandle;
-    }
-    else if(mCompreRxHandle) {
-        ALOGD("setAvsyncWindow: Inside ComprHandle");
-        rxHandle = mCompreRxHandle;
-    }
-     else if(mSecCompreRxHandle){
-        ALOGD("setAvsyncWindow: Inside ComprHandle");
-        rxHandle = mSecCompreRxHandle;
-    }
 
-    if ( rxHandle != NULL){
+    if ( mCompreRxHandle || mSecCompreRxHandle){
         if(windowId == QCOM_BROADCAST_AVSYNC_RENDER_WINDOW) {
             ALOGD("setAvsyncWindow: Inside RenderWindow");
             cmdId = SNDRV_COMPRESS_SET_AVSYNC_RENDER_WINDOW;
+            if(window.ws_msw == RENDER_WINDOWS_START_MSW && window.ws_lsw == RENDER_WINDOWS_START_LSW
+               && window.we_msw == RENDER_WINDOWS_END_MSW && window.we_lsw == RENDER_WINDOWS_END_LSW){
+               // This indicates infinite render window, which is set in case of Audio Master mode.
+               // For Audio Master Mode to work , CMD_RUN to DSP should be with RELATIVE_TIME mode.
+               ALOGE("Enable Audio Master Mode");
+               mRunMode = RUN_IMMEDIATE;
+            }
+            else {
+               // Finite Render window, which is set in case of PCR/Video Master mode.
+               // CMD_RUN to DSP should be with ABSOLUTE_TIME mode, with zero start delay,
+               // This ensures that the session time is intialized with Wall Clock (AV time value).
+               uint64_t start_delay =0;
+               ALOGE("Enable PCR master mode");
+               mRunMode = RUN_AT_ABSOLUTE_TIME;
+               if (mCompreRxHandle){
+                   rc = ioctl( mCompreRxHandle->handle->fd,SNDRV_COMPRESS_SET_START_DELAY, &start_delay);
+                   if (rc < 0)
+                      ALOGD("setAvsyncWindow(mCompreRxHandle): ioctl set start delay failed rc =%d\n",rc);
+               }
+               if (mSecCompreRxHandle){
+                   rc = ioctl( mSecCompreRxHandle->handle->fd,SNDRV_COMPRESS_SET_START_DELAY, &start_delay);
+                   if (rc < 0)
+                      ALOGD("setAvsyncWindow(mSecCompreRxHandle): ioctl set start delay failed rc =%d\n",rc);
+               }
+            }
+            if (mCompreRxHandle){
+                rc = ioctl(mCompreRxHandle->handle->fd, SNDRV_COMPRESS_SET_RUN_MODE, &mRunMode);
+                if (rc < 0)
+                    ALOGD("setAvsyncWindow(mCompreRxHandle): ioctl set start run mode failed rc =%d\n",rc);
+            }
+            if (mSecCompreRxHandle){
+                rc = ioctl(mSecCompreRxHandle->handle->fd, SNDRV_COMPRESS_SET_RUN_MODE, &mRunMode);
+                if (rc < 0)
+                    ALOGD("setAvsyncWindow(mSecCompreRxHandle): ioctl set start run mode failed rc =%d\n",rc);
+            }
+
+            if (mFrameCount > 0){
+                // This indicates runtime Change in the Mode, hence for this to be effective
+                // We need to pause , flush the buffered data and start the session again, so that
+                // the new mode is effective.
+                // NOTE: Assumption here is MPQ Player enusres that once the mode is changed,
+                // data packets related to older mode are not fed to AHAL.
+                // This might result in a glitch on the output to be heard, but becuase of
+                // a limitation in DSP, this is the best we support now.
+                if (!isSessionPaused){
+                     pause();
+                     flush();
+                     resume();
+                }
+            }
         }
         else if(windowId == QCOM_BROADCAST_AVSYNC_STAT_WINDOW) {
             ALOGD("setAvsyncWindow: Inside StatWindow");
@@ -536,9 +569,16 @@ status_t AudioBroadcastStreamALSA::setAvsyncWindow(int windowId, int ws_msw, int
         }
         ALOGD("setAvsyncWindow: calling ioctl avsync cmd=%d\n",cmdId);
 
-        rc = ioctl(rxHandle->handle->fd, cmdId, &window);
-        if (rc < 0)
-           ALOGD("setAvsyncWindow: ioctl setWindow failed rc = %d\n", rc);
+        if (mCompreRxHandle){
+            rc = ioctl(mCompreRxHandle->handle->fd, cmdId, &window);
+            if (rc < 0)
+                ALOGD("setAvsyncWindow(mCompreRxHandle): ioctl setWindow failed rc = %d\n", rc);
+        }
+        if (mSecCompreRxHandle){
+            rc = ioctl(mSecCompreRxHandle->handle->fd, cmdId, &window);
+            if (rc < 0)
+                ALOGD("setAvsyncWindow(mSecCompreRxHandle): ioctl setWindow failed rc = %d\n", rc);
+        }
     }
     else
         ALOGE("Handle Invalid hence not issuing any ioctls");
@@ -872,6 +912,7 @@ void AudioBroadcastStreamALSA::initialization()
     mPcmWriteTempBuffer       = NULL;
     mCompreWriteTempBuffer    = NULL;
     mFirstBuffer              = true;
+    mRunMode                  = 0;
 
     AudioSetupCompleteCB      = NULL;
     avSyncFlag                = 0;
@@ -1508,7 +1549,7 @@ status_t AudioBroadcastStreamALSA::openTunnelDevice(int devices)
                                  strlen(SND_USE_CASE_VERB_INACTIVE)))) {
             status = openRoutingDevice(SND_USE_CASE_VERB_HIFI_TUNNEL2, true, mSecDevices);
         } else {
-            status = openRoutingDevice(SND_USE_CASE_MOD_PLAY_TUNNEL2, false, mSecDevices);
+            status = openRoutingDevice(SND_USE_CASE_MOD_PLAY_TUNNEL3, false, mSecDevices);
         }
         if(use_case) {
             free(use_case);
@@ -3387,7 +3428,177 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
     return status;
 }
 
-status_t AudioBroadcastStreamALSA::pause_l()
+status_t AudioBroadcastStreamALSA::flush()
+{
+    Mutex::Autolock autoLock(mLock);
+    Mutex::Autolock autoLock1(mRoutingLock);
+    ALOGD("AudioBroadcastStreamALSA::flush E");
+    int err = 0;
+
+    if (mCompreRxHandle || mSecCompreRxHandle) {
+        ALOGV("Paused case, %d",isSessionPaused);
+        if ((mCompreRxHandle && (mCompreRxHandle->handle->start == 1)) || (mSecCompreRxHandle && (mSecCompreRxHandle->handle->start == 1))) {
+            if (!isSessionPaused) {
+               if (mCompreRxHandle) {
+                    if ((err = ioctl(mCompreRxHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE,1)) < 0) {
+                        ALOGE("Audio Pause failed");
+                        return err;
+                    }
+                }
+                if (mSecCompreRxHandle) {
+                    if ((err = ioctl(mSecCompreRxHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE, 1)) < 0) {
+                        ALOGE("Audio Pause failed");
+                        return err;
+                    }
+                }
+            }
+            if ((err = drainTunnel()) != OK)
+                return err;
+       } else {
+             ALOGW("Audio is not started yet, clearing Queue without drain");
+             if (mCompreRxHandle)
+                 mCompreRxHandle->handle->sync_ptr->c.control.appl_ptr = 0;
+             if (mSecCompreRxHandle)
+                 mSecCompreRxHandle->handle->sync_ptr->c.control.appl_ptr = 0;
+             {
+                 Mutex::Autolock autoLock(mSyncLock);
+                 if (mCompreRxHandle) {
+                     mCompreRxHandle->handle->sync_ptr->flags = 0;
+                     sync_ptr(mCompreRxHandle->handle);
+                 }
+                 if (mSecCompreRxHandle) {
+                     mSecCompreRxHandle->handle->sync_ptr->flags = 0;
+                     sync_ptr(mSecCompreRxHandle->handle);
+                 }
+             }
+             resetBufferQueue();
+        }
+        mSkipWrite = true;
+        mWriteCv.signal();
+    }
+    if(mPcmRxHandle) {
+        if(!isSessionPaused) {
+            ALOGE("flush(): Move to pause state if flush without pause");
+            if (ioctl(mPcmRxHandle->handle->fd, SNDRV_PCM_IOCTL_PAUSE,1) < 0)
+                ALOGE("flush(): Audio Pause failed");
+        }
+        pcm_prepare(mPcmRxHandle->handle);
+        ALOGV("flush(): prepare completed");
+    }
+
+    if(mBitstreamSM)
+       mBitstreamSM->resetBitstreamPtr();
+     if(mUseMS11Decoder == true) {
+      mMS11Decoder->flush();
+      if (mFormat == AUDIO_FORMAT_AC3 || mFormat == AUDIO_FORMAT_EAC3 ||
+            mFormat == AUDIO_FORMAT_AAC || mFormat == AUDIO_FORMAT_AAC_ADIF){
+         delete mMS11Decoder;
+         mMS11Decoder = new SoftMS11;
+         int32_t format_ms11;
+         if(mMS11Decoder->initializeMS11FunctionPointers() == false){
+            ALOGE("Could not resolve all symbols Required for MS11");
+            delete mMS11Decoder;
+            return -1;
+         }
+         if(mFormat == AUDIO_FORMAT_AAC || mFormat == AUDIO_FORMAT_AAC_ADIF){
+            format_ms11 = FORMAT_DOLBY_PULSE_MAIN;
+         } else {
+            format_ms11 = FORMAT_DOLBY_DIGITAL_PLUS_MAIN;
+         }
+         if(mMS11Decoder->setUseCaseAndOpenStream(format_ms11,mChannels, mSampleRate)){
+             ALOGE("SetUseCaseAndOpen MS11 failed");
+             delete mMS11Decoder;
+             return -1;
+         }
+      }
+    }
+    ALOGD("AudioSessionOutALSA::flush X");
+    return NO_ERROR;
+}
+
+status_t AudioBroadcastStreamALSA::drainTunnel()
+{
+    status_t err = OK;
+
+    if (mCompreRxHandle) {
+        mCompreRxHandle->handle->start = 0;
+
+      err = pcm_prepare(mCompreRxHandle->handle);
+        if(err != OK)
+            ALOGE("pcm_prepare failed for mCompreRxHandle = %d",err);
+
+        ALOGV("drainTunnel Empty Queue1 size() = %d,"
+              " Filled Queue1 size() = %d ",\
+              mInputMemEmptyQueue[0].size(),\
+              mInputMemFilledQueue[0].size());
+        {
+            Mutex::Autolock autoLock(mSyncLock);
+            mCompreRxHandle->handle->sync_ptr->flags =
+                       SNDRV_PCM_SYNC_PTR_APPL | SNDRV_PCM_SYNC_PTR_AVAIL_MIN;
+            sync_ptr(mCompreRxHandle->handle);
+        }
+        hw_ptr[0] = 0;
+        ALOGV("appl_ptr1= %d",\
+            (int)mCompreRxHandle->handle->sync_ptr->c.control.appl_ptr);
+    }
+    if (mSecCompreRxHandle)
+    {
+        mSecCompreRxHandle->handle->start = 0;
+
+       err = pcm_prepare(mSecCompreRxHandle->handle);
+       if(err != OK)
+           ALOGE("pcm_prepare failed for mSecCompreRxHandle = %d",err);
+
+        ALOGV("drainTunnel Empty Queue2 size() = %d,"
+              " Filled Queue2 size() = %d ",\
+              mInputMemEmptyQueue[1].size(),\
+              mInputMemFilledQueue[1].size());
+        {
+            Mutex::Autolock autoLock(mSyncLock);
+            mSecCompreRxHandle->handle->sync_ptr->flags =
+                       SNDRV_PCM_SYNC_PTR_APPL | SNDRV_PCM_SYNC_PTR_AVAIL_MIN;
+            sync_ptr(mSecCompreRxHandle->handle);
+        }
+        hw_ptr[1] = 0;
+        ALOGV("appl_ptr2= %d",\
+              (int)mSecCompreRxHandle->handle->sync_ptr->c.control.appl_ptr);
+    }
+    resetBufferQueue();
+    ALOGV("Reset, drain and prepare completed");
+    return err;
+}
+
+status_t AudioBroadcastStreamALSA::resetBufferQueue()
+{
+    mInputMemMutex.lock();
+    List<BuffersAllocated>::iterator it;
+    if (mCompreRxHandle) {
+        mInputMemFilledQueue[0].clear();
+        mInputMemEmptyQueue[0].clear();
+        it = mInputBufPool[0].begin();
+        for (;it!=mInputBufPool[0].end();++it) {
+            memset((*it).memBuf, 0x0, (*it).memBufsize);
+            mInputMemEmptyQueue[0].push_back(*it);
+        }
+        ALOGV("Transferred all the buffers from response queue1 to\
+            request queue1");
+    }
+    if (mSecCompreRxHandle) {
+        mInputMemFilledQueue[1].clear();
+        mInputMemEmptyQueue[1].clear();
+        it = mInputBufPool[1].begin();
+        for (;it!=mInputBufPool[1].end();++it) {
+            memset((*it).memBuf, 0x0, (*it).memBufsize);
+            mInputMemEmptyQueue[1].push_back(*it);
+        }
+        ALOGV("Transferred all the buffers from response queue2 to\
+               request queue2");
+    }
+    mInputMemMutex.unlock();
+    return NO_ERROR;
+}
+
+status_t AudioBroadcastStreamALSA::pause()
 {
     ALOGE("pause");
     if(mPcmRxHandle) {
@@ -3418,7 +3629,7 @@ status_t AudioBroadcastStreamALSA::pause_l()
     return NO_ERROR;
 }
 
-status_t AudioBroadcastStreamALSA::resume_l()
+status_t AudioBroadcastStreamALSA::resume()
 {
     if (mRouteAudioToA2dp) {
         ALOGD("startA2dpPlayback - resume - usecase %x", mA2dpUseCase);
