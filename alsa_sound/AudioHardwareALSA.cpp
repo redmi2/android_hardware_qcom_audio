@@ -2619,21 +2619,22 @@ status_t AudioHardwareALSA::setMicMute(bool state)
     ALOGD("setMicMute  newMode %d state:%d",newMode,state);
     if(newMode == AUDIO_MODE_IN_COMMUNICATION) {
         if (mVoipMicMute != state) {
-             mVoipMicMute = state;
-            ALOGD("setMicMute: mVoipMicMute %d", mVoipMicMute);
             if(mALSADevice) {
                 mALSADevice->setVoipMicMute(state);
             }
         }
     } else {
         if (mMicMute != state) {
-              mMicMute = state;
-              ALOGD("setMicMute: mMicMute %d", mMicMute);
               if(mALSADevice) {
                   mALSADevice->setMicMute(state);
               }
         }
     }
+
+    mMicMute = state;
+    mVoipMicMute = state;
+    ALOGD("setMicMute: mMicMute %d; mVoipMicMute %d", mMicMute, mVoipMicMute);
+
     return NO_ERROR;
 }
 
