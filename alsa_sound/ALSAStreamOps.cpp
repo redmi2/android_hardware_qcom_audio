@@ -225,10 +225,11 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
                ALOGV("setParameters(): camcorder_enabled %d, camcorder_enabled");
               if (camcorder_enabled == 1) {
                   if ((mMode == AudioSystem::MODE_IN_CALL) ||
-                       (mMode == AudioSystem::MODE_IN_COMMUNICATION)) {
-                       ALOGD("Ignoring routing for CAMCORDER recording while in call");
-
-                       return NO_ERROR;
+                      (mMode == AudioSystem::MODE_IN_COMMUNICATION)) {
+                      ALOGD("Ignoring routing for CAMCORDER recording while in call");
+                      return NO_ERROR;
+                  } else {
+                      device = AudioSystem::DEVICE_IN_BUILTIN_MIC;
                   }
               }
            } else {
