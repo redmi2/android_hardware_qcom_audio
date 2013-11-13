@@ -3006,6 +3006,7 @@ status_t AudioHardwareALSA::closeExtOutput(int device) {
     ALOGD("closeExtOutput");
     status_t err = NO_ERROR;
     Mutex::Autolock autolock1(mExtOutMutex);
+    Mutex::Autolock autolock2(mExtOutMutexWrite);
     if (device & AudioSystem::DEVICE_OUT_ALL_A2DP) {
         if(mExtOutStream == mA2dpStream)
             mExtOutStream = NULL;
@@ -3292,26 +3293,26 @@ void AudioHardwareALSA::extOutThreadFunc() {
         while (err == OK && (numBytesRemaining  > 0) && !mKillExtOutThread
                 && mIsExtOutEnabled ) {
             {
-                mExtOutMutex.lock();
+                mExtOutMutexWrite.lock();
                 if(mExtOutStream != NULL ) {
                     bytesAvailInBuffer = mExtOutStream->common.get_buffer_size(&mExtOutStream->common);
                     uint32_t writeLen = bytesAvailInBuffer > numBytesRemaining ?
                                     numBytesRemaining : bytesAvailInBuffer;
                     ALOGV("Writing %d bytes to External Output ", writeLen);
                     bytesWritten = mExtOutStream->write(mExtOutStream,copyBuffer, writeLen);
+                    mExtOutMutexWrite.unlock();
                 } else {
                     //unlock the mutex before sleep
-                    mExtOutMutex.unlock();
+                    mExtOutMutexWrite.unlock();
                     ALOGV(" No External output to write  ");
                     usleep(proxyBufferTime*1000);
                     bytesWritten = numBytesRemaining;
                 }
-                mExtOutMutex.unlock();
             }
             //If the write fails make this thread sleep and let other
             //thread (eg: stopA2DP) to acquire lock to prevent a deadlock.
-            if(0 >= bytesWritten) {
-                ALOGV("bytesWritten = %d",bytesWritten);
+            if(bytesWritten < 0 || bytesWritten == 0) {
+                ALOGE("bytesWritten = %d",bytesWritten);
                 usleep(10000);
                 break;
             }
