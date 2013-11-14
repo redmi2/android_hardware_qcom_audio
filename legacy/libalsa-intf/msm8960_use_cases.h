@@ -340,6 +340,9 @@ static card_mapping_t card_mapping_list[] = {
 #define SND_USE_CASE_MOD_PSEUDO_TUNNEL2    "Play Tunnel2Pseudo"
 #define SND_USE_CASE_MOD_PSEUDO_TUNNEL3    "Play Tunnel3Pseudo"
 #define SND_USE_CASE_MOD_PLAY_VOICE2             "Play Voice2"
+#define SND_USE_CASE_MOD_PSEUDO_MUSIC2    "Play Music2Pseudo"
+#define SND_USE_CASE_MOD_PSEUDO_MUSIC3    "Play Music3Pseudo"
+#define SND_USE_CASE_MOD_PSEUDO_MUSIC4    "Play Music4Pseudo"
 
 
 /* List utility functions for maintaining enabled devices and modifiers */
