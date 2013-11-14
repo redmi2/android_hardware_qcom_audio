@@ -1117,7 +1117,7 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
             }
         }
     }
-    return sent;
+    return bytes;
 }
 
 int32_t AudioSessionOutALSA::writeToCompressedDriver(char *buffer, int bytes)
