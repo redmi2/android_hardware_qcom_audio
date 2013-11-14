@@ -38,7 +38,9 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.*/
 int pil_fd;
 #define NUM_FD 1
 int bootup_complete = 0;
-char adsp_pil_state_file[] = "/sys/kernel/audio_voice_service/status";
+//In MPQ path is different?
+//char adsp_pil_state_file[] = "/sys/kernel/audio_voice_service/status";
+char adsp_pil_state_file[] = "/sys/bus/pil/devices/pil0/state";
 
 namespace android {
 
