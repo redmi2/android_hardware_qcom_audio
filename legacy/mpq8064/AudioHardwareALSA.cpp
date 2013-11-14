@@ -901,7 +901,6 @@ AudioHardwareALSA::closeBroadcastStream(AudioBroadcastStream* out)
 
 AudioStreamOut *
 AudioHardwareALSA::openOutputStream(uint32_t devices,
-                                    audio_output_flags_t flags,
                                     int *format,
                                     uint32_t *channels,
                                     uint32_t *sampleRate,
@@ -909,8 +908,11 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
 {
     bool bIsUseCaseSet = false;
     Mutex::Autolock autoLock(mLock);
-    ALOGD("openOutputStream: devices 0x%x channels %d sampleRate %d",
-         devices, *channels, *sampleRate);
+
+    audio_output_flags_t flags = static_cast<audio_output_flags_t> (*status);
+
+    ALOGD("openOutputStream: devices 0x%x channels %d sampleRate %d flags 0x%x",
+         devices, *channels, *sampleRate, flags);
 
     status_t err = BAD_VALUE;
     if (flags & AUDIO_OUTPUT_FLAG_TUNNEL) {
