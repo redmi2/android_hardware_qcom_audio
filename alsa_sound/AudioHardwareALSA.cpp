@@ -766,6 +766,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
     ssize_t pos;
     int cardNumber;
     String8 cardStatus;
+    ALSAHandleList::iterator it;
 
     ALOGV("%s() ,%s", __func__, keyValuePairs.string());
 
@@ -1013,6 +1014,17 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         mVoipBitRate = atoi(value);
         mVoipEvrcBitRateMin = mVoipBitRate;
         mVoipEvrcBitRateMax = mVoipBitRate;
+
+        for(it = mDeviceList.begin();
+            it != mDeviceList.end(); ++it) {
+                if((!strcmp(it->useCase, SND_USE_CASE_VERB_VOIP2)) ||
+                   (!strcmp(it->useCase, SND_USE_CASE_MOD_PLAY_VOIP2))) {
+                    ALOGV("VOCODER:  it->format %d; rate: %d", it->format, mVoipBitRate);
+                    mALSADevice->setVoipConfig(getVoipMode(it->format), mVoipBitRate);
+                    break;
+                }
+        }
+
         param.remove(key);
     }
 
