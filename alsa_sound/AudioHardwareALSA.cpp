@@ -99,7 +99,7 @@ AudioHardwareALSA::AudioHardwareALSA() :
     mALSADevice(0),mVoipInStreamCount(0),mVoipOutStreamCount(0),mVoip2InStreamCount(0),
     mVoip2OutStreamCount(0),mVoipMicMute(false),mVoip2MicMute(false),mVoipBitRate(0),
     mCallState(CALL_INACTIVE),mAcdbHandle(NULL),mCsdHandle(NULL),mMicMute(0),
-    mVoipEvrcBitRateMin(0),mVoipEvrcBitRateMax(0)
+    mVoipEvrcBitRateMin(0),mVoipEvrcBitRateMax(0),mIncallMode(0)
 {
     FILE *fp;
     char soundCardInfo[200];
@@ -1552,19 +1552,24 @@ status_t AudioHardwareALSA::doRouting(int device, char* useCase)
             ALSAHandleList::iterator it = mDeviceList.end();
             it--;
             status_t err = NO_ERROR;
-            if (useCase != NULL) {
-                //if required usecase is not null, go through mDeviceList to find last matching alsa_handle_t
+            uint32_t activeUsecase = useCaseStringToEnum(it->useCase);
+
+            //If required usecase is not null, go through mDeviceList to find last matching alsa_handle_t.
+            //For FM we don't open an output stream. Hence required usecase shouldn't be considered.
+            if ( (useCase != NULL) && (activeUsecase != USECASE_FM) ) {
                 for(ALSAHandleList::iterator it2 = mDeviceList.begin(); it2 != mDeviceList.end(); it2++) {
                     if (!strncmp(useCase, it2->useCase,sizeof(useCase))) {
                             it = it2;
                             ALOGV("found matching required usecase:%s device:%x",it->useCase,it->devices);
+                            activeUsecase = useCaseStringToEnum(it->useCase);
+                            break;
                         }
                 }
             }
-            uint32_t activeUsecase = useCaseStringToEnum(it->useCase);
             ALOGV("Dorouting updated usecase:%s device:%x activeUsecase",it->useCase, it->devices, activeUsecase);
             if (!((device & AudioSystem::DEVICE_OUT_ALL_A2DP) &&
                   (mCurRxDevice & AUDIO_DEVICE_OUT_ALL_USB))) {
+                /* Music playback case */
                 if ((activeUsecase == USECASE_HIFI_LOW_POWER) ||
                     (activeUsecase == USECASE_HIFI_TUNNEL) ||
                     (activeUsecase == USECASE_HIFI_TUNNEL2) ||
@@ -1582,21 +1587,21 @@ status_t AudioHardwareALSA::doRouting(int device, char* useCase)
                     err = startPlaybackOnExtOut_l(activeUsecase);
                 } else {
                     //WHY NO check for prev device here?
+                    /* For low latency use case */
                     if (device != mCurRxDevice) {
                         if((isExtOutDevice(mCurRxDevice)) &&
                             (isExtOutDevice(device))) {
+                            /* Stop has to be called only if we are switching
+                            from USB to A2DP or vice versa */
                             activeUsecase = getExtOutActiveUseCases_l();
                             stopPlaybackOnExtOut_l(activeUsecase);
-                            mALSADevice->route(&(*it),(uint32_t)device, newMode);
                             mRouteAudioToExtOut = true;
-                            startPlaybackOnExtOut_l(activeUsecase);
-                        } else {
-                           mALSADevice->route(&(*it),(uint32_t)device, newMode);
                         }
+                        mALSADevice->route(&(*it),(uint32_t)device, newMode);
                     }
-                    if (activeUsecase == USECASE_FM){
-                        err = startPlaybackOnExtOut_l(activeUsecase);
-                    }
+
+                    /* open Proxy and start Playbackthread either way */
+                    err = startPlaybackOnExtOut_l(activeUsecase);
                 }
                 if(err) {
                     ALOGW("startPlaybackOnExtOut_l for hardware output failed err = %d", err);
@@ -2093,6 +2098,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
                }
           } else {
               ALOGV("Invalid incall music usecase, return NULL");
+              free(use_case);
               return NULL;
           }
 #endif
@@ -2509,7 +2515,13 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                 (!strncmp(it->useCase, SND_USE_CASE_VERB_UL_DL_REC,
                  sizeof (SND_USE_CASE_VERB_UL_DL_REC))) ||
                 (!strncmp(it->useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC,
-                 sizeof (SND_USE_CASE_MOD_CAPTURE_MUSIC)))) {
+                 sizeof (SND_USE_CASE_MOD_CAPTURE_MUSIC))) ||
+                (!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC,
+                 sizeof (SND_USE_CASE_VERB_HIFI_REC))) ||
+                (!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_LOWLATENCY_REC,
+                 sizeof (SND_USE_CASE_VERB_HIFI_LOWLATENCY_REC))) ||
+                (!strncmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED,
+                 sizeof (SND_USE_CASE_VERB_HIFI_REC_COMPRESSED)))) {
                 ALOGE("error:Input stream already opened for voice recording");
                 return in;
             }
@@ -2520,6 +2532,7 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                 ALOGD("openInputStream: into incall recording, channels %d", *channels);
 
                 if ((!sessionVsid) && (mFusion3Platform == false)) {
+                    free(use_case);
                     return NULL;
                 }
                 mIncallMode = *channels;
