@@ -743,7 +743,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
 
        if (cardNumber != mALSADevice->mSndCardNumber) {
            ALOGV("Ignore status change for card number %d mSndCardNumber %d",
-                 cardNumber, mSndCardNumber);
+                 cardNumber, mALSADevice->mSndCardNumber);
        } else if (cardStatus == "ONLINE") {
            ALOGV("Sound card online set SSRcomplete");
            mALSADevice->mSndCardState = SND_CARD_UP_AFTER_SSR;
@@ -1502,19 +1502,24 @@ status_t AudioHardwareALSA::doRouting(int device, char* useCase)
             ALSAHandleList::iterator it = mDeviceList.end();
             it--;
             status_t err = NO_ERROR;
-            if (useCase != NULL) {
-                //if required usecase is not null, go through mDeviceList to find last matching alsa_handle_t
+            uint32_t activeUsecase = useCaseStringToEnum(it->useCase);
+
+            //If required usecase is not null, go through mDeviceList to find last matching alsa_handle_t.
+            //For FM we don't open an output stream. Hence required usecase shouldn't be considered.
+            if ( (useCase != NULL) && (activeUsecase != USECASE_FM) ) {
                 for(ALSAHandleList::iterator it2 = mDeviceList.begin(); it2 != mDeviceList.end(); it2++) {
                     if (!strncmp(useCase, it2->useCase,sizeof(useCase))) {
                             it = it2;
                             ALOGV("found matching required usecase:%s device:%x",it->useCase,it->devices);
+                            activeUsecase = useCaseStringToEnum(it->useCase);
+                            break;
                         }
                 }
             }
-            uint32_t activeUsecase = useCaseStringToEnum(it->useCase);
             ALOGV("Dorouting updated usecase:%s device:%x activeUsecase",it->useCase, it->devices, activeUsecase);
             if (!((device & AudioSystem::DEVICE_OUT_ALL_A2DP) &&
                   (mCurRxDevice & AUDIO_DEVICE_OUT_ALL_USB))) {
+                /* Music playback case */
                 if ((activeUsecase == USECASE_HIFI_LOW_POWER) ||
                     (activeUsecase == USECASE_HIFI_TUNNEL) ||
                     (activeUsecase == USECASE_HIFI_TUNNEL2) ||
@@ -1532,21 +1537,21 @@ status_t AudioHardwareALSA::doRouting(int device, char* useCase)
                     err = startPlaybackOnExtOut_l(activeUsecase);
                 } else {
                     //WHY NO check for prev device here?
+                    /* For low latency use case */
                     if (device != mCurRxDevice) {
                         if((isExtOutDevice(mCurRxDevice)) &&
                             (isExtOutDevice(device))) {
+                            /* Stop has to be called only if we are switching
+                            from USB to A2DP or vice versa */
                             activeUsecase = getExtOutActiveUseCases_l();
                             stopPlaybackOnExtOut_l(activeUsecase);
-                            mALSADevice->route(&(*it),(uint32_t)device, newMode);
                             mRouteAudioToExtOut = true;
-                            startPlaybackOnExtOut_l(activeUsecase);
-                        } else {
-                           mALSADevice->route(&(*it),(uint32_t)device, newMode);
                         }
+                        mALSADevice->route(&(*it),(uint32_t)device, newMode);
                     }
-                    if (activeUsecase == USECASE_FM){
-                        err = startPlaybackOnExtOut_l(activeUsecase);
-                    }
+
+                    /* open Proxy and start Playbackthread either way */
+                    err = startPlaybackOnExtOut_l(activeUsecase);
                 }
                 if(err) {
                     ALOGW("startPlaybackOnExtOut_l for hardware output failed err = %d", err);
