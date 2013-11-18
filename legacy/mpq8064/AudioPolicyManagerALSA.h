@@ -40,7 +40,7 @@ public:
         virtual ~AudioPolicyManager() {}
 
         // AudioPolicyInterface
-        virtual status_t setDeviceConnectionState(AudioSystem::audio_devices device, AudioSystem::device_connection_state state, const char *device_address);
+        virtual status_t setDeviceConnectionState(audio_devices_t device, AudioSystem::device_connection_state state, const char *device_address);
         virtual void setPhoneState(int state);
         virtual void setForceUse(AudioSystem::force_use usage, AudioSystem::forced_config config);
         virtual status_t startOutput(audio_io_handle_t output, AudioSystem::stream_type stream, int session = 0);
@@ -59,7 +59,7 @@ public:
         //  before updateDeviceForStrategy() is called.
         virtual audio_devices_t getDeviceForStrategy(routing_strategy strategy, bool fromCache = true);
 
-        virtual AudioSystem::device_connection_state getDeviceConnectionState(AudioSystem::audio_devices device,
+        virtual AudioSystem::device_connection_state getDeviceConnectionState(audio_devices_t device,
                                                                               const char *device_address);
 
         void checkA2dpSuspend();
