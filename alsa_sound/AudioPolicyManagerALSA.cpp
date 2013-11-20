@@ -2441,6 +2441,15 @@ bool AudioPolicyManager::platform_is_Fusion3()
 #ifdef RESOURCE_MANAGER
 void AudioPolicyManager::checkAndSuspendOutputs() {
 
+    char rmexceptions[PROPERTY_VALUE_MAX];
+    property_get("rm.audio.exceptions",rmexceptions,"0");
+    bool isExceptionEnabled = !strcmp("true",rmexceptions) || atoi(rmexceptions);
+
+    if(isExceptionEnabled) {
+        ALOGD("\n  %s ::>>>>>> RM EXCEPTION   system property enabled ...\n",__FUNCTION__);
+        return;
+    }
+
     AudioOutputDescriptor *desc;
     for (size_t i = 0; i < mOutputs.size(); i++) {
         desc = mOutputs.valueAt(i);
@@ -2459,6 +2468,16 @@ void AudioPolicyManager::checkAndSuspendOutputs() {
 }
 
 void AudioPolicyManager::checkAndRestoreOutputs() {
+
+    char rmexceptions[PROPERTY_VALUE_MAX];
+    property_get("rm.audio.exceptions",rmexceptions,"0");
+    bool isExceptionEnabled = !strcmp("true",rmexceptions) || atoi(rmexceptions);
+
+    if(isExceptionEnabled) {
+        ALOGD("\n  >>>>>>%s :: RM EXCEPTION   system property enabled ...\n",__FUNCTION__);
+        return;
+    }
+
 
     AudioOutputDescriptor *desc;
     for (size_t i = 0; i < mOutputs.size(); i++) {
