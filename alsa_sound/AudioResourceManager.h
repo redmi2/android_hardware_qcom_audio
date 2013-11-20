@@ -171,7 +171,7 @@ const struct UseCaseMetadata sVideoRecordConflicts[] = {
     //STRING_AND_REFCOUNT(USECASE_VIDEO_RECORD,1),
     //STRING_AND_REFCOUNT(USECASE_VIDEO_TELEPHONY,1),
     //STRING_AND_REFCOUNT(USECASE_LPA_PLAYBACK,1),
-    STRING_AND_REFCOUNT(USECASE_FM_PLAYBACK,1),
+    //STRING_AND_REFCOUNT(USECASE_FM_PLAYBACK,1),
 };
 
 // No conflicts for voice call. Voice call has to be honoured
