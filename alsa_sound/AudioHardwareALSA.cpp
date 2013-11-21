@@ -789,7 +789,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
 
        if (cardNumber != mALSADevice->mSndCardNumber) {
            ALOGV("Ignore status change for card number %d mSndCardNumber %d",
-                 cardNumber, mSndCardNumber);
+                 cardNumber, mALSADevice->mSndCardNumber);
        } else if (cardStatus == "ONLINE") {
            ALOGV("Sound card online set SSRcomplete");
            mALSADevice->mSndCardState = SND_CARD_UP_AFTER_SSR;
