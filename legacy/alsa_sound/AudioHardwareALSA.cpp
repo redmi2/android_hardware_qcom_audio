@@ -575,7 +575,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         if(mMode != AUDIO_MODE_IN_CALL){
            return NO_ERROR;
         }
-        doRouting(0);
+        doRouting(0,NULL);
         param.remove(key);
     }
 #ifdef QCOM_FLUENCE_ENABLED
@@ -602,7 +602,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
             ALOGV("Fluence feature Disabled");
         }
         mALSADevice->setFlags(mDevSettingsFlag);
-        doRouting(0);
+        doRouting(0,NULL);
         param.remove(key);
     }
 #endif
@@ -642,7 +642,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
             mDevSettingsFlag &= (~ANC_FLAG);
         }
         mALSADevice->setFlags(mDevSettingsFlag);
-        doRouting(0);
+        doRouting(0,NULL);
         param.remove(key);
     }
 #endif
@@ -651,7 +651,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
     if (param.getInt(key, device) == NO_ERROR) {
         // Ignore routing if device is 0.
         if(device) {
-            doRouting(device);
+            doRouting(device,NULL);
         }
         param.remove(key);
     }
@@ -807,7 +807,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
            }
 
            if(isAnyCallActive())
-                doRouting(0);
+              doRouting(0,NULL);
         }
         param.remove(key);
     }
@@ -963,7 +963,7 @@ void AudioHardwareALSA::startUsbRecordingIfNotStarted(){
 }
 #endif
 
-status_t AudioHardwareALSA::doRouting(int device)
+status_t AudioHardwareALSA::doRouting(int device, char* useCase)
 {
     Mutex::Autolock autoLock(mLock);
     int newMode = mode();
@@ -1090,7 +1090,17 @@ status_t AudioHardwareALSA::doRouting(int device)
             ALSAHandleList::iterator it = mDeviceList.end();
             it--;
             status_t err = NO_ERROR;
+            if (useCase != NULL) {
+                //if required usecase is not null, go through mDeviceList to find last matching alsa_handle_t
+                for(ALSAHandleList::iterator it2 = mDeviceList.begin(); it2 != mDeviceList.end(); it2++) {
+                    if (!strncmp(useCase, it2->useCase,sizeof(useCase))) {
+                            it = it2;
+                            ALOGV("found matching required usecase:%s device:%x",it->useCase,it->devices);
+                        }
+                }
+            }
             uint32_t activeUsecase = useCaseStringToEnum(it->useCase);
+            ALOGV("Dorouting updated usecase:%s device:%x activeUsecase",it->useCase, it->devices, activeUsecase);
             if (!((device & AudioSystem::DEVICE_OUT_ALL_A2DP) &&
                   (mCurRxDevice & AUDIO_DEVICE_OUT_ALL_USB))) {
                    if (device != mCurRxDevice) {
@@ -2706,6 +2716,7 @@ status_t AudioHardwareALSA::closeExtOutput(int device) {
     ALOGV("closeExtOutput");
     status_t err = NO_ERROR;
     Mutex::Autolock autolock1(mExtOutMutex);
+    Mutex::Autolock autolock2(mExtOutMutexWrite);
     if (device & AudioSystem::DEVICE_OUT_ALL_A2DP) {
         if(mExtOutStream == mA2dpStream)
             mExtOutStream = NULL;
@@ -2992,15 +3003,17 @@ void AudioHardwareALSA::extOutThreadFunc() {
         while (err == OK && (numBytesRemaining  > 0) && !mKillExtOutThread
                 && mIsExtOutEnabled ) {
             {
-                Mutex::Autolock autolock1(mExtOutMutex);
+                mExtOutMutexWrite.lock();
                 if(mExtOutStream != NULL ) {
                     bytesAvailInBuffer = mExtOutStream->common.get_buffer_size(&mExtOutStream->common);
                     uint32_t writeLen = bytesAvailInBuffer > numBytesRemaining ?
                                     numBytesRemaining : bytesAvailInBuffer;
                     ALOGV("Writing %d bytes to External Output ", writeLen);
                     bytesWritten = mExtOutStream->write(mExtOutStream,copyBuffer, writeLen);
-                    mExtOutMutex.unlock();
+                    mExtOutMutexWrite.unlock();
                 } else {
+                    //unlock the mutex before sleep
+                    mExtOutMutexWrite.unlock();
                     ALOGV(" No External output to write  ");
                     usleep(proxyBufferTime*1000);
                     bytesWritten = numBytesRemaining;
@@ -3008,8 +3021,8 @@ void AudioHardwareALSA::extOutThreadFunc() {
             }
             //If the write fails make this thread sleep and let other
             //thread (eg: stopA2DP) to acquire lock to prevent a deadlock.
-            if(bytesWritten == -1) {
-                ALOGV("bytesWritten = %d",bytesWritten);
+            if(bytesWritten < 0 || bytesWritten == 0) {
+                ALOGE("bytesWritten = %d",bytesWritten);
                 usleep(10000);
                 break;
             }
