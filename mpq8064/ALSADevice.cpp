@@ -304,7 +304,10 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
         }  else if(format == AUDIO_FORMAT_MP2) {
              ALOGV("MP2 CODEC");
              compr_params.codec.id = compr_cap.codecs[12];
-        }else {
+        } else if(format == SNDRV_PCM_FORMAT_S16_LE) {
+             ALOGV("PCM FORMAT");
+             compr_params.codec.id = compr_cap.codecs[11];
+        } else {
              ALOGE("format not supported to open tunnel device");
              if (params)
                  free(params);
@@ -330,9 +333,11 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
                 free(params);
             return err;
         }
-        handle->handle->flags &= ~(PCM_STEREO | PCM_MONO | PCM_QUAD | PCM_5POINT1);
-        handle->handle->flags |= PCM_7POINT1;
-        handle->channels = 8;
+        if(format != SNDRV_PCM_FORMAT_S16_LE){
+            handle->handle->flags &= ~(PCM_STEREO | PCM_MONO | PCM_QUAD | PCM_5POINT1);
+            handle->handle->flags |= PCM_7POINT1;
+            handle->channels = 8;
+        }
     }
     if(handle->sampleRate > 48000) {
         ALOGE("Sample rate >48000, opening the driver with 48000Hz");
