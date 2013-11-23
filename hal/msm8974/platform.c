@@ -1380,6 +1380,14 @@ void platform_get_parameters(void *platform,
         str_parms_add_str(reply, AUDIO_PARAMETER_KEY_FLUENCE_TYPE, value);
     }
 
+    memset(value, 0, sizeof(value));
+    ret = str_parms_get_str(query, AUDIO_PARAMETER_KEY_SLOWTALK,
+                            value, sizeof(value));
+    if (ret >= 0) {
+        str_parms_add_int(reply, AUDIO_PARAMETER_KEY_SLOWTALK,
+                          my_data->slowtalk);
+    }
+
     ALOGV("%s: exit: returns - %s", __func__, str_parms_to_str(reply));
 }
 
@@ -1402,4 +1410,15 @@ int platform_update_usecase_from_source(int source, int usecase)
     if(source == AUDIO_SOURCE_FM_RX_A2DP)
         usecase = USECASE_AUDIO_RECORD_FM_VIRTUAL;
     return usecase;
+}
+
+bool platform_listen_update_status(snd_device_t snd_device)
+{
+    if ((snd_device >= SND_DEVICE_IN_BEGIN) &&
+        (snd_device < SND_DEVICE_IN_END) &&
+        (snd_device != SND_DEVICE_IN_CAPTURE_FM) &&
+        (snd_device != SND_DEVICE_IN_CAPTURE_VI_FEEDBACK))
+        return true;
+    else
+        return false;
 }
