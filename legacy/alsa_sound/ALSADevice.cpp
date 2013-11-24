@@ -721,6 +721,7 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
                     setEcrxDevice(ec_rx_dev);
                     free(ec_rx_dev);
                 }
+                free(ec_dev);
             }
         } else {
             ALOGE("acdb_loader_get_ecrx_device is NULL");
@@ -2534,6 +2535,8 @@ status_t ALSADevice::startProxy() {
                    capture_handle->underruns++;
                    capture_handle->running = 0;
                    capture_handle->start = 0;
+                   /* sleeping for 10 ms before retrying */
+                   usleep(10000);
                    continue;
                 } else {
                    ALOGE("IGNORE - IOCTL_START failed for proxy err: %d \n", errno);
