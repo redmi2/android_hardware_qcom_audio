@@ -94,9 +94,6 @@ int stop_call(struct audio_device *adev, audio_usecase_t usecase_id)
     disable_snd_device(adev, uc_info->out_snd_device, false);
     disable_snd_device(adev, uc_info->in_snd_device, true);
 
-    audio_extn_listen_update_status(uc_info,
-            LISTEN_EVENT_AUDIO_CAPTURE_INACTIVE);
-
     list_remove(&uc_info->list);
     free(uc_info);
 
@@ -126,9 +123,6 @@ int start_call(struct audio_device *adev, audio_usecase_t usecase_id)
     list_add_tail(&adev->usecase_list, &uc_info->list);
 
     select_devices(adev, usecase_id);
-
-    audio_extn_listen_update_status(uc_info,
-            LISTEN_EVENT_AUDIO_CAPTURE_ACTIVE);
 
     pcm_dev_rx_id = platform_get_pcm_device_id(uc_info->id, PCM_PLAYBACK);
     pcm_dev_tx_id = platform_get_pcm_device_id(uc_info->id, PCM_CAPTURE);
@@ -231,7 +225,6 @@ int voice_check_and_set_incall_rec_usecase(struct audio_device *adev,
             return ret;
         }
 
-        in->config = pcm_config_voice_call;
         session_id = voice_get_active_session_id(adev);
         ret = platform_set_incall_recoding_session_id(adev->platform,
                                                       session_id);
