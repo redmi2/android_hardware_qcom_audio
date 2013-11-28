@@ -1132,8 +1132,9 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         return in;
     }
 
-    if((devices == AudioSystem::DEVICE_IN_COMMUNICATION) )  {
-        bool voipstream_active = false;
+    if((devices == AudioSystem::DEVICE_IN_COMMUNICATION) &&
+	((*sampleRate == VOIP_SAMPLING_RATE_8K) || (*sampleRate == VOIP_SAMPLING_RATE_16K) ) )  {
+	bool voipstream_active = false;
         for(it = mDeviceList.begin();
             it != mDeviceList.end(); ++it) {
                 if((!strncmp(it->useCase, SND_USE_CASE_VERB_IP_VOICECALL,
