@@ -811,11 +811,25 @@ int pcm_write(struct pcm *pcm, void *data, unsigned count)
 int pcm_read(struct pcm *pcm, void *data, unsigned count)
 {
     struct snd_xferi x;
+    int format = pcm->format;
+
     if (pcm == NULL)
         return -EINVAL;
 
     if (!(pcm->flags & PCM_IN))
         return -EINVAL;
+
+    if(pcm->bytes_per_sample == 0)
+    {
+        if (format == SNDRV_PCM_FORMAT_S16_LE)
+            pcm->bytes_per_sample = 2;
+        else if (format == SNDRV_PCM_FORMAT_S24_LE)
+            pcm->bytes_per_sample = 4;
+        else {
+            ALOGD("Default to 16 bit PCM");
+            pcm->bytes_per_sample = 2;
+        }
+    }
 
     x.buf = data;
    if ((pcm->flags & PCM_MONO)||(pcm->flags & PCM_TRIPLE)||
