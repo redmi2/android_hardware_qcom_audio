@@ -504,7 +504,7 @@ status_t AudioBroadcastStreamALSA::setAvsyncWindow(int windowId, int ws_msw, int
 
     if ( mCompreRxHandle || mSecCompreRxHandle && mTimeStampModeSet){
         if(windowId == QCOM_BROADCAST_AVSYNC_RENDER_WINDOW) {
-            ALOGD("setAvsyncWindow: Inside RenderWindow");
+            ALOGV("setAvsyncWindow: Inside RenderWindow");
             cmdId = SNDRV_COMPRESS_SET_AVSYNC_RENDER_WINDOW;
             if(window.ws_msw == RENDER_WINDOWS_START_MSW && window.ws_lsw == RENDER_WINDOWS_START_LSW
                && window.we_msw == RENDER_WINDOWS_END_MSW && window.we_lsw == RENDER_WINDOWS_END_LSW){
@@ -523,23 +523,23 @@ status_t AudioBroadcastStreamALSA::setAvsyncWindow(int windowId, int ws_msw, int
                if (mCompreRxHandle){
                    rc = ioctl( mCompreRxHandle->handle->fd,SNDRV_COMPRESS_SET_START_DELAY, &start_delay);
                    if (rc < 0)
-                      ALOGD("setAvsyncWindow(mCompreRxHandle): ioctl set start delay failed rc =%d\n",rc);
+                      ALOGE("setAvsyncWindow(mCompreRxHandle): ioctl set start delay failed rc =%d\n",rc);
                }
                if (mSecCompreRxHandle){
                    rc = ioctl( mSecCompreRxHandle->handle->fd,SNDRV_COMPRESS_SET_START_DELAY, &start_delay);
                    if (rc < 0)
-                      ALOGD("setAvsyncWindow(mSecCompreRxHandle): ioctl set start delay failed rc =%d\n",rc);
+                      ALOGE("setAvsyncWindow(mSecCompreRxHandle): ioctl set start delay failed rc =%d\n",rc);
                }
             }
             if (mCompreRxHandle){
                 rc = ioctl(mCompreRxHandle->handle->fd, SNDRV_COMPRESS_SET_RUN_MODE, &mRunMode);
                 if (rc < 0)
-                    ALOGD("setAvsyncWindow(mCompreRxHandle): ioctl set start run mode failed rc =%d\n",rc);
+                    ALOGE("setAvsyncWindow(mCompreRxHandle): ioctl set start run mode failed rc =%d\n",rc);
             }
             if (mSecCompreRxHandle){
                 rc = ioctl(mSecCompreRxHandle->handle->fd, SNDRV_COMPRESS_SET_RUN_MODE, &mRunMode);
                 if (rc < 0)
-                    ALOGD("setAvsyncWindow(mSecCompreRxHandle): ioctl set start run mode failed rc =%d\n",rc);
+                    ALOGE("setAvsyncWindow(mSecCompreRxHandle): ioctl set start run mode failed rc =%d\n",rc);
             }
 
             if (mFrameCount > 0){
@@ -566,12 +566,12 @@ status_t AudioBroadcastStreamALSA::setAvsyncWindow(int windowId, int ws_msw, int
         if (mCompreRxHandle){
             rc = ioctl(mCompreRxHandle->handle->fd, cmdId, &window);
             if (rc < 0)
-                ALOGD("setAvsyncWindow(mCompreRxHandle): ioctl setWindow failed rc = %d\n", rc);
+                ALOGE("setAvsyncWindow(mCompreRxHandle): ioctl setWindow failed rc = %d\n", rc);
         }
         if (mSecCompreRxHandle){
             rc = ioctl(mSecCompreRxHandle->handle->fd, cmdId, &window);
             if (rc < 0)
-                ALOGD("setAvsyncWindow(mSecCompreRxHandle): ioctl setWindow failed rc = %d\n", rc);
+                ALOGE("setAvsyncWindow(mSecCompreRxHandle): ioctl setWindow failed rc = %d\n", rc);
         }
     }
     else
@@ -588,30 +588,30 @@ status_t AudioBroadcastStreamALSA::getAvsyncSessionTime(int *session_msw, int *s
     alsa_handle_t *rxHandle = NULL;
     int rc = NO_ERROR;
 
-    ALOGD("getAvsyncSessionTime: Enter");
+    ALOGV("getAvsyncSessionTime: Enter");
     if(!session_msw || !session_lsw || !absolute_msw || !absolute_lsw) {
-        ALOGD("getAvsyncSessionTime: Leave : Bad Parameter");
+        ALOGE("getAvsyncSessionTime: Leave : Bad Parameter");
         return BAD_VALUE;
     }
     if(mPcmRxHandle) {
-        ALOGD("getAvsyncSessionTime: Inside PCM");
+        ALOGV("getAvsyncSessionTime: Inside PCM");
         rxHandle = mPcmRxHandle;
     }
     else if(mCompreRxHandle) {
-        ALOGD("getAvsyncSessionTime: Inside ComprHandle");
+        ALOGV("getAvsyncSessionTime: Inside ComprHandle");
         rxHandle = mCompreRxHandle;
     }
     else if(mSecCompreRxHandle) {
-        ALOGD("getAvsyncSessionTime: Inside SecComprHandle");
+        ALOGV("getAvsyncSessionTime: Inside SecComprHandle");
         rxHandle = mSecCompreRxHandle;
     }
 
 
     if(rxHandle != NULL && mTimeStampModeSet){
-        ALOGD("getAvsyncSessionTime: calling ioctl avsync cmd=%d\n", SNDRV_COMPRESS_GET_AVSYNC_SESSION_TIME);
+        ALOGV("getAvsyncSessionTime: calling ioctl avsync cmd=%d\n", SNDRV_COMPRESS_GET_AVSYNC_SESSION_TIME);
         rc = ioctl(rxHandle->handle->fd, SNDRV_COMPRESS_GET_AVSYNC_SESSION_TIME, &st);
         if (rc < 0) {
-           ALOGD("setAvsyncWindow: ioctl setWindow failed rc = %d\n", rc);
+           ALOGE("setAvsyncWindow: ioctl setWindow failed rc = %d\n", rc);
            return rc;
         }
         *session_msw = st.timeStamp_msw;
@@ -624,7 +624,7 @@ status_t AudioBroadcastStreamALSA::getAvsyncSessionTime(int *session_msw, int *s
     else
         ALOGE("Handle Invalid hence not issuing any ioctls or timeStampMode not set");
 
-    ALOGD("getAvsyncSessionTime: Leave");
+    ALOGV("getAvsyncSessionTime: Leave");
     return NO_ERROR;
 
 }
@@ -637,31 +637,31 @@ status_t AudioBroadcastStreamALSA::getAvsyncInstStatistics(audio_avsync_statisti
     uint64_t print_duration_region_B, print_average_region_B;
     uint64_t print_duration_region_C, print_average_region_C;
 
-    ALOGD("getAvsyncInstStatistics: Enter");
+    ALOGV("getAvsyncInstStatistics: Enter");
     if(!st) {
-        ALOGD("getAvsyncInstStatistics: Leave : Bad Parameter");
+        ALOGE("getAvsyncInstStatistics: Leave : Bad Parameter");
         return BAD_VALUE;
     }
     if(mPcmRxHandle) {
-        ALOGD("getAvsyncInstStatistics: Inside PCM");
+        ALOGV("getAvsyncInstStatistics: Inside PCM");
         rxHandle = mPcmRxHandle;
     }
     else if(mCompreRxHandle) {
-        ALOGD("getAvsyncInstStatistics: Inside ComprHandle");
+        ALOGV("getAvsyncInstStatistics: Inside ComprHandle");
         rxHandle = mCompreRxHandle;
     }
     else if(mSecCompreRxHandle) {
-        ALOGD("getAvsyncInstStatistics: Inside SecComprHandle");
+        ALOGV("getAvsyncInstStatistics: Inside SecComprHandle");
         rxHandle = mSecCompreRxHandle;
     }
 
 
 
     if(rxHandle != NULL && mTimeStampModeSet){
-	ALOGD("getAvsyncInstStatistics: calling ioctl avsync cmd=%d\n", SNDRV_COMPRESS_GET_AVSYNC_INST_STATISTICS);
+	ALOGV("getAvsyncInstStatistics: calling ioctl avsync cmd=%d\n", SNDRV_COMPRESS_GET_AVSYNC_INST_STATISTICS);
 	rc = ioctl(rxHandle->handle->fd, SNDRV_COMPRESS_GET_AVSYNC_INST_STATISTICS, &statistics);
 	if (rc < 0) {
-             ALOGD("setAvsyncWindow: ioctl setWindow failed rc = %d\n", rc);
+             ALOGE("setAvsyncWindow: ioctl setWindow failed rc = %d\n", rc);
 	     return rc;
          }
          st->absolute_time_msw = statistics.absolute_time_msw;
@@ -687,7 +687,7 @@ status_t AudioBroadcastStreamALSA::getAvsyncInstStatistics(audio_avsync_statisti
          print_duration_region_C = ((uint64_t) statistics.duration_region_C_msw << 32) | (uint64_t)statistics.duration_region_C_lsw;
          print_average_region_C = ((uint64_t) statistics.average_region_C_msw << 32) | (uint64_t)statistics.average_region_C_lsw;
 
-         ALOGD("getAvsyncInstStatistics: returning statistics:");
+         ALOGV("getAvsyncInstStatistics: returning statistics:");
          ALOGD("Absolute_time %lld", print_absolute_time);
 
          ALOGD("duration_region_A %lld average_region_A %lld ",print_duration_region_A, print_average_region_A);
@@ -699,7 +699,7 @@ status_t AudioBroadcastStreamALSA::getAvsyncInstStatistics(audio_avsync_statisti
     else
         ALOGE("Handle Invalid hence not issuing any ioctls or timeStampMode not set");
 
-    ALOGD("getAvsyncInstStatistics: Leave");
+    ALOGV("getAvsyncInstStatistics: Leave");
     return NO_ERROR;
 
 }
@@ -713,22 +713,22 @@ status_t AudioBroadcastStreamALSA::getAvsyncCumuStatistics(audio_avsync_statisti
     uint64_t print_duration_region_B, print_average_region_B;
     uint64_t print_duration_region_C, print_average_region_C;
 
-    ALOGD("getAvsyncCumuStatistics: Enter");
+    ALOGV("getAvsyncCumuStatistics: Enter");
     if(!st) {
-        ALOGD("getAvsyncCumuStatistics: Leave : Bad Parameter");
+        ALOGE("getAvsyncCumuStatistics: Leave : Bad Parameter");
         return BAD_VALUE;
     }
     if(mPcmRxHandle) {
-        ALOGD("getAvsyncCumuStatistics: Inside PCM");
+        ALOGV("getAvsyncCumuStatistics: Inside PCM");
         rxHandle = mPcmRxHandle;
     }
     else if(mCompreRxHandle) {
-        ALOGD("getAvsyncCumuStatistics: Inside ComprHandle");
+        ALOGV("getAvsyncCumuStatistics: Inside ComprHandle");
         rxHandle = mCompreRxHandle;
     }
 
     if( rxHandle != NULL){
-         ALOGD("getAvsyncCumuStatistics: calling ioctl avsync cmd=%d\n", SNDRV_COMPRESS_GET_AVSYNC_CUMU_STATISTICS);
+         ALOGV("getAvsyncCumuStatistics: calling ioctl avsync cmd=%d\n", SNDRV_COMPRESS_GET_AVSYNC_CUMU_STATISTICS);
          rc = ioctl(rxHandle->handle->fd, SNDRV_COMPRESS_GET_AVSYNC_CUMU_STATISTICS, &statistics);
          if (rc < 0) {
              ALOGD("setAvsyncWindow: ioctl setWindow failed rc = %d\n", rc);
@@ -757,7 +757,7 @@ status_t AudioBroadcastStreamALSA::getAvsyncCumuStatistics(audio_avsync_statisti
          print_duration_region_C = ((uint64_t) statistics.duration_region_C_msw << 32) | (uint64_t)statistics.duration_region_C_lsw;
          print_average_region_C = ((uint64_t) statistics.average_region_C_msw << 32) | (uint64_t)statistics.average_region_C_lsw;
 
-         ALOGD("getAvsyncCumuStatistics: returning statistics:");
+         ALOGV("getAvsyncCumuStatistics: returning statistics:");
          ALOGD("Absolute_time %lld", print_absolute_time);
 
          ALOGD("duration_region_A %lld average_region_A %lld ",print_duration_region_A, print_average_region_A);
@@ -769,7 +769,7 @@ status_t AudioBroadcastStreamALSA::getAvsyncCumuStatistics(audio_avsync_statisti
     else
          ALOGE("Handle Invalid hence not issuing any ioctls");
 
-    ALOGD("getAvsyncCumuStatistics: Leave");
+    ALOGV("getAvsyncCumuStatistics: Leave");
     return NO_ERROR;
 
 }
@@ -2186,6 +2186,13 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
                         SNDRV_PCM_SYNC_PTR_HWSYNC | SNDRV_PCM_SYNC_PTR_APPL);
                     sync_ptr(mCompreRxHandle->handle);
                 }
+
+                if(hw_ptr[0] > mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr){
+                    ALOGE("status.hw_ptr %ld overflown hence correct the local hw_ptr[0] %lld",mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,hw_ptr[0]);
+                    hw_ptr[0]-=mCompreRxHandle->handle->sw_p->boundary;
+                    ALOGE("new local hw_ptr[0] %lld",hw_ptr[0]);
+                }
+
                 while(hw_ptr[0] < mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr) {
                     if (mInputMemFilledQueue[0].empty()) {
                         ALOGD("Filled queue is empty");
@@ -2216,6 +2223,11 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
                     mSecCompreRxHandle->handle->sync_ptr->flags = (SNDRV_PCM_SYNC_PTR_AVAIL_MIN |
                         SNDRV_PCM_SYNC_PTR_HWSYNC | SNDRV_PCM_SYNC_PTR_APPL);
                     sync_ptr(mSecCompreRxHandle->handle);
+                }
+                if(hw_ptr[1] > mSecCompreRxHandle->handle->sync_ptr->s.status.hw_ptr){
+                    ALOGE("status.hw_ptr %ld overflown hence correct the local hw_ptr[1] %lld",mSecCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,hw_ptr[1]);
+                    hw_ptr[1]-=mSecCompreRxHandle->handle->sw_p->boundary;
+                    ALOGE("new local hw_ptr[1] %lld",hw_ptr[1]);
                 }
                 while(hw_ptr[1] < mSecCompreRxHandle->handle->sync_ptr->s.status.hw_ptr) {
                 if (mInputMemFilledQueue[1].empty()) {
