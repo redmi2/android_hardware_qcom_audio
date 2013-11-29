@@ -241,9 +241,18 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
             else
                  mHandle->module->open(mHandle);
             if(mHandle->handle == NULL) {
-                ALOGE("write:: device open failed sleeping for 5 ms");
+                uint32_t sleepTimeUs;
+                if(mParent->mCurRxDevice == AudioSystem::DEVICE_OUT_AUX_DIGITAL)
+                {
+                    sleepTimeUs = (uint32_t) ((bytes * 1000000 /*for us*/) / (48000 * 2 /*channel*/));
+                }
+                else
+                {
+                    sleepTimeUs = 5000;
+                }
+                ALOGE("write:: device open failed sleeping for %u us", sleepTimeUs);
                 mParent->mLock.unlock();
-                usleep(5000);
+                usleep(sleepTimeUs);
                 return bytes;
             }
 #ifdef QCOM_USBAUDIO_ENABLED
