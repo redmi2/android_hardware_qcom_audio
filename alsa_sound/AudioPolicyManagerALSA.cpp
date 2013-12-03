@@ -354,12 +354,26 @@ status_t AudioPolicyManager::setDeviceConnectionState(audio_devices_t device,
             }
         }
 #endif
-        for (int i = mOutputs.size() -1; i >= 0; i--) {
-            audio_devices_t newDevice = getNewDevice(mOutputs.keyAt(i), true /*fromCache*/);
-            setOutputDevice(mOutputs.keyAt(i),
-                            getNewDevice(mOutputs.keyAt(i), true /*fromCache*/),
-                            true,
-                            0);
+        if(isInCall() && isTunnelOutputEnabled()) {
+            //On each keyRouting call, HAL is routing new device to all open outputs
+            //Incall mode device switch is taking time than normal
+            //start with tunnel mode to avoid current device mismatch with APM to HAL(which effects temp mute)
+            for (int i = mOutputs.size() -1; i >= 0; i--) {
+                audio_devices_t newDevice = getNewDevice(mOutputs.keyAt(i), true /*fromCache*/);
+                setOutputDevice(mOutputs.keyAt(i),
+                                                getNewDevice(mOutputs.keyAt(i), true /*fromCache*/),
+                                                true,
+                                                0);
+            }
+        }
+        else {
+            for (int i = 0; i < mOutputs.size(); i++) {
+                audio_devices_t newDevice = getNewDevice(mOutputs.keyAt(i), true /*fromCache*/);
+                setOutputDevice(mOutputs.keyAt(i),
+                                                getNewDevice(mOutputs.keyAt(i), true /*fromCache*/),
+                                                true,
+                                                0);
+            }
         }
 
 #ifdef DOLBY_UDC_MULTICHANNEL
@@ -2438,6 +2452,16 @@ bool AudioPolicyManager::platform_is_Fusion3()
     else
         return false;
 }
+
+bool AudioPolicyManager::isTunnelOutputEnabled()
+{
+    for (int i = mOutputs.size() -1; i >= 0; i--) {
+        if(mOutputs.valueAt(i)->mFlags &((audio_output_flags_t) AUDIO_OUTPUT_FLAG_TUNNEL))
+            return true;
+    }
+    return false;
+}
+
 #ifdef RESOURCE_MANAGER
 void AudioPolicyManager::checkAndSuspendOutputs() {
 

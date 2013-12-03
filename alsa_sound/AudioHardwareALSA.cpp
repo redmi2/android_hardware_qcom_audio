@@ -1788,8 +1788,12 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
           if((mCurDevice & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
              (mCurDevice & AudioSystem::DEVICE_OUT_DGTL_DOCK_HEADSET)||
              (mCurDevice & AudioSystem::DEVICE_OUT_PROXY)){
-              ALOGD("Routing to proxy for normal voip call in openOutputStream");
-              mALSADevice->route(&(*it), mCurDevice, AUDIO_MODE_IN_COMMUNICATION);
+              if (devices & AudioSystem::DEVICE_OUT_ALL_A2DP)
+                  mALSADevice->route(&(*it), AudioSystem::DEVICE_OUT_EARPIECE, AUDIO_MODE_IN_COMMUNICATION);
+              else {
+                  ALOGD("Routing to proxy for normal voip call in openOutputStream");
+                  mALSADevice->route(&(*it), mCurDevice, AUDIO_MODE_IN_COMMUNICATION);
+              }
 #ifdef QCOM_USBAUDIO_ENABLED
               ALOGD("enabling VOIP in openoutputstream, musbPlaybackState: %d", musbPlaybackState);
               startUsbPlaybackIfNotStarted();
@@ -1799,7 +1803,10 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
               musbRecordingState |= USBRECBIT_VOIPCALL;
 #endif
            } else{
-              mALSADevice->route(&(*it), mCurDevice, AUDIO_MODE_IN_COMMUNICATION);
+              if (devices & AudioSystem::DEVICE_OUT_ALL_A2DP)
+                  mALSADevice->route(&(*it), AudioSystem::DEVICE_OUT_EARPIECE, AUDIO_MODE_IN_COMMUNICATION);
+              else
+                  mALSADevice->route(&(*it), mCurDevice, AUDIO_MODE_IN_COMMUNICATION);
           }
           if(!strcmp(it->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) {
               snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_IP_VOICECALL);
