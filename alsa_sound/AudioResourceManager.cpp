@@ -31,6 +31,7 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.*/
 //#define LOG_NDEBUG 0
 #define LOG_NDDEBUG 0
 #include <utils/Log.h>
+#include <cutils/properties.h>
 #include "AudioResourceManager.h"
 
 namespace android_audio_legacy{
@@ -301,8 +302,26 @@ status_t AudioResourceManager::checkUseCaseConflict(
             if(vector->desc->refCount < vector->maxRefCount) {
                 continue;
             } else {
-                err = INVALID_OPERATION;
-                break;
+                char rmexceptions[PROPERTY_VALUE_MAX];
+                property_get("rm.audio.exceptions",rmexceptions,"0");
+                bool isExceptionEnabled = !strcmp("true",rmexceptions) || atoi(rmexceptions);
+
+                if(isExceptionEnabled) {
+                    //Add all conflict usecases which needs to be disabled based on property here
+                    if((USECASE_VIDEO_RECORD == useCase && USECASE_PCM_PLAYBACK == vector->desc->useCase)
+                          || (USECASE_VIDEO_RECORD == vector->desc->useCase
+                                && USECASE_PCM_PLAYBACK == useCase)) {
+                         ALOGD("\n Allowing USECASE_VIDEO_RECORD & PCM playback as system property enabled ...\n");
+                    }
+                    else {
+                        err = INVALID_OPERATION;
+                    }
+              }
+              else  {
+                  err = INVALID_OPERATION;
+              }
+
+              break;
             }
         }
     }
