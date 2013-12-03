@@ -236,6 +236,7 @@ status_t AudioSessionOutALSA::openAudioSessionDevice(int type, int devices)
 {
     char* use_case;
     status_t status = NO_ERROR;
+    char* tunnel_usecase = NULL;
     //1.) Based on the current device and session type (LPA/Tunnel), open a device
     //    with verb or modifier
     snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
@@ -248,7 +249,6 @@ status_t AudioSessionOutALSA::openAudioSessionDevice(int type, int devices)
         }
         ALOGD("openAudioSessionDevice - LPA status =%d", status);
     } else if (type == TUNNEL_MODE) {
-        char* tunnel_usecase = NULL;
         if ((use_case == NULL) || (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
                                             strlen(SND_USE_CASE_VERB_INACTIVE)))) {
             //for hifi use cases
@@ -285,6 +285,9 @@ status_t AudioSessionOutALSA::openAudioSessionDevice(int type, int devices)
     }
     if(status != NO_ERROR) {
         ALOGE("AudioSessionOut open error ");
+        if ((type == TUNNEL_MODE) && (tunnel_usecase != NULL)) {
+            mParent->freeTunnel(tunnel_usecase);
+        }
         return status;
     }
 
