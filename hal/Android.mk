@@ -47,6 +47,10 @@ ifneq ($(strip $(AUDIO_FEATURE_DISABLED_USBAUDIO)),true)
     LOCAL_CFLAGS += -DUSB_HEADSET_ENABLED
     LOCAL_SRC_FILES += audio_extn/usb.c
 endif
+ifneq ($(strip $(AUDIO_FEATURE_DISABLED_HFP)),true)
+    LOCAL_CFLAGS += -DHFP_ENABLED
+    LOCAL_SRC_FILES += audio_extn/hfp.c
+endif
 
 ifneq ($(strip $(AUDIO_FEATURE_DISABLED_SSR)),true)
     LOCAL_CFLAGS += -DSSR_ENABLED
@@ -85,6 +89,11 @@ endif
 ifneq ($(strip $(AUDIO_FEATURE_DISABLED_COMPRESS_CAPTURE)),true)
     LOCAL_CFLAGS += -DCOMPRESS_CAPTURE_ENABLED
     LOCAL_SRC_FILES += audio_extn/compress_capture.c
+endif
+
+ifneq ($(strip $(AUDIO_FEATURE_DISABLED_DS1_DOLBY_DDP)),true)
+    LOCAL_CFLAGS += -DDS1_DOLBY_DDP_ENABLED
+    LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
 endif
 
 LOCAL_SHARED_LIBRARIES := \
