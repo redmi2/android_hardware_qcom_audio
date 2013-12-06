@@ -109,6 +109,7 @@ const char * const use_case_table[AUDIO_USECASE_MAX] = {
     [USECASE_AUDIO_RECORD_LOW_LATENCY] = "low-latency-record",
     [USECASE_AUDIO_RECORD_FM_VIRTUAL] = "fm-virtual-record",
     [USECASE_AUDIO_PLAYBACK_FM] = "play-fm",
+    [USECASE_AUDIO_HFP_SCO] = "hfp-sco",
     [USECASE_VOICE_CALL] = "voice-call",
     
     [USECASE_VOICE2_CALL] = "voice2-call",
@@ -165,7 +166,7 @@ static int get_snd_codec_id(audio_format_t format)
         id = SND_AUDIOCODEC_AAC;
         break;
     default:
-        ALOGE("%s: Unsupported audio format", __func__);
+        ALOGE("%s: Unsupported audio format :%x", __func__, format);
     }
 
     return id;
@@ -593,7 +594,8 @@ int select_devices(struct audio_device *adev, audio_usecase_t uc_id)
     }
 
     if ((usecase->type == VOICE_CALL) ||
-        (usecase->type == VOIP_CALL)) {
+        (usecase->type == VOIP_CALL)  ||
+        (usecase->type == PCM_HFP_CALL)) {
         out_snd_device = platform_get_output_snd_device(adev->platform,
                                                         usecase->stream.out->devices);
         in_snd_device = platform_get_input_snd_device(adev->platform, usecase->stream.out->devices);
@@ -609,7 +611,8 @@ int select_devices(struct audio_device *adev, audio_usecase_t uc_id)
         if (voice_is_in_call(adev)) {
             vc_usecase = get_usecase_from_list(adev,
                                                get_voice_usecase_id_from_list(adev));
-            if (vc_usecase->devices & AUDIO_DEVICE_OUT_ALL_CODEC_BACKEND) {
+            if ((vc_usecase->devices & AUDIO_DEVICE_OUT_ALL_CODEC_BACKEND) ||
+                (usecase->devices == AUDIO_DEVICE_IN_VOICE_CALL)) {
                 in_snd_device = vc_usecase->in_snd_device;
                 out_snd_device = vc_usecase->out_snd_device;
             }
@@ -733,6 +736,9 @@ static int stop_input_stream(struct stream_in *in)
               __func__, in->usecase);
         return -EINVAL;
     }
+
+    /* Close in-call recording streams */
+    voice_check_and_stop_incall_rec_usecase(adev, in);
 
     /* 1. Disable stream specific mixer controls */
     disable_audio_route(adev, uc_info, true);
@@ -1039,9 +1045,12 @@ static int stop_output_stream(struct stream_out *out)
         return -EINVAL;
     }
 
-    if (out->usecase == USECASE_AUDIO_PLAYBACK_OFFLOAD &&
-            adev->visualizer_stop_output != NULL)
-        adev->visualizer_stop_output(out->handle);
+    if (out->usecase == USECASE_AUDIO_PLAYBACK_OFFLOAD) {
+        if (adev->visualizer_stop_output != NULL)
+            adev->visualizer_stop_output(out->handle, out->pcm_device_id);
+        if (adev->offload_effects_stop_output != NULL)
+            adev->offload_effects_stop_output(out->handle, out->pcm_device_id);
+    }
 
     /* 1. Get and set stream specific mixer controls */
     disable_audio_route(adev, uc_info, true);
@@ -1119,7 +1128,9 @@ int start_output_stream(struct stream_out *out)
             compress_nonblock(out->compr, out->non_blocking);
 
         if (adev->visualizer_start_output != NULL)
-            adev->visualizer_start_output(out->handle);
+            adev->visualizer_start_output(out->handle, out->pcm_device_id);
+        if (adev->offload_effects_start_output != NULL)
+            adev->offload_effects_start_output(out->handle, out->pcm_device_id);
     }
     ALOGV("%s: exit", __func__);
     return 0;
@@ -1465,10 +1476,14 @@ static int out_set_volume(struct audio_stream_out *stream, float left,
         out->muted = (left == 0.0f);
         return 0;
     } else if (out->usecase == USECASE_AUDIO_PLAYBACK_OFFLOAD) {
-        const char *mixer_ctl_name = "Compress Playback Volume";
+        char mixer_ctl_name[128];
         struct audio_device *adev = out->dev;
         struct mixer_ctl *ctl;
+        int pcm_device_id = platform_get_pcm_device_id(out->usecase,
+                                                       PCM_PLAYBACK);
 
+        snprintf(mixer_ctl_name, sizeof(mixer_ctl_name),
+                 "Compress Playback %d Volume", pcm_device_id);
         ctl = mixer_get_ctl_by_name(adev->mixer, mixer_ctl_name);
         if (!ctl) {
             ALOGE("%s: Could not get ctl for mixer cmd - %s",
@@ -2022,7 +2037,8 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
             ret = -EINVAL;
             goto error_open;
         }
-        if (!is_supported_format(config->offload_info.format)) {
+        if (!is_supported_format(config->offload_info.format) &&
+                !audio_extn_dolby_is_supported_format(config->offload_info.format)) {
             ALOGE("%s: Unsupported audio format", __func__);
             ret = -EINVAL;
             goto error_open;
@@ -2045,7 +2061,11 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
         out->stream.drain = out_drain;
         out->stream.flush = out_flush;
 
-        out->compr_config.codec->id =
+        if (audio_extn_dolby_is_supported_format(config->offload_info.format))
+            out->compr_config.codec->id =
+                audio_extn_dolby_get_snd_codec_id(config->offload_info.format);
+        else
+            out->compr_config.codec->id =
                 get_snd_codec_id(config->offload_info.format);
         out->compr_config.fragment_size = COMPRESS_OFFLOAD_FRAGMENT_SIZE;
         out->compr_config.fragments = COMPRESS_OFFLOAD_NUM_FRAGMENTS;
@@ -2065,6 +2085,16 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
         ALOGV("%s: offloaded output offload_info version %04x bit rate %d",
                 __func__, config->offload_info.version,
                 config->offload_info.bit_rate);
+
+        if (audio_extn_dolby_is_supported_format(out->format)) {
+            ret = audio_extn_dolby_set_DMID(adev);
+            if (ret != 0) {
+                ALOGE("%s: Dolby DMID cannot be set error:%d",
+                      __func__, ret);
+                goto error_open;
+            }
+        }
+
     } else if (out->flags & AUDIO_OUTPUT_FLAG_INCALL_MUSIC) {
         ret = voice_check_and_set_incall_music_usecase(adev, out);
         if (ret != 0) {
@@ -2323,6 +2353,7 @@ static int adev_set_mic_mute(struct audio_hw_device *dev, bool state)
     int ret;
 
     pthread_mutex_lock(&adev->lock);
+    ALOGD("%s state %d\n", __func__, state);
     ret = voice_set_mic_mute((struct audio_device *)dev, state);
     pthread_mutex_unlock(&adev->lock);
 
@@ -2555,14 +2586,31 @@ static int adev_open(const hw_module_t *module, const char *name,
         } else {
             ALOGV("%s: DLOPEN successful for %s", __func__, VISUALIZER_LIBRARY_PATH);
             adev->visualizer_start_output =
-                        (int (*)(audio_io_handle_t))dlsym(adev->visualizer_lib,
+                        (int (*)(audio_io_handle_t, int))dlsym(adev->visualizer_lib,
                                                         "visualizer_hal_start_output");
             adev->visualizer_stop_output =
-                        (int (*)(audio_io_handle_t))dlsym(adev->visualizer_lib,
+                        (int (*)(audio_io_handle_t, int))dlsym(adev->visualizer_lib,
                                                         "visualizer_hal_stop_output");
         }
     }
     audio_extn_listen_init(adev, SOUND_CARD);
+
+    if (access(OFFLOAD_EFFECTS_BUNDLE_LIBRARY_PATH, R_OK) == 0) {
+        adev->offload_effects_lib = dlopen(OFFLOAD_EFFECTS_BUNDLE_LIBRARY_PATH, RTLD_NOW);
+        if (adev->offload_effects_lib == NULL) {
+            ALOGE("%s: DLOPEN failed for %s", __func__,
+                  OFFLOAD_EFFECTS_BUNDLE_LIBRARY_PATH);
+        } else {
+            ALOGV("%s: DLOPEN successful for %s", __func__,
+                  OFFLOAD_EFFECTS_BUNDLE_LIBRARY_PATH);
+            adev->offload_effects_start_output =
+                        (int (*)(audio_io_handle_t, int))dlsym(adev->offload_effects_lib,
+                                         "offload_effects_bundle_hal_start_output");
+            adev->offload_effects_stop_output =
+                        (int (*)(audio_io_handle_t, int))dlsym(adev->offload_effects_lib,
+                                         "offload_effects_bundle_hal_stop_output");
+        }
+    }
 
     *device = &adev->device.common;
 
