@@ -747,6 +747,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
        } else if (cardStatus == "ONLINE") {
            ALOGV("Sound card online set SSRcomplete");
            mALSADevice->mSndCardState = SND_CARD_UP_AFTER_SSR;
+           doRouting(0,NULL);
            return status;
        } else if (cardStatus == "OFFLINE") {
            ALOGV("Sound card online re-set SSRcomplete");
