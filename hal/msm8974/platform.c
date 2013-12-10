@@ -121,6 +121,12 @@ static const int pcm_device_table[AUDIO_USECASE_MAX][2] = {
                                      AUDIO_RECORD_PCM_DEVICE},
     [USECASE_INCALL_REC_UPLINK_AND_DOWNLINK] = {AUDIO_RECORD_PCM_DEVICE,
                                                 AUDIO_RECORD_PCM_DEVICE},
+    [USECASE_INCALL_REC_UPLINK_COMPRESS] = {COMPRESS_CAPTURE_DEVICE,
+                                            COMPRESS_CAPTURE_DEVICE},
+    [USECASE_INCALL_REC_DOWNLINK_COMPRESS] = {COMPRESS_CAPTURE_DEVICE,
+                                              COMPRESS_CAPTURE_DEVICE},
+    [USECASE_INCALL_REC_UPLINK_AND_DOWNLINK_COMPRESS] = {COMPRESS_CAPTURE_DEVICE,
+                                                         COMPRESS_CAPTURE_DEVICE},
     [USECASE_INCALL_MUSIC_UPLINK] = {INCALL_MUSIC_UPLINK_PCM_DEVICE,
                                      INCALL_MUSIC_UPLINK_PCM_DEVICE},
     [USECASE_INCALL_MUSIC_UPLINK2] = {INCALL_MUSIC_UPLINK2_PCM_DEVICE,
@@ -1310,6 +1316,11 @@ int platform_set_parameters(void *platform, struct str_parms *parms)
     if (ret >= 0) {
         str_parms_del(parms, AUDIO_PARAMETER_KEY_BTSCO);
         my_data->btsco_sample_rate = val;
+        if (val == SAMPLE_RATE_16KHZ) {
+            audio_route_apply_path(my_data->adev->audio_route,
+                                   "bt-sco-wb-samplerate");
+            audio_route_update_mixer(my_data->adev->audio_route);
+        }
     }
 
     ret = str_parms_get_int(parms, AUDIO_PARAMETER_KEY_SLOWTALK, &val);
