@@ -1088,6 +1088,8 @@ public:
     status_t openListenSession(ListenSession** handle);
     status_t closeListenSession(ListenSession* handle);
     status_t setMadObserver(listen_callback_t cb_func);
+    int getConcurrentTxUseCaseType(const char *useCase);
+    bool CheckForConcurrentTxUseCaseActive();
 #endif
 
     status_t    startPlaybackOnExtOut(uint32_t activeUsecase);
