@@ -29,7 +29,7 @@
 
 #define LOG_TAG "AudioStreamOutALSA"
 //#define LOG_NDEBUG 0
-#define LOG_NDDEBUG 0
+//#define LOG_NDDEBUG 0
 #include <utils/Log.h>
 #include <utils/String8.h>
 
@@ -101,6 +101,70 @@ status_t AudioStreamOutALSA::setVolume(float left, float right)
     return INVALID_OPERATION;
 }
 
+status_t AudioStreamOutALSA::setParameters(const String8& keyValuePairs) {
+    ALOGD("AudioStreamOut: setParameters %s activeDevice = %d",
+                keyValuePairs.string(), mHandle->activeDevice);
+    AudioParameter param = AudioParameter(keyValuePairs);
+    String8 keyStandby = String8(STANDBY_DEVICES_KEY);
+    String8 keyResume = String8(RESUME_DEVICES_KEY);
+    String8 keyRouting = String8(AudioParameter::keyRouting);
+    String8 keyScreenState = String8(AudioParameter::keyScreenState);
+    String8 value;
+    int device;
+    if(param.getInt(keyStandby, device) == NO_ERROR && device) {
+        //TODO:mStandbyDevices |= (mHandle->activeDevice & device);
+        if(mHandle->handle == NULL) {
+           mHandle->activeDevice &= ~device;
+           if(mHandle->activeDevice == 0)
+               mHandle->playbackMode = STANDBY;
+        } else if((mHandle->activeDevice & device) == mHandle->activeDevice) {
+            mHandle->playbackMode = STANDBY;
+            standby();
+        } else if(mHandle->activeDevice & device) {
+            mHandle->module->switchDeviceUseCase(mHandle,
+                 mHandle->activeDevice & (~device),
+                 mHandle->mode);
+        }
+    } else if (param.getInt(keyResume, device) == NO_ERROR && device) {
+        //TODO:if(mStandbyDevices & device) {
+            if(mHandle->handle) {
+                mHandle->module->switchDeviceUseCase(mHandle,
+                        mHandle->activeDevice /*TODO:| (mStandbyDevices & device)*/,
+                        mHandle->mode);
+            }
+            else
+                mHandle->activeDevice |= (/*TODO:mStandbyDevices &*/ device);
+            mHandle->playbackMode = PLAY;
+        //}
+        //TODO:mStandbyDevices &= ~device;
+    } else {
+        return ALSAStreamOps::setParameters(keyValuePairs);
+        if (param.getInt(keyRouting, device) == NO_ERROR) {
+            if(device == 0 || device == AudioSystem::DEVICE_OUT_SPDIF) {
+                mDevices = AudioSystem::DEVICE_OUT_SPDIF;
+                standby();
+            }
+            //TODO:mStandbyDevices = device & ~mHandle->activeDevice;
+        }
+    }
+    return NO_ERROR;
+}
+
+String8 AudioStreamOutALSA::getParameters(const String8& keys) {
+    ALOGV("AudioStreamOut: getParameters %s", keys.string());
+    AudioParameter param = AudioParameter(keys);
+    String8 value;
+    String8 keyComprStandby = String8(COMPR_STANDBY_DEVICES_KEY);
+    int devices = mDevices;
+    if(param.get(keyComprStandby, value) == NO_ERROR) {
+        param.addInt(keyComprStandby, 0);
+        ALOGV("getParameters() %s", param.toString().string());
+        return param.toString();
+    } else {
+        return ALSAStreamOps::getParameters(keys);
+    }
+}
+
 ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
 {
     int period_size;
@@ -118,6 +182,27 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
 
     int write_pending = bytes;
     bool bIsUseCaseSet = false;
+
+    int devices;
+    /*
+    If the handle was made to NULL and put to STOP by other streams,
+    fake that the handle is valid and rendering data in real time to AudioFlinger
+    so that no underruns happen in framework
+    */
+    {
+        //Mutex::Autolock autolock1(mParent->mDeviceStateLock);
+        devices = mParent->getUnComprDeviceInCurrDevices(mDevices);
+        ALOGV("mDevices: %d, activeDevices: %d unComprDevices %d", mDevices, mHandle->activeDevice, devices);
+        if((mHandle->handle == NULL) && (mHandle->playbackMode == STANDBY) &&
+           (mHandle->channels)) {
+            //mParent->mDeviceStateLock.unlock();
+            int periodTimeInUS = (int)((bytes*1000)/(96*mHandle->channels));
+            ALOGD("Ignoring pcm on device with compressed pass through playback");
+            usleep(periodTimeInUS);
+            return bytes;
+        }
+    }
+
     if((mHandle->handle == NULL) && (mHandle->rxHandle == NULL) &&
          (strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,
                               strlen(SND_USE_CASE_VERB_IP_VOICECALL))) &&
@@ -152,8 +237,9 @@ ssize_t AudioStreamOutALSA::write(const void *buffer, size_t bytes)
             free(use_case);
             use_case = NULL;
         }
-        mHandle->activeDevice = mDevices;
+        mHandle->activeDevice = devices;
         mHandle->devices = mDevices;
+        mHandle->playbackMode = PLAY;
         if((!strncmp(mHandle->useCase, SND_USE_CASE_VERB_IP_VOICECALL,
                                  strlen(SND_USE_CASE_VERB_IP_VOICECALL))) ||
            (!strncmp(mHandle->useCase, SND_USE_CASE_MOD_PLAY_VOIP,

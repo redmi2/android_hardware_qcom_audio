@@ -141,7 +141,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
     char dtsPPparam[20];
     int dtsPPval = -1;
 
-    if (handle->devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+    if (handle->activeDevice & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
             int channel_count = 0;
             updateHDMIEDIDInfo();
             for (int i = 0; i < mEDIDInfo.nAudioBlocks && i < MAX_EDID_BLOCKS; i++) {
@@ -592,7 +592,7 @@ void ALSADevice::switchDeviceUseCase(alsa_handle_t *handle,
 
     enableDevice(handle, bIsUseCaseSet);
 
-    handle->devices = handle->activeDevice = switchTodevices;
+    handle->activeDevice = switchTodevices;
 
     if (use_case != NULL) {
         free(use_case);
@@ -791,7 +791,7 @@ status_t ALSADevice::configureTranscode(alsa_handle_t *handle) {
     param_set_int(params, SNDRV_PCM_HW_PARAM_RATE, handle->sampleRate);
     param_set_int(params, SNDRV_PCM_HW_PARAM_CHANNELS,
                           handle->channels);
-    if (handle->devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+    if (handle->activeDevice & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
         err = setHDMIChannelCount(2);
         if(err != OK) {
             ALOGE("setHDMIChannelCount err = %d", err);
