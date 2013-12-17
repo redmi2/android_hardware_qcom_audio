@@ -397,6 +397,11 @@ ssize_t AudioBroadcastStreamALSA::write(const void *buffer, size_t bytes,
     size_t            sent = 0;
     status_t          err;
 
+    if ( bytes > SAMPLES_PER_CHANNEL*MAX_INPUT_CHANNELS_SUPPORTED*FACTOR_FOR_BUFFERING){
+       ALOGE("Appears to be an erroneous packet as the buffer Size exceeds the internal buffer size");
+       ALOGE("Hence rejecting this packet");
+       return bytes;
+    }
 #if 0
     // 1. Check if MS11 decoder instance is present and if present we need to
     //    preserve the data and supply it to MS 11 decoder.
@@ -3316,13 +3321,14 @@ bool AudioBroadcastStreamALSA::decode(char *buffer, size_t bytes)
             mDDFirstFrameBuffered = true;
 
         //handle change in sample rate
-        if((mSampleRate != outSampleRate) || (mChannels != outChannels)) {
+        if((outSampleRate !=0) && ((mSampleRate != outSampleRate) || (mChannels != outChannels))) {
             mSampleRate = outSampleRate;
             mChannels = outChannels;
             if(mRoutePcmAudio) {
                 status_t status = closeDevice(mCompreRxHandle);
                 if(status != NO_ERROR)
                     ALOGE("change in sample rate - close pcm device fail");
+                mCompreRxHandle = NULL;
                 status = openTunnelDevice(mPCMDevices);
                 if(status != NO_ERROR)
                     ALOGE("change in sample rate - open pcm device fail");
