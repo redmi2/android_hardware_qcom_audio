@@ -360,6 +360,7 @@ enum {
 Requested end device format by user/app through set parameters
 */
 enum {
+    INVALID = -1,
     UNCOMPRESSED = 0,
     COMPRESSED,
     COMPRESSED_CONVERT_EAC3_AC3,
