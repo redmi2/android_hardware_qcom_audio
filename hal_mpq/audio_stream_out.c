@@ -2706,8 +2706,21 @@ int adev_open_output_stream(struct audio_hw_device *dev,
     pthread_mutex_init(&out->lock, (const pthread_mutexattr_t *) NULL);
     pthread_cond_init(&out->cond, (const pthread_condattr_t *) NULL);
 
-    if (out->flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
-        ALOGE("%s: Usecase is OFFLOAD", __func__);
+    if (out->flags & AUDIO_OUTPUT_FLAG_FAST) {
+        ALOGV("%s: Usecase is LOW_LATENCY", __func__);
+        if((device_handle = get_alsa_handle())== NULL)
+            goto error_handle;
+        list_add_tail(&out->session_list, &device_handle->list);
+        device_handle->usecase = USECASE_AUDIO_PLAYBACK_LOW_LATENCY;
+        device_handle->config = pcm_config_low_latency;
+        device_handle->sample_rate = device_handle->config.rate;
+        device_handle->out = out;
+        device_handle->cmd_pending = false;
+        out->uc_strm_type  = LOW_LATENCY_PLAYBACK_STREAM;
+        out->buffer_size = device_handle->config.period_size *
+                            audio_stream_frame_size(&out->stream.common);
+    } else if (out->flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
+        ALOGV("%s: Usecase is OFFLOAD", __func__);
         if (config->offload_info.version != AUDIO_INFO_INITIALIZER.version ||
             config->offload_info.size != AUDIO_INFO_INITIALIZER.size) {
             ALOGE("%s: Unsupported Offload information", __func__);
@@ -2783,8 +2796,8 @@ int adev_open_output_stream(struct audio_hw_device *dev,
         ALOGV("%s: offloaded output offload_info version %04x bit rate %d",
                 __func__, config->offload_info.version,
                 config->offload_info.bit_rate);
-    } else { //if (out->flags & AUDIO_OUTPUT_FLAG_DEEP_BUFFER) {
-        ALOGE("%s: Usecase is DEEP_BUFFER", __func__);
+    } else {
+        ALOGV("%s: Usecase is DEEP_BUFFER", __func__);
         if((device_handle = get_alsa_handle())== NULL)
             goto error_handle;
         list_add_tail(&out->session_list, &device_handle->list);
@@ -2796,22 +2809,10 @@ int adev_open_output_stream(struct audio_hw_device *dev,
         out->uc_strm_type = DEEP_BUFFER_PLAYBACK_STREAM;
         out->buffer_size = device_handle->config.period_size *
                             audio_stream_frame_size(&out->stream.common);
-    }/* else {
-        if((device_handle = get_alsa_handle())== NULL)
-            goto error_handle;
-        list_add_tail(&out->session_list, &device_handle->list);
-        device_handle->usecase = USECASE_AUDIO_PLAYBACK_LOW_LATENCY;
-        device_handle->config = pcm_config_low_latency;
-        device_handle->sample_rate = device_handle->config.rate;
-        device_handle->out = out;
-        device_handle->cmd_pending = false;
-        out->uc_strm_type  = LOW_LATENCY_PLAYBACK_STREAM;
-        out->buffer_size = device_handle->config.period_size *
-                            audio_stream_frame_size(&out->stream.common);
-    }*/
+    }
 
     if (flags & AUDIO_OUTPUT_FLAG_PRIMARY) {
-        ALOGE("%s: Usecase is primary ", __func__);
+        ALOGV("%s: Usecase is primary ", __func__);
         if(adev->primary_output == NULL)
             adev->primary_output = out;
         else {
