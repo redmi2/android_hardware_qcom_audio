@@ -2169,7 +2169,22 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
 void
 AudioHardwareALSA::closeOutputStream(AudioStreamOut* out)
 {
+    uint32_t voip_cnt = mVoipOutStreamCount;
+    ALOGD("closeOutputStream");
     delete out;
+
+#ifdef QCOM_LISTEN_FEATURE_ENABLE
+{
+    bool txActive;
+    if (voip_cnt == 1) {
+        if(mListenHw) {
+            txActive = CheckForConcurrentTxUseCaseActive();
+            if (txActive == false)
+                mListenHw->notifyEvent(AUDIO_CAPTURE_INACTIVE);
+        }
+    }
+}
+#endif
 }
 
 #ifdef QCOM_TUNNEL_LPA_ENABLED
