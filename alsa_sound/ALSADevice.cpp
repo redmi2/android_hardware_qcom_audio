@@ -470,6 +470,81 @@ status_t ALSADevice::setSoftwareParams(alsa_handle_t *handle)
     return NO_ERROR;
 }
 
+status_t ALSADevice::setHfpHardwareParams(struct pcm* handle)
+{
+    struct snd_pcm_hw_params *params;
+    unsigned int requestedRate = 8000;
+    int channels = 1;
+    status_t err;
+    snd_pcm_format_t format = SNDRV_PCM_FORMAT_S16_LE;
+
+    params = (snd_pcm_hw_params*) calloc(1, sizeof(struct snd_pcm_hw_params));
+    if (!params) {
+        ALOGE("Failed to allocate ALSA hardware parameters!");
+        return NO_INIT;
+    }
+
+    param_init(params);
+    param_set_mask(params, SNDRV_PCM_HW_PARAM_ACCESS,
+                       SNDRV_PCM_ACCESS_RW_INTERLEAVED);
+
+    //TODO: Add format setting for tunnel mode using the usecase.
+    param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT,
+                   format);
+    param_set_mask(params, SNDRV_PCM_HW_PARAM_SUBFORMAT,
+                   SNDRV_PCM_SUBFORMAT_STD);
+    param_set_int(params, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, 1024);
+    //Setting number of periods to 4. If the system is loaded and record
+    // obtain buffer is seen increase PCM_RECORD_PERIOD_COUNT to a value between 4-16.
+    param_set_int(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS, 16);
+    param_set_int(params, SNDRV_PCM_HW_PARAM_FRAME_BITS,
+                   channels * 16);
+    param_set_int(params, SNDRV_PCM_HW_PARAM_CHANNELS,
+                  channels);
+    param_set_int(params, SNDRV_PCM_HW_PARAM_RATE, requestedRate);
+    param_set_hw_refine(handle, params);
+
+    if (param_set_hw_params(handle, params)) {
+        ALOGE("cannot set hw params");
+    	param_dump(params);
+        if(params) {
+            free(params);
+        }
+        return NO_INIT;
+    }
+    param_dump(params);
+    return NO_ERROR;
+}
+
+status_t ALSADevice::setHfpSoftwareParams(struct pcm *handle)
+{
+    struct snd_pcm_sw_params* params;
+
+    params = (snd_pcm_sw_params*) calloc(1, sizeof(struct snd_pcm_sw_params));
+    if (!params) {
+        LOG_ALWAYS_FATAL("Failed to allocate ALSA software parameters!");
+        return NO_INIT;
+    }
+
+    // Get the current software parameters
+    params->tstamp_mode = SNDRV_PCM_TSTAMP_NONE;
+    params->period_step = 1;
+    params->avail_min = 1;
+    params->start_threshold = 1;
+    params->stop_threshold = INT_MAX;
+    params->silence_threshold = 0;
+    params->silence_size = 0;
+
+    if (param_set_sw_params(handle, params)) {
+        ALOGE("cannot set sw params");
+        if (params) {
+            free(params);
+        }
+        return NO_INIT;
+    }
+    return NO_ERROR;
+}
+
 void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t mode)
 {
     const char **mods_list;
@@ -1132,6 +1207,208 @@ Error:
     }
     close(handle, vsid);
     return NO_INIT;
+}
+
+status_t ALSADevice::startHfp_loopback(alsa_handle_t *handle)
+{
+    char *devName = NULL;
+    unsigned flags = 0;
+    int err = NO_ERROR;
+
+    ALOGV("startHfp: handle %p", handle);
+
+    // ASoC multicomponent requires a valid path (frontend/backend) for
+    // the device to be opened
+
+    flags = PCM_OUT | PCM_STEREO;
+    handle->hfp_rx_handle = pcm_open(flags, (char*)"hw:0,16");
+    if (!handle->hfp_rx_handle || (handle->hfp_rx_handle->fd < 0)) {
+        ALOGE("startFm: could not open PCM device");
+        goto Error;
+    }
+
+    handle->hfp_rx_handle->flags = flags;
+    err = setHfpHardwareParams(handle->hfp_rx_handle);
+    if(err != NO_ERROR) {
+        ALOGE("startFm: setHardwareParams failed");
+        goto Error;
+    }
+
+    err = setHfpSoftwareParams(handle->hfp_rx_handle);
+    if(err != NO_ERROR) {
+        ALOGE("startFm: setSoftwareParams failed");
+        goto Error;
+    }
+
+    err = pcm_prepare(handle->hfp_rx_handle);
+    if(err != NO_ERROR) {
+        ALOGE("startFm: setSoftwareParams failed");
+        goto Error;
+    }
+
+    if (ioctl(handle->hfp_rx_handle->fd, SNDRV_PCM_IOCTL_START)) {
+        ALOGE("startFm: SNDRV_PCM_IOCTL_START failed\n");
+        goto Error;
+    }
+
+    // Open PCM capture device
+    flags = PCM_IN | PCM_STEREO;
+    handle->hfp_tx_handle = pcm_open(flags, (char*)"hw:0,16");
+    if (!handle->handle) {
+        goto Error;
+    }
+
+    handle->hfp_tx_handle->flags = flags;
+    err = setHfpHardwareParams(handle->hfp_tx_handle);
+    if(err != NO_ERROR) {
+        ALOGE("startHfp: setHardwareParams failed");
+        goto Error;
+    }
+
+    err = setHfpSoftwareParams(handle->hfp_tx_handle);
+    if(err != NO_ERROR) {
+        ALOGE("startHfp: setSoftwareParams failed");
+        goto Error;
+    }
+
+    err = pcm_prepare(handle->hfp_tx_handle);
+    if(err != NO_ERROR) {
+        ALOGE("startHfp: pcm_prepare failed");
+        goto Error;
+    }
+
+    if (ioctl(handle->hfp_tx_handle->fd, SNDRV_PCM_IOCTL_START)) {
+        ALOGE("startHfp: SNDRV_PCM_IOCTL_START failed\n");
+        goto Error;
+    }
+
+    return NO_ERROR;
+
+Error:
+    if (devName) {
+        free(devName);
+        devName = NULL;
+    }
+    close(handle);
+    return NO_INIT;
+}
+
+status_t ALSADevice::startHfp(alsa_handle_t *handle)
+{
+    char *devName = NULL;
+    unsigned flags = 0;
+    int err = NO_ERROR;
+
+    ALOGV("startHfp: handle %p", handle);
+
+    // ASoC multicomponent requires a valid path (frontend/backend) for
+    // the device to be opened
+
+    flags = PCM_OUT | PCM_STEREO;
+    if (deviceName(handle, flags, &devName) < 0) {
+        ALOGE("Failed to get pcm device node");
+        goto Error;
+    }
+    if (devName != NULL) {
+        handle->handle = pcm_open(flags, (char*)devName);
+    } else {
+         ALOGE("Failed to get pcm device node");
+         return NO_INIT;
+    }
+    if (!handle->handle || (handle->handle->fd < 0)) {
+        ALOGE("startFm: could not open PCM device");
+        goto Error;
+    }
+
+    handle->handle->flags = flags;
+    err = setHardwareParams(handle);
+    if(err != NO_ERROR) {
+        ALOGE("startFm: setHardwareParams failed");
+        goto Error;
+    }
+
+    err = setSoftwareParams(handle);
+    if(err != NO_ERROR) {
+        ALOGE("startFm: setSoftwareParams failed");
+        goto Error;
+    }
+
+    err = pcm_prepare(handle->handle);
+    if(err != NO_ERROR) {
+        ALOGE("startFm: setSoftwareParams failed");
+        goto Error;
+    }
+
+    if (ioctl(handle->handle->fd, SNDRV_PCM_IOCTL_START)) {
+        ALOGE("startFm: SNDRV_PCM_IOCTL_START failed\n");
+        goto Error;
+    }
+
+    // Store the PCM playback device pointer in rxHandle
+    handle->rxHandle = handle->handle;
+    if (devName) {
+        free(devName);
+        devName = NULL;
+    }
+
+    // Open PCM capture device
+    flags = PCM_IN | PCM_STEREO;
+    if (deviceName(handle, flags, &devName) < 0) {
+        ALOGE("Failed to get pcm device node");
+        goto Error;
+    }
+    if (devName != NULL) {
+        handle->handle = pcm_open(flags, (char*)devName);
+    } else {
+         ALOGE("Failed to get pcm device node");
+         return NO_INIT;
+    }
+    if (!handle->handle) {
+        goto Error;
+    }
+
+    handle->handle->flags = flags;
+    err = setHardwareParams(handle);
+    if(err != NO_ERROR) {
+        ALOGE("startHfp: setHardwareParams failed");
+        goto Error;
+    }
+
+    err = setSoftwareParams(handle);
+    if(err != NO_ERROR) {
+        ALOGE("startHfp: setSoftwareParams failed");
+        goto Error;
+    }
+
+    err = pcm_prepare(handle->handle);
+    if(err != NO_ERROR) {
+        ALOGE("startHfp: pcm_prepare failed");
+        goto Error;
+    }
+
+    if (ioctl(handle->handle->fd, SNDRV_PCM_IOCTL_START)) {
+        ALOGE("startHfp: SNDRV_PCM_IOCTL_START failed\n");
+        goto Error;
+    }
+
+    return startHfp_loopback(handle);
+
+Error:
+    if (devName) {
+        free(devName);
+        devName = NULL;
+    }
+    close(handle);
+    return NO_INIT;
+}
+
+status_t ALSADevice::stopHfp(alsa_handle_t *handle)
+{
+   pcm_close(handle->hfp_rx_handle);
+   pcm_close(handle->hfp_tx_handle);
+   pcm_close(handle->handle);
+   pcm_close(handle->rxHandle);
+   return NO_ERROR;
 }
 
 status_t ALSADevice::startFm(alsa_handle_t *handle)

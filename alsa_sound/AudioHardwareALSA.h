@@ -248,6 +248,8 @@ struct alsa_handle_t {
     struct pcm *        rxHandle;
     snd_use_case_mgr_t  *ucMgr;
     AudioSessionOutALSA *session;
+    struct pcm *        hfp_rx_handle;
+    struct pcm *        hfp_tx_handle;
 };
 
 struct output_metadata_handle_t {
@@ -280,6 +282,9 @@ public:
     status_t startVoiceCall(alsa_handle_t *handle, uint32_t vsid = 0);
     status_t startVoipCall(alsa_handle_t *handle);
     status_t startFm(alsa_handle_t *handle);
+    status_t startHfp(alsa_handle_t *handle);
+    status_t startHfp_loopback(alsa_handle_t *handle);
+    status_t stopHfp(alsa_handle_t *handle);
     void     setVoiceVolume(int volume);
     void     setVoipVolume(int volume);
     void     setMicMute(int state);
@@ -327,6 +332,8 @@ private:
     status_t setHardwareParams(alsa_handle_t *handle);
     int      deviceName(alsa_handle_t *handle, unsigned flags, char **value);
     status_t setSoftwareParams(alsa_handle_t *handle);
+    status_t setHfpHardwareParams(struct pcm *handle);
+    status_t setHfpSoftwareParams(struct pcm *handle);
     status_t getMixerControl(const char *name, unsigned int &value, int index = 0);
     status_t getMixerControlExt(const char *name, unsigned **getValues, unsigned *count);
     status_t setMixerControl(const char *name, unsigned int value, int index = -1);
@@ -863,6 +870,9 @@ protected:
 #ifdef QCOM_FM_ENABLED
     void                handleFm(int device);
 #endif
+#ifdef QCOM_HFP_ENABLED
+    void                handleHfp(int device);
+#endif
 #ifdef QCOM_USBAUDIO_ENABLED
     void                closeUSBPlayback();
     void                closeUSBRecording();
@@ -909,6 +919,7 @@ protected:
     uint32_t            mIncallMode;
 
     bool                mMicMute;
+    bool mHfpState;
     int mCSCallActive;
     int mVolteCallActive;
     int mVoice2CallActive;

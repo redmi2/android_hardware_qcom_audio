@@ -94,7 +94,7 @@ AudioHardwareInterface *AudioHardwareALSA::create() {
 
 AudioHardwareALSA::AudioHardwareALSA() :
     mALSADevice(0),mVoipInStreamCount(0),mVoipOutStreamCount(0),mVoipMicMute(false),
-    mVoipBitRate(0),mCallState(0),mAcdbHandle(NULL),mCsdHandle(NULL),mMicMute(0)
+    mVoipBitRate(0),mCallState(0),mAcdbHandle(NULL),mCsdHandle(NULL),mMicMute(0), mHfpState(0)
 {
     FILE *fp;
     char soundCardInfo[200];
@@ -765,6 +765,15 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         mCallState = state;
         param.remove(key);
     }
+#ifdef QCOM_HFP_ENABLED
+    key = String8("hfp_enable");
+    if (param.getInt(key, state) == NO_ERROR) {
+        if (mHfpState != state) {
+               handleHfp(state);
+        }
+        param.remove(key);
+    }
+#endif
     if (param.size()) {
         status = BAD_VALUE;
     }
@@ -1967,6 +1976,99 @@ size_t AudioHardwareALSA::getInputBufferSize(uint32_t sampleRate, int format, in
     }
     return bufferSize;
 }
+
+#ifdef QCOM_HFP_ENABLED
+void AudioHardwareALSA::handleHfp(int status)
+{
+    int newMode = mode();
+    uint32_t activeUsecase = USECASE_NONE;
+    char ident[70];
+    int tx_dev_id, capability;
+
+    if(status) {
+        // Start FM Radio on current active device
+        unsigned long bufferSize = 1024;
+        alsa_handle_t alsa_handle;
+        char *use_case;
+        ALOGV("Start HFP");
+        snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
+        if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
+            strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_HFP, sizeof(alsa_handle.useCase));
+        } else {
+            strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_HFP_SCO, sizeof(alsa_handle.useCase));
+        }
+        free(use_case);
+
+        for (size_t b = 1; (bufferSize & ~b) != 0; b <<= 1)
+        bufferSize &= ~b;
+        alsa_handle.module = mALSADevice;
+        alsa_handle.bufferSize = 1024;
+        alsa_handle.devices = 0;
+        alsa_handle.handle = 0;
+        alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
+        alsa_handle.channels = VOICE_CHANNEL_MODE;
+        alsa_handle.sampleRate = VOICE_SAMPLING_RATE;
+        alsa_handle.latency = VOICE_LATENCY;
+        alsa_handle.rxHandle = 0;
+        alsa_handle.ucMgr = mUcMgr;
+        mHfpState = 1;
+        mDeviceList.push_back(alsa_handle);
+        ALSAHandleList::iterator it = mDeviceList.end();
+        it--;
+
+#if 0
+        // Get the FM device ACDB ID and capability
+        memset(&ident,0,sizeof(ident));
+        strlcpy(ident, "ACDBID/", sizeof(ident));
+        strlcat(ident, "FM TX PREPROC", sizeof(ident));
+        tx_dev_id = snd_use_case_get(alsa_handle.ucMgr, ident, NULL);
+
+        memset(&ident,0,sizeof(ident));
+        strlcpy(ident, "CAPABILITY/", sizeof(ident));
+        strlcat(ident, "FM TX PREPROC", sizeof(ident));
+        capability = snd_use_case_get(alsa_handle.ucMgr, ident, NULL);
+
+        if ((tx_dev_id < 0) || (capability < 0)) {
+            ALOGD("No pre-proc calibration applied on receiving FM stream\n");
+        } else {
+            if (mAcdbHandle == NULL) {
+                ALOGE("mAcdbHandle is NULL\n");
+            } else {
+                acdb_send_audio_cal =
+                    (void (*)(int, int))::dlsym(mAcdbHandle,"acdb_loader_send_audio_cal");
+                if (acdb_send_audio_cal == NULL) {
+                    ALOGE("acdb_send_audio_cal is NULL\n");
+                } else {
+                    acdb_send_audio_cal(tx_dev_id, capability);
+                }
+            }
+        }
+#endif
+        mALSADevice->route(&(*it), (uint32_t)(0), newMode);
+        if(!strcmp(it->useCase, SND_USE_CASE_VERB_HFP)) {
+            snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_HFP);
+        } else {
+            snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_HFP_SCO);
+        }
+        mALSADevice->startHfp(&(*it));
+        activeUsecase = useCaseStringToEnum(it->useCase);
+    } else if (status == 0) {
+        ALOGV("Stop HFP");
+        for(ALSAHandleList::iterator it = mDeviceList.begin();
+            it != mDeviceList.end(); ++it) {
+            if((!strcmp(it->useCase, SND_USE_CASE_VERB_HFP)) ||
+              (!strcmp(it->useCase, SND_USE_CASE_MOD_HFP_SCO))) {
+    		mALSADevice->stopHfp(&(*it));
+                activeUsecase = useCaseStringToEnum(it->useCase);
+                //mALSADevice->route(&(*it), (uint32_t)device, newMode);
+                mDeviceList.erase(it);
+                break;
+            }
+        }
+        mHfpState = 0;
+    }
+}
+#endif
 
 #ifdef QCOM_FM_ENABLED
 void AudioHardwareALSA::handleFm(int device)
