@@ -242,6 +242,7 @@ static card_mapping_t card_mapping_list[] = {
 #define SND_USE_CASE_VERB_HIFI_TUNNEL2    "HiFi Tunnel2"
 #define SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL    "HiFi Pseudo Tunnel"
 #define SND_USE_CASE_VERB_VOICE2             "Voice2"
+#define SND_USE_CASE_VERB_HFP             "Hfp-sco"
 
 #define SND_USE_CASE_DEV_FM_TX           "FM Tx"
 #define SND_USE_CASE_DEV_ANC_HEADSET     "ANC Headset"
@@ -309,6 +310,7 @@ static card_mapping_t card_mapping_list[] = {
 #define SND_USE_CASE_MOD_CAPTURE_FM      "Capture FM"
 #define SND_USE_CASE_MOD_CAPTURE_LOWLATENCY_MUSIC     "Capture Lowlatency Music"
 #define SND_USE_CASE_MOD_CAPTURE_A2DP_FM "Capture A2DP FM"
+#define SND_USE_CASE_MOD_HFP_SCO		"Hfp-sco"
 #define SND_USE_CASE_MOD_PLAY_LPA        "Play LPA"
 #define SND_USE_CASE_MOD_PLAY_VOIP       "Play VOIP"
 #define SND_USE_CASE_MOD_CAPTURE_VOIP    "Capture VOIP"
