@@ -75,6 +75,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     mFrameCount     = 0;
     mFormat         = format;
     mSampleRate     = samplingRate;
+    mChannelMap     = channels;
     ALOGV("channel map = %d", channels);
     mChannels = channels = channelMapToChannels(channels);
     // NOTE: This has to be changed when Multi channel PCM has to be
@@ -3310,55 +3311,87 @@ void AudioSessionOutALSA::setPCMChannelMap(alsa_handle_t *handle)
     status_t status = NO_ERROR;
 
     memset(channelMap, 0, sizeof(channelMap));
-    switch (handle->channels) {
-    case 3:
-        channelMap[0] = PCM_CHANNEL_FL;
-        channelMap[1] = PCM_CHANNEL_FR;
-        channelMap[2] = PCM_CHANNEL_FC;
-    break;
-    case 4:
-        channelMap[0] = PCM_CHANNEL_FL;
-        channelMap[1] = PCM_CHANNEL_FR;
-        channelMap[2] = PCM_CHANNEL_LB;
-        channelMap[3] = PCM_CHANNEL_RB;
-    break;
-    case 5:
-        channelMap[0] = PCM_CHANNEL_FL;
-        channelMap[1] = PCM_CHANNEL_FR;
-        channelMap[2] = PCM_CHANNEL_FC;
-        channelMap[3] = PCM_CHANNEL_LB;
-        channelMap[4] = PCM_CHANNEL_RB;
-        break;
-    case 6:
-        channelMap[0] = PCM_CHANNEL_FL;
-        channelMap[1] = PCM_CHANNEL_FR;
-        channelMap[2] = PCM_CHANNEL_FC;
-        channelMap[3] = PCM_CHANNEL_LFE;
-        channelMap[4] = PCM_CHANNEL_LB;
-        channelMap[5] = PCM_CHANNEL_RB;
-        break;
-    case 7:
-        channelMap[0] = PCM_CHANNEL_FL;
-        channelMap[1] = PCM_CHANNEL_FR;
-        channelMap[2] = PCM_CHANNEL_FC;
-        channelMap[3] = PCM_CHANNEL_LFE;
-        channelMap[4] = PCM_CHANNEL_LB;
-        channelMap[5] = PCM_CHANNEL_RB;
-        channelMap[6] = PCM_CHANNEL_FLC;
-        break;
-    case 8:
-        channelMap[0] = PCM_CHANNEL_FL;
-        channelMap[1] = PCM_CHANNEL_FR;
-        channelMap[2] = PCM_CHANNEL_FC;
-        channelMap[3] = PCM_CHANNEL_LFE;
-        channelMap[4] = PCM_CHANNEL_LB;
-        channelMap[5] = PCM_CHANNEL_RB;
-        channelMap[6] = PCM_CHANNEL_FLC;
-        channelMap[7] = PCM_CHANNEL_FRC;
-        break;
-    default:
-        ALOGE("un supported channels for setting channel map");
-        return;
+
+
+
+    for(int i=0; i < handle->channels; i++)
+    {
+        if ((mChannelMap & AudioSystem::CHANNEL_OUT_FRONT_LEFT) )
+        {
+            mChannelMap = mChannelMap & ~AudioSystem::CHANNEL_OUT_FRONT_LEFT;
+            channelMap[i] = PCM_CHANNEL_FL;
+            continue;
+        }
+
+        if ((mChannelMap & AudioSystem::CHANNEL_OUT_FRONT_RIGHT) )
+        {
+            mChannelMap = mChannelMap & ~AudioSystem::CHANNEL_OUT_FRONT_RIGHT;
+            channelMap[i] = PCM_CHANNEL_FR;
+            continue;
+        }
+
+        if ((mChannelMap & AudioSystem::CHANNEL_OUT_FRONT_CENTER) )
+        {
+            mChannelMap = mChannelMap & ~AudioSystem::CHANNEL_OUT_FRONT_CENTER;
+            channelMap[i] = PCM_CHANNEL_FC;
+            continue;
+        }
+
+        if ((mChannelMap & AudioSystem::CHANNEL_OUT_LOW_FREQUENCY) )
+        {
+            mChannelMap = mChannelMap & ~AudioSystem::CHANNEL_OUT_LOW_FREQUENCY;
+            channelMap[i] = PCM_CHANNEL_LFE;
+            continue;
+        }
+
+        if ((mChannelMap & AudioSystem::CHANNEL_OUT_BACK_LEFT) )
+        {
+            mChannelMap = mChannelMap & ~AudioSystem::CHANNEL_OUT_BACK_LEFT;
+            channelMap[i] = PCM_CHANNEL_LB;
+            continue;
+        }
+
+        if ((mChannelMap & AudioSystem::CHANNEL_OUT_BACK_RIGHT) )
+        {
+            mChannelMap = mChannelMap & ~AudioSystem::CHANNEL_OUT_BACK_RIGHT;
+            channelMap[i] = PCM_CHANNEL_RB;
+            continue;
+        }
+
+        if ((mChannelMap & AudioSystem::CHANNEL_OUT_FRONT_LEFT_OF_CENTER) )
+        {
+            mChannelMap = mChannelMap & ~AudioSystem::CHANNEL_OUT_FRONT_LEFT_OF_CENTER;
+            channelMap[i] = PCM_CHANNEL_FLC;
+            continue;
+        }
+
+        if ((mChannelMap & AudioSystem::CHANNEL_OUT_FRONT_RIGHT_OF_CENTER) )
+        {
+            mChannelMap = mChannelMap & ~AudioSystem::CHANNEL_OUT_FRONT_RIGHT_OF_CENTER;
+            channelMap[i] = PCM_CHANNEL_FRC;
+            continue;
+        }
+
+        if ((mChannelMap & AudioSystem::CHANNEL_OUT_BACK_CENTER) )
+        {
+            mChannelMap = mChannelMap & ~AudioSystem::CHANNEL_OUT_BACK_CENTER;
+            channelMap[i] = PCM_CHANNEL_CS;
+            continue;
+        }
+
+        if ((mChannelMap & AudioSystem::CHANNEL_OUT_SIDE_LEFT) )
+        {
+            mChannelMap = mChannelMap & ~AudioSystem::CHANNEL_OUT_SIDE_LEFT;
+            channelMap[i] = PCM_CHANNEL_LS;
+            continue;
+        }
+
+        if ((mChannelMap & AudioSystem::CHANNEL_OUT_SIDE_RIGHT) )
+        {
+            mChannelMap = mChannelMap & ~AudioSystem::CHANNEL_OUT_SIDE_RIGHT;
+            channelMap[i] = PCM_CHANNEL_RS;
+            continue;
+        }
     }
 
     status = mALSADevice->setChannelMap(handle, sizeof(channelMap), channelMap);

@@ -597,6 +597,7 @@ private:
     uint32_t            mFrameCount;
     uint32_t            mSampleRate;
     uint32_t            mChannels;
+    uint32_t            mChannelMap;
     size_t              mBufferSize;
     int                 mFormat;
     int                 mDevices;
