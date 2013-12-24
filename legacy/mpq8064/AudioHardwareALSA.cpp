@@ -1761,6 +1761,9 @@ uint32_t AudioHardwareALSA::useCaseStringToEnum(const char *usecase) {
     } else if (!strncmp(usecase, SND_USE_CASE_MOD_PLAY_MUSIC4,
                     strlen(SND_USE_CASE_MOD_PLAY_MUSIC4)+1)) {
         activeUsecase = USECASE_HIFI4;
+    } else if (!strncmp(usecase, SND_USE_CASE_MOD_PLAY_MUSIC5,
+                    strlen(SND_USE_CASE_MOD_PLAY_MUSIC5)+1)) {
+        activeUsecase = USECASE_HIFI5;
     } else if ((!strncmp(usecase, SND_USE_CASE_VERB_DIGITAL_RADIO,
                     strlen(SND_USE_CASE_VERB_DIGITAL_RADIO)+1)) ||
                (!strncmp(usecase, SND_USE_CASE_MOD_PLAY_FM,
