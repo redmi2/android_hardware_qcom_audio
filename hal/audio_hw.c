@@ -53,12 +53,15 @@
 #include "voice_extn.h"
 
 #include "sound/compress_params.h"
-
+#define MAX_COMPRESS_OFFLOAD_FRAGMENT_SIZE (256 * 1024)
+#define MIN_COMPRESS_OFFLOAD_FRAGMENT_SIZE (8 * 1024)
 #define COMPRESS_OFFLOAD_FRAGMENT_SIZE (32 * 1024)
 #define COMPRESS_OFFLOAD_NUM_FRAGMENTS 4
 /* ToDo: Check and update a proper value in msec */
 #define COMPRESS_OFFLOAD_PLAYBACK_LATENCY 96
 #define COMPRESS_PLAYBACK_VOLUME_MAX 0x2000
+
+#define USECASE_AUDIO_PLAYBACK_PRIMARY USECASE_AUDIO_PLAYBACK_DEEP_BUFFER
 
 struct pcm_config pcm_config_deep_buffer = {
     .channels = 2,
@@ -148,6 +151,7 @@ static pthread_mutex_t adev_init_lock;
 static unsigned int audio_device_ref_count;
 
 static int set_voice_volume_l(struct audio_device *adev, float volume);
+static uint32_t get_offload_buffer_size();
 
 static bool is_supported_format(audio_format_t format)
 {
@@ -851,9 +855,6 @@ static void *offload_thread_loop(void *context)
 {
     struct stream_out *out = (struct stream_out *) context;
     struct listnode *item;
-
-    out->offload_state = OFFLOAD_STATE_IDLE;
-    out->playback_started = 0;
 
     setpriority(PRIO_PROCESS, 0, ANDROID_PRIORITY_AUDIO);
     set_sched_policy(0, SP_FOREGROUND);
@@ -1998,6 +1999,13 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
     *stream_out = NULL;
     out = (struct stream_out *)calloc(1, sizeof(struct stream_out));
 
+    if (!out) {
+        return -ENOMEM;
+    }
+
+    pthread_mutex_init(&out->lock, (const pthread_mutexattr_t *) NULL);
+    pthread_cond_init(&out->cond, (const pthread_condattr_t *) NULL);
+
     if (devices == AUDIO_DEVICE_NONE)
         devices = AUDIO_DEVICE_OUT_SPEAKER;
 
@@ -2083,7 +2091,7 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
         else
             out->compr_config.codec->id =
                 get_snd_codec_id(config->offload_info.format);
-        out->compr_config.fragment_size = COMPRESS_OFFLOAD_FRAGMENT_SIZE;
+        out->compr_config.fragment_size = get_offload_buffer_size();
         out->compr_config.fragments = COMPRESS_OFFLOAD_NUM_FRAGMENTS;
         out->compr_config.codec->sample_rate =
                     compress_get_alsa_rate(config->offload_info.sample_rate);
@@ -2097,6 +2105,9 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
             out->non_blocking = 1;
 
         out->send_new_metadata = 1;
+        out->offload_state = OFFLOAD_STATE_IDLE;
+        out->playback_started = 0;
+
         create_offload_callback_thread(out);
         ALOGV("%s: offloaded output offload_info version %04x bit rate %d",
                 __func__, config->offload_info.version,
@@ -2123,12 +2134,15 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
         out->config = pcm_config_low_latency;
         out->sample_rate = out->config.rate;
     } else {
-        out->usecase = USECASE_AUDIO_PLAYBACK_DEEP_BUFFER;
+        /* primary path is the default path selected if no other outputs are available/suitable */
+        out->usecase = USECASE_AUDIO_PLAYBACK_PRIMARY;
         out->config = pcm_config_deep_buffer;
         out->sample_rate = out->config.rate;
     }
 
-    if (flags & AUDIO_OUTPUT_FLAG_PRIMARY) {
+    if ((out->usecase == USECASE_AUDIO_PLAYBACK_PRIMARY) ||
+        (flags & AUDIO_OUTPUT_FLAG_PRIMARY)) {
+        /* Ensure the default output is not selected twice */
         if(adev->primary_output == NULL)
             adev->primary_output = out;
         else {
@@ -2170,9 +2184,6 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
     out->standby = 1;
     /* out->muted = false; by calloc() */
     /* out->written = 0; by calloc() */
-
-    pthread_mutex_init(&out->lock, (const pthread_mutexattr_t *) NULL);
-    pthread_cond_init(&out->cond, (const pthread_condattr_t *) NULL);
 
     config->format = out->stream.common.get_format(&out->stream.common);
     config->channel_mask = out->stream.common.get_channels(&out->stream.common);
@@ -2593,6 +2604,7 @@ static int adev_open(const hw_module_t *module, const char *name,
         free(adev);
         ALOGE("%s: Failed to init platform data, aborting.", __func__);
         *device = NULL;
+        pthread_mutex_unlock(&adev_init_lock);
         return -EINVAL;
     }
 
@@ -2636,6 +2648,28 @@ static int adev_open(const hw_module_t *module, const char *name,
 
     ALOGV("%s: exit", __func__);
     return 0;
+}
+
+/* Read  offload buffer size from a property.
+ * If value is not power of 2  round it to
+ * power of 2.
+ */
+static uint32_t get_offload_buffer_size()
+{
+    char value[PROPERTY_VALUE_MAX] = {0};
+    uint32_t fragment_size = COMPRESS_OFFLOAD_FRAGMENT_SIZE;
+    if((property_get("audio.offload.buffer.size.kb", value, "")) &&
+            atoi(value)) {
+        fragment_size =  atoi(value) * 1024;
+        //ring buffer size needs to be 4k aligned.
+        CHECK(!(fragment_size * COMPRESS_OFFLOAD_NUM_FRAGMENTS % 4096));
+    }
+    if(fragment_size < MIN_COMPRESS_OFFLOAD_FRAGMENT_SIZE)
+        fragment_size = MIN_COMPRESS_OFFLOAD_FRAGMENT_SIZE;
+    else if(fragment_size > MAX_COMPRESS_OFFLOAD_FRAGMENT_SIZE)
+        fragment_size = MAX_COMPRESS_OFFLOAD_FRAGMENT_SIZE;
+    ALOGVV("%s: fragment_size %d", __func__, fragment_size);
+    return fragment_size;
 }
 
 static struct hw_module_methods_t hal_module_methods = {
