@@ -103,6 +103,9 @@ class AudioBitstreamSM;
 #define FENS_KEY            "fens_enable"
 #define SPDIF_FORMAT_KEY    "spdif_format"
 #define HDMI_FORMAT_KEY     "hdmi_format"
+#define STANDBY_DEVICES_KEY "standby_devices"
+#define RESUME_DEVICES_KEY  "resume_devices"
+#define COMPR_STANDBY_DEVICES_KEY   "compr_standby_devices"
 
 #define ANC_FLAG        0x00000001
 #define DMIC_FLAG       0x00000002
@@ -155,7 +158,7 @@ static int USBRECBIT_FM = (1 << 3);
 
 //Required for Tunnel
 #define TUNNEL_DECODER_BUFFER_SIZE 4800
-#define TUNNEL_DECODER_BUFFER_COUNT 256
+#define TUNNEL_DECODER_BUFFER_COUNT 64
 // To accommodate worst size frame of  AC3 and DTS and meta data
 #define TUNNEL_DECODER_BUFFER_SIZE_BROADCAST 9600
 // Multiple of MS11 MultiChanell Output which fits in a buffer
@@ -256,7 +259,33 @@ enum {
     PASSTHROUGH_FORMAT = 0x8,
     TRANSCODE_FORMAT = 0x10
 };
-
+/*
+Requested end device format by user/app through set parameters
+*/
+enum {
+    UNCOMPRESSED = 0,
+    COMPRESSED,
+    COMPRESSED_CONVERT_EAC3_AC3,
+    COMPRESSED_CONVERT_ANY_AC3,
+    COMPRESSED_CONVERT_ANY_DTS,
+    AUTO_DEVICE_FORMAT,
+    UNCOMPRESSED_MCH,  /* not to be exposed, internal use only */
+    COMPRESSED_CONVERT_AC3_ASSOC, /* not to be exposed, internal use only */
+    ALL_DEVICE_FORMATS
+};
+/*
+playback controls
+*/
+enum {
+    PLAY = 1,		//1
+    PAUSE = (1<<1),	//2
+    RESUME = (1<<2),	//4
+    SEEK = (1<<3),	//8
+    EOS = (1<<4),	//16
+    STOP = (1<<5),	//32
+    STANDBY = (1<<6),	//64
+    INIT = (1<<7),	//128
+};
 struct alsa_handle_t {
     ALSADevice*         module;
     uint64_t            devices;
@@ -273,6 +302,7 @@ struct alsa_handle_t {
     unsigned int        periodSize;
     struct pcm *        rxHandle;
     uint64_t            activeDevice;
+    uint8_t             playbackMode;
     snd_use_case_mgr_t  *ucMgr;
 };
 
@@ -525,13 +555,9 @@ public:
 
     virtual status_t    standby();
 
-    virtual status_t    setParameters(const String8& keyValuePairs) {
-        return ALSAStreamOps::setParameters(keyValuePairs);
-    }
+    virtual status_t    setParameters(const String8& keyValuePairs);
 
-    virtual String8     getParameters(const String8& keys) {
-        return ALSAStreamOps::getParameters(keys);
-    }
+    virtual String8     getParameters(const String8& keys);
 
     // return the number of audio frames written by the audio dsp to DAC since
     // the output has exited standby
@@ -539,6 +565,7 @@ public:
 
     status_t            open(int mode);
     status_t            close();
+
 
 private:
     uint32_t            mFrameCount;
@@ -657,6 +684,11 @@ private:
     uint64_t            hw_ptr[2];
     uint32_t            mA2dpUseCase;
     struct pollfd       pfd[NUM_AUDIOSESSION_FDS];
+
+    int                 mStandByDevices;
+    int                 mStandByFormats;
+    bool                mConfiguringSessions;
+
     //Structure to hold mem buffer information
     class BuffersAllocated {
     public:
@@ -759,6 +791,7 @@ private:
 #endif
     int64_t  mSavedTimestamp;
 
+    void updateDevicesInSessionList(int devices, int state);
 };
 
 // ----------------------------------------------------------------------------
@@ -1240,6 +1273,7 @@ public:
     int         buffer_data(struct pcm *pcm, void *data, unsigned count);
     int         is_buffer_available(struct pcm *pcm, void *data, int count, int format);
     int         hw_pcm_write(struct pcm *pcm, void *data, unsigned count);
+    int         getUnComprDeviceInCurrDevices(int devices);
 
     /**This method dumps the state of the audio hardware */
     //virtual status_t dumpState(int fd, const Vector<String16>& args);
@@ -1261,6 +1295,7 @@ private:
     uint32_t    getA2DPActiveUseCases_l();
     void        clearA2DPActiveUseCases_l(uint32_t activeUsecase);
     uint32_t    useCaseStringToEnum(const char *usecase);
+    int         getPCMDevices(int devices);
 
 protected:
     virtual status_t    dump(int fd, const Vector<String16>& args);
@@ -1278,6 +1313,9 @@ protected:
     int musbPlaybackState;
     int musbRecordingState;
 #endif
+
+    void standbySessionDevices(int device);
+    void updateDevicesOfOtherSessions(int device, int state);
 
     friend class AudioBroadcastStreamALSA;
     friend class AudioSessionOutALSA;
@@ -1318,6 +1356,10 @@ protected:
     Condition           mA2dpCv;
     volatile bool       mIsA2DPEnabled;
     volatile bool       mIsA2DPSuspended;
+
+    int mSpdifRenderFormat;
+    int mHdmiRenderFormat;
+    List <AudioStreamOut *> mSessions;
 
     enum {
       USECASE_NONE = 0x00,
