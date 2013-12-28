@@ -866,6 +866,7 @@ private:
     char                *mPcmWriteTempBuffer;
     char                *mCompreWriteTempBuffer;
     uint32_t            mA2dpUseCase;
+    bool                mFirstBuffer;
 
     // ALSA device handle to route PCM 2.0 playback
     alsa_handle_t      *mPcmRxHandle;
