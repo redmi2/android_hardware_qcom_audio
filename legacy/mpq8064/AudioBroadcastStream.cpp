@@ -175,6 +175,7 @@ AudioBroadcastStreamALSA::~AudioBroadcastStreamALSA()
 {
     ALOGD("Destructor ++");
 
+    mCloseSession = true;
     mSkipWrite = true;
     mWriteCv.signal();
 
@@ -342,7 +343,7 @@ status_t AudioBroadcastStreamALSA::mute(bool mute)
                                                mPcmRxHandle->useCase);
         }
     } else if(mCompreRxHandle) {
-        if(mSpdifFormat != COMPRESSED_FORMAT && mHdmiFormat != COMPRESSED_FORMAT) {
+        if(mSpdifFormat != COMPRESSED_FORMAT && !(mHdmiFormat & COMPRESSED_FORMAT)) {
             status = mCompreRxHandle->module->setPlaybackVolume(volume,
                                                  mCompreRxHandle->useCase);
         }
@@ -375,7 +376,7 @@ status_t AudioBroadcastStreamALSA::setVolume(float left, float right)
                                                mPcmRxHandle->useCase);
         }
     } else if(mCompreRxHandle) {
-        if(mSpdifFormat != COMPRESSED_FORMAT && mHdmiFormat != COMPRESSED_FORMAT)
+        if(mSpdifFormat != COMPRESSED_FORMAT && !(mHdmiFormat & COMPRESSED_FORMAT))
             status = mCompreRxHandle->module->setPlaybackVolume(mStreamVol,
                                                  mCompreRxHandle->useCase);
     }
@@ -403,6 +404,11 @@ ssize_t AudioBroadcastStreamALSA::write(const void *buffer, size_t bytes,
     size_t            sent = 0;
     status_t          err;
 
+    if ( bytes > SAMPLES_PER_CHANNEL*MAX_INPUT_CHANNELS_SUPPORTED*FACTOR_FOR_BUFFERING){
+         ALOGE("Appears to be an erroneous packet as the buffer Size exceeds the internal buffer size");
+         ALOGE("Hence rejecting this packet");
+         return bytes;
+    }
 #if 0
     // 1. Check if MS11 decoder instance is present and if present we need to
     //    preserve the data and supply it to MS 11 decoder.
@@ -508,14 +514,14 @@ status_t AudioBroadcastStreamALSA::setAvsyncWindow(int windowId, int ws_msw, int
     ALOGD("setAvsyncWindow1: Enter, ws_msw=%d, ws_lsw=%d, we_msw=%d, we_lsw=%d",
          ws_msw, ws_lsw, we_msw, we_lsw);
 
-    if ( mCompreRxHandle || mSecCompreRxHandle){
+    if ( mCompreRxHandle || mSecCompreRxHandle && mTimeStampModeSet){
         if(windowId == QCOM_BROADCAST_AVSYNC_RENDER_WINDOW) {
             ALOGD("setAvsyncWindow: Inside RenderWindow");
             cmdId = SNDRV_COMPRESS_SET_AVSYNC_RENDER_WINDOW;
             if(window.ws_msw == RENDER_WINDOWS_START_MSW && window.ws_lsw == RENDER_WINDOWS_START_LSW
                && window.we_msw == RENDER_WINDOWS_END_MSW && window.we_lsw == RENDER_WINDOWS_END_LSW){
                // This indicates infinite render window, which is set in case of Audio Master mode.
-               // For Audio Master Mode to work , CMD_RUN to DSP should be with RELATIVE_TIME mode.
+               // For Audio Master Mode to work , CMD_RUN to DSP should be with RUN_IMMEDIATE mode.
                ALOGE("Enable Audio Master Mode");
                mRunMode = RUN_IMMEDIATE;
             }
@@ -581,7 +587,7 @@ status_t AudioBroadcastStreamALSA::setAvsyncWindow(int windowId, int ws_msw, int
         }
     }
     else
-        ALOGE("Handle Invalid hence not issuing any ioctls");
+        ALOGE("Handle Invalid hence not issuing any ioctls or Time Stamp mode not set");
 
     ALOGD("setAvsyncWindow: Leave");
     return rc;
@@ -607,8 +613,13 @@ status_t AudioBroadcastStreamALSA::getAvsyncSessionTime(int *session_msw, int *s
         ALOGD("getAvsyncSessionTime: Inside ComprHandle");
         rxHandle = mCompreRxHandle;
     }
+    else if(mSecCompreRxHandle) {
+        ALOGD("getAvsyncSessionTime: Inside SecComprHandle");
+        rxHandle = mSecCompreRxHandle;
+    }
 
-    if(rxHandle != NULL){
+
+    if(rxHandle != NULL && mTimeStampModeSet){
         ALOGD("getAvsyncSessionTime: calling ioctl avsync cmd=%d\n", SNDRV_COMPRESS_GET_AVSYNC_SESSION_TIME);
         rc = ioctl(rxHandle->handle->fd, SNDRV_COMPRESS_GET_AVSYNC_SESSION_TIME, &st);
         if (rc < 0) {
@@ -619,11 +630,11 @@ status_t AudioBroadcastStreamALSA::getAvsyncSessionTime(int *session_msw, int *s
         *session_lsw = st.timeStamp_lsw;
         *absolute_msw = st.absolute_msw;
         *absolute_lsw = st.absolute_lsw;
-        ALOGD("getAvsyncSessionTime: returning sessiontime %d, %d, %d, %d DSP session time %d %d\n", *session_msw, *session_lsw,
+        ALOGD("getAvsyncSessionTime: returning sessiontime %u, %u, %u, %u DSP session time %u %u\n", *session_msw, *session_lsw,
                         *absolute_msw, *absolute_lsw, st.session_msw, st.session_lsw );
     }
     else
-        ALOGE("Handle Invalid hence not issuing any ioctls");
+        ALOGE("Handle Invalid hence not issuing any ioctls or timeStampMode not set");
 
     ALOGD("getAvsyncSessionTime: Leave");
     return NO_ERROR;
@@ -651,8 +662,14 @@ status_t AudioBroadcastStreamALSA::getAvsyncInstStatistics(audio_avsync_statisti
         ALOGD("getAvsyncInstStatistics: Inside ComprHandle");
         rxHandle = mCompreRxHandle;
     }
+    else if(mSecCompreRxHandle) {
+        ALOGD("getAvsyncInstStatistics: Inside SecComprHandle");
+        rxHandle = mSecCompreRxHandle;
+    }
 
-    if(rxHandle != NULL){
+
+
+    if(rxHandle != NULL && mTimeStampModeSet){
 	ALOGD("getAvsyncInstStatistics: calling ioctl avsync cmd=%d\n", SNDRV_COMPRESS_GET_AVSYNC_INST_STATISTICS);
 	rc = ioctl(rxHandle->handle->fd, SNDRV_COMPRESS_GET_AVSYNC_INST_STATISTICS, &statistics);
 	if (rc < 0) {
@@ -692,7 +709,7 @@ status_t AudioBroadcastStreamALSA::getAvsyncInstStatistics(audio_avsync_statisti
          ALOGD("duration_region_C %lld average_region_C %lld ",print_duration_region_C, print_average_region_C);
     }
     else
-        ALOGE("Handle Invalid hence not issuing any ioctls");
+        ALOGE("Handle Invalid hence not issuing any ioctls or timeStampMode not set");
 
     ALOGD("getAvsyncInstStatistics: Leave");
     return NO_ERROR;
@@ -835,6 +852,7 @@ void AudioBroadcastStreamALSA::initialization()
     mCompreTxHandle    = NULL;
     mCaptureHandle     = NULL;
     mTranscodeHandle   = NULL;
+    mCloseSession      = false;
 
     // MS11
     mMS11Decoder       = NULL;
@@ -1031,12 +1049,15 @@ void AudioBroadcastStreamALSA::setRoutingFlagsBasedOnConfig()
     if(mDevices & AudioSystem::DEVICE_OUT_PROXY)
         mCaptureFromProxy = true;
 
+    if (mDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
+        mALSADevice->updateHDMIEDIDInfo();
+
     setSpdifHdmiRoutingFlags(mDevices);
     mPCMDevices = mDevices;
     if(mSpdifFormat == COMPRESSED_FORMAT) {
         mPCMDevices &= ~AudioSystem::DEVICE_OUT_SPDIF;
     }
-    if(mHdmiFormat == COMPRESSED_FORMAT) {
+    if(mHdmiFormat & COMPRESSED_FORMAT) {
         mPCMDevices &= ~AudioSystem::DEVICE_OUT_AUX_DIGITAL;
     }
     if((((mSpdifFormat == PCM_FORMAT) ||
@@ -1060,7 +1081,7 @@ void AudioBroadcastStreamALSA::setRoutingFlagsBasedOnConfig()
 
     if(mSpdifFormat == COMPRESSED_FORMAT)
         mSecDevices |= AudioSystem::DEVICE_OUT_SPDIF;
-    if(mHdmiFormat == COMPRESSED_FORMAT)
+    if(mHdmiFormat & COMPRESSED_FORMAT)
         mSecDevices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
     ALOGD("mPCMDevices = 0x%x, mUseDualTunnel = %d, mTranscodeDevices =%x, mSecDevices = 0x%x",
                                    mPCMDevices, mUseDualTunnel, mTranscodeDevices, mSecDevices);
@@ -1098,8 +1119,14 @@ void AudioBroadcastStreamALSA::setSpdifHdmiRoutingFlags(int devices)
     }
     if(!strncmp(mHdmiOutputFormat,"ac3",sizeof(mHdmiOutputFormat))) {
         if(mDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
-            if(mSampleRate > 24000 && mUseMS11Decoder)
+            if(mSampleRate > 24000 && mUseMS11Decoder){
+             // User wants AC3/EAC3 Compressed output on HDMI, and for
+             // sample rates greater than 24Khz compressed out is possible
+             // Confirm if the Sink device supports compressed out otherwise
+             // fallback to the best supported output.
                 mHdmiFormat = COMPRESSED_FORMAT;
+                fixUpHdmiFormatBasedOnEDID();
+            }
             else
                 mHdmiFormat = PCM_FORMAT;
     }
@@ -1149,6 +1176,56 @@ void AudioBroadcastStreamALSA::setSpdifHdmiRoutingFlags(int devices)
 
     return;
 }
+
+void AudioBroadcastStreamALSA::fixUpHdmiFormatBasedOnEDID(){
+    ALOGV("fixUpHdmiFormatBasedOnEDID");
+    switch(mFormat) {
+    case AUDIO_FORMAT_EAC3:
+         if(mHdmiFormat==COMPRESSED_FORMAT) {
+             if((mALSADevice->getFormatHDMIIndexEDIDInfo(DOLBY_DIGITAL_PLUS_1) >= 0) && (mSampleRate > 32000)) {
+                  // EAC3 passthrough is only supported for 44.1Khz and 48Khz clips
+                  // For EAC3 32Khz clips rendering sample rate required is 128Khz
+                  // This is not supported by HDMI spec, hence 32Khz EAC3 clisp
+                  // Are transcoded to 32Khz AC3.
+                  mHdmiFormat = COMPRESSED_FORMAT;
+             } else if(mALSADevice->getFormatHDMIIndexEDIDInfo(AC3) >= 0) {
+                  mHdmiFormat |= TRANSCODE_FORMAT;
+             } else {
+                  mHdmiFormat = PCM_FORMAT;
+             }
+         }
+         break;
+     case AUDIO_FORMAT_AC3:
+         if(mHdmiFormat==COMPRESSED_FORMAT) {
+             if(mALSADevice->getFormatHDMIIndexEDIDInfo(AC3) >= 0)
+                  mHdmiFormat = COMPRESSED_FORMAT;
+             else{
+                  mHdmiFormat = PCM_FORMAT;
+                  ALOGE("Cannot set compressed format as sink does not support it");
+             }
+         }
+         break;
+     case AUDIO_FORMAT_AAC:
+     case AUDIO_FORMAT_HE_AAC_V1:
+     case AUDIO_FORMAT_HE_AAC_V2:
+     case AUDIO_FORMAT_AAC_ADIF:
+         if(mHdmiFormat==COMPRESSED_FORMAT) {
+             if(mALSADevice->getFormatHDMIIndexEDIDInfo(AC3) >= 0)
+                  mHdmiFormat |= TRANSCODE_FORMAT;
+             else{
+                  mHdmiFormat = PCM_FORMAT;
+                  ALOGE("Cannot set compressed format as sink does not support it");
+             }
+         }
+         break;
+     defalut:
+         mHdmiFormat = PCM_FORMAT;
+         break;
+     }
+}
+
+
+
 
 /*******************************************************************************
 Description: open appropriate capture and routing devices
@@ -1321,64 +1398,6 @@ status_t AudioBroadcastStreamALSA::openCompressedCapturePath()
     return status;
 }
 
-status_t AudioBroadcastStreamALSA::openPcmDevice(int devices)
-{
-    char *use_case;
-    status_t status = NO_ERROR;
-
-    status = setPlaybackFormat();
-    if(status != NO_ERROR) {
-        ALOGE("setPlaybackFormat Failed");
-        return BAD_VALUE;
-    }
-    mInputBufferSize = DEFAULT_OUT_BUFFER_SIZE_PER_CHANNEL * mChannels;
-    mInputBufferCount = MULTI_CHANNEL_PERIOD_COUNT;
-    if(mPcmRxHandle == NULL) {
-        snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
-        if ((use_case == NULL) ||
-            (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
-                strlen(SND_USE_CASE_VERB_INACTIVE)))) {
-            status = openRoutingDevice(SND_USE_CASE_VERB_HIFI3, true,
-                         devices & ~mTranscodeDevices);
-        } else {
-            status = openRoutingDevice(SND_USE_CASE_MOD_PLAY_MUSIC3, false,
-                         devices & ~mTranscodeDevices);
-        }
-        if(use_case) {
-            free(use_case);
-            use_case = NULL;
-        }
-        if(status != NO_ERROR) {
-            return status;
-        }
-        ALSAHandleList::iterator it = mParent->mDeviceList.end(); it--;
-        mPcmRxHandle = &(*it);
-        mBufferSize = mPcmRxHandle->periodSize;
-
-        if(mPcmRxHandle) {
-            if(mPcmRxHandle->type == PCM_FORMAT) {
-                status = mPcmRxHandle->module->setPlaybackVolume(mStreamVol,
-                                                mPcmRxHandle->useCase);
-            }
-        }
-
-        if(mUseMS11Decoder && (mPcmRxHandle->channels > 2))
-            setChannelMap(mPcmRxHandle);
-        else if(mPcmRxHandle->channels > 2)
-            setPCMChannelMap(mPcmRxHandle);
-
-        pcm_prepare(mPcmRxHandle->handle);
-
-        mPcmWriteTempBuffer = (char *) malloc(mBufferSize);
-        if(mPcmWriteTempBuffer == NULL) {
-            ALOGE("Memory allocation of temp buffer to write pcm to driver failed");
-            return BAD_VALUE;
-        }
-    }
-
-    return NO_ERROR;
-}
-
 void AudioBroadcastStreamALSA::setChannelMap(alsa_handle_t *handle)
 {
     char channelMap[8];
@@ -1511,7 +1530,7 @@ status_t AudioBroadcastStreamALSA::openTunnelDevice(int devices)
         mCompreRxHandle = &(*it);
 
         if(mCompreRxHandle) {
-           if(mSpdifFormat != COMPRESSED_FORMAT && mHdmiFormat != COMPRESSED_FORMAT)
+           if(mSpdifFormat != COMPRESSED_FORMAT && !(mHdmiFormat & COMPRESSED_FORMAT))
                 status = mCompreRxHandle->module->setPlaybackVolume(mStreamVol,
                                                   mCompreRxHandle->useCase);
         }
@@ -1530,6 +1549,13 @@ status_t AudioBroadcastStreamALSA::openTunnelDevice(int devices)
     if(status != NO_ERROR) {
         return status;
     }
+    if(mCompreRxHandle !=NULL){
+         if(mUseMS11Decoder && (mCompreRxHandle->channels > 2) && (mCompreRxHandle->format == SNDRV_PCM_FORMAT_S16_LE))
+              setChannelMap(mCompreRxHandle);
+         else if(mCompreRxHandle->channels > 2 && (mCompreRxHandle->format == SNDRV_PCM_FORMAT_S16_LE))
+              setPCMChannelMap(mCompreRxHandle);
+    }
+
     if (mCompreRxHandle !=NULL && (devices & ~mSecDevices)) {
         //prepare the driver for playback
         status = pcm_prepare(mCompreRxHandle->handle);
@@ -1626,7 +1652,7 @@ status_t AudioBroadcastStreamALSA::setPlaybackFormat()
                  !(mTranscodeDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL))) {
         status = mALSADevice->setPlaybackFormat("LPCM",
                            AudioSystem::DEVICE_OUT_AUX_DIGITAL);
-    } else if (mHdmiFormat == COMPRESSED_FORMAT ||
+    } else if (mHdmiFormat & COMPRESSED_FORMAT ||
                 mTranscodeDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
         status = mALSADevice->setPlaybackFormat("Compr",
                            AudioSystem::DEVICE_OUT_AUX_DIGITAL);
@@ -1646,8 +1672,12 @@ status_t AudioBroadcastStreamALSA::openRoutingDevice(char *useCase,
     alsa_handle.devices     = devices;
     alsa_handle.activeDevice= devices;
     alsa_handle.handle      = 0;
-    alsa_handle.format      = (mFormat == AUDIO_FORMAT_PCM_16_BIT ?
-                                  SNDRV_PCM_FORMAT_S16_LE : mFormat);
+    if(!mUseTunnelDecoder && (mPCMDevices & devices))
+         alsa_handle.format =  SNDRV_PCM_FORMAT_S16_LE;
+    else
+         alsa_handle.format = (mFormat == AUDIO_FORMAT_PCM_16_BIT ?
+                               SNDRV_PCM_FORMAT_S16_LE : mFormat);
+
     alsa_handle.channels    = mChannels;
     alsa_handle.sampleRate  = mSampleRate;
     alsa_handle.mode        = mParent->mode();
@@ -1670,8 +1700,13 @@ status_t AudioBroadcastStreamALSA::openRoutingDevice(char *useCase,
         (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL3,
                           strlen(SND_USE_CASE_MOD_PLAY_TUNNEL3))))) {
             alsa_handle.type = COMPRESSED_FORMAT;
-        if (mUseMS11Decoder == true)
+        if (mUseMS11Decoder == true){
             alsa_handle.type |= PASSTHROUGH_FORMAT;
+            // If we are transcoding then the output format is AC3
+            // Set the same format to driver.
+            if (mHdmiFormat & TRANSCODE_FORMAT || mSpdifFormat==COMPRESSED_FORMAT)
+                alsa_handle.format = AUDIO_FORMAT_AC3;
+        }
         else if (mFormat == AUDIO_FORMAT_DTS || mFormat == AUDIO_FORMAT_DTS_LBR) {
             if(mUseDualTunnel) {
                 if(((mSpdifFormat == COMPRESSED_FORMAT) || (mHdmiFormat == COMPRESSED_FORMAT))
@@ -1939,15 +1974,15 @@ void AudioBroadcastStreamALSA::adjustClockThreadEntry()
         if( sleep_time > minTimeBetweenTwoSampleCorrection ){
             for (i = 0 ; (i < iterations && !mKillAdjustClockThread); i++)
             {
-                 if ( adjust_time != 0 && mPcmRxHandle ) {
+                 if ( adjust_time != 0 && mCompreRxHandle ) {
                       // adjust_time is in to microseconds.
                       if ( adjust_time > 0){
                            drift_correction = MIN_DRIFT_CORRECTION;
-                           if((ret = ioctl(mPcmRxHandle->handle->fd, SNDRV_PCM_ADJUST_SESSION_CLOCK, &drift_correction)) < 0 )
+                           if((ret = ioctl(mCompreRxHandle->handle->fd, SNDRV_PCM_ADJUST_SESSION_CLOCK, &drift_correction)) < 0 )
                                ALOGE("ADJUST Session clock time command failed %d", ret);
                       } else if ( adjust_time < 0){
                            drift_correction = (MIN_DRIFT_CORRECTION * -1);
-                           if((ret = ioctl(mPcmRxHandle->handle->fd, SNDRV_PCM_ADJUST_SESSION_CLOCK, &drift_correction)) < 0 )
+                           if((ret = ioctl(mCompreRxHandle->handle->fd, SNDRV_PCM_ADJUST_SESSION_CLOCK, &drift_correction)) < 0 )
                                ALOGE("ADJUST Session clock time command failed %d", ret);
                       }
                  }
@@ -2129,7 +2164,7 @@ void AudioBroadcastStreamALSA::captureThreadEntry()
                 }
                 // For now we enable drift correcton
                 // Only for PCM output and PCM input.
-                if(mPcmRxHandle && mPcmTxHandle)
+                if(mPcmTxHandle)
                    createAdjustSessionClockThread();
 
                 mSignalToSetupRoutingPath = false;
@@ -2273,7 +2308,7 @@ status_t AudioBroadcastStreamALSA::doRoutingSetup()
         mOutputMetadataLength = sizeof(output_metadata_handle_t);
     if(mRoutePcmAudio) {
         ALOGV("Open pcm session, mPCMDevices = 0x%x", mPCMDevices);
-        status = openPcmDevice(mPCMDevices);
+        status = openTunnelDevice(mPCMDevices);
         if(status != NO_ERROR) {
             ALOGE("PCM device open failure");
             return status;
@@ -2289,8 +2324,8 @@ status_t AudioBroadcastStreamALSA::doRoutingSetup()
                 return status;
             }
         }
-        createPlaybackThread();
     }
+    createPlaybackThread();
     mBitstreamSM = new AudioBitstreamSM;
     if(false == mBitstreamSM->initBitstreamPtr()) {
         ALOGE("Unable to allocate Memory for i/p and o/p buffering for MS11");
@@ -2550,6 +2585,7 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
                 continue;
             }
             ALOGV("After an event occurs");
+            mWriteCvMutex.lock();
             if(mCompreCBk) {
                 {
                     Mutex::Autolock autoLock(mSyncLock);
@@ -2557,6 +2593,14 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
                         SNDRV_PCM_SYNC_PTR_HWSYNC | SNDRV_PCM_SYNC_PTR_APPL);
                     sync_ptr(mCompreRxHandle->handle);
                 }
+                if(hw_ptr[0] > mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr){
+
+                    ALOGE("status.hw_ptr %ld overflown hence correct the local hw_ptr[0] %lld",
+                           mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,hw_ptr[0]);
+                    hw_ptr[0]-=mCompreRxHandle->handle->sw_p->boundary;
+                    ALOGE("new local hw_ptr[0] %lld",hw_ptr[0]);
+                }
+
                 while(hw_ptr[0] < mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr) {
                     if (mInputMemFilledQueue[0].empty()) {
                         ALOGD("Filled queue is empty");
@@ -2565,7 +2609,6 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
                     mInputMemMutex.lock();
                     BuffersAllocated buf = *(mInputMemFilledQueue[0].begin());
                     mInputMemFilledQueue[0].erase(mInputMemFilledQueue[0].begin());
-
 
                     mInputMemEmptyQueue[0].push_back(buf);
                     ALOGV("playback thread :Empty Queue[0] size() = %d, Filled Queue[0] size() = %d ",
@@ -2592,6 +2635,14 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
                         SNDRV_PCM_SYNC_PTR_HWSYNC | SNDRV_PCM_SYNC_PTR_APPL);
                     sync_ptr(mSecCompreRxHandle->handle);
                 }
+                if(hw_ptr[1] > mSecCompreRxHandle->handle->sync_ptr->s.status.hw_ptr){
+
+                    ALOGE("status.hw_ptr %ld overflown hence correct the local hw_ptr[1] %lld",
+                           mSecCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,hw_ptr[1]);
+                    hw_ptr[1]-=mSecCompreRxHandle->handle->sw_p->boundary;
+                    ALOGE("new local hw_ptr[1] %lld",hw_ptr[1]);
+                }
+
                 while(hw_ptr[1] < mSecCompreRxHandle->handle->sync_ptr->s.status.hw_ptr) {
                 if (mInputMemFilledQueue[1].empty()) {
                     ALOGD("Filled queue is empty");
@@ -2642,6 +2693,7 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
             }
             else
                 mWriteCv.signal();
+            mWriteCvMutex.unlock();
         } else {
             ALOGD("No event");
             mPlaybackPfd[0].revents = 0;
@@ -2830,13 +2882,24 @@ ssize_t AudioBroadcastStreamALSA::write_l(char *buffer, size_t bytes)
 {
     size_t   sent = 0;
     bool     continueDecode;
+#ifdef DEBUG
+    FILE *mFpDumpInput;
+#endif
 
     // set decoder configuration data if any
     if(setDecoderConfig(buffer, bytes)) {
         ALOGD("decoder configuration set");
         return bytes;
     }
-
+#ifdef DEBUG
+     mFpDumpInput = fopen("/data/pcm_input.raw","a");
+                    if(mFpDumpInput != NULL) {
+                    ALOGD("Dump iNput to file bytes %d",bytes);
+                        fwrite(buffer, 1,
+                                   bytes, mFpDumpInput);
+                        fclose(mFpDumpInput);
+                    }
+#endif
     copyBitstreamInternalBuffer(buffer, bytes);
 
     do {
@@ -2854,6 +2917,7 @@ int32_t AudioBroadcastStreamALSA::writeToCompressedDriver(char *buffer, int byte
     ALOGV("writeToCompressedDriver");
     int n = 0;
     mPlaybackCv.signal();
+    mWriteCvMutex.lock();
     mInputMemMutex.lock();
     if(mCompreRxHandle) {
         ALOGD("write Empty Queue[0] size() = %d, Filled Queue[0] size() = %d ",
@@ -2876,7 +2940,6 @@ int32_t AudioBroadcastStreamALSA::writeToCompressedDriver(char *buffer, int byte
                       mSecCompreRxHandle->handle->sync_ptr->c.control.appl_ptr);
         }
         mLock.unlock();
-        mWriteCvMutex.lock();
         mInputMemMutex.unlock();
         mWriteCv.wait(mWriteCvMutex);
         mInputMemMutex.lock();
@@ -2884,12 +2947,14 @@ int32_t AudioBroadcastStreamALSA::writeToCompressedDriver(char *buffer, int byte
         mLock.lock();
         if (mSkipWrite) {
             mSkipWrite = false;
+            mWriteCvMutex.unlock();
             mInputMemMutex.unlock();
             return 0;
         }
         ALOGD("Write: received a signal to wake up");
     }
 
+    mWriteCvMutex.unlock();
     List<BuffersAllocated>::iterator it;
     pcm * local_handle;
     if(mCompreRxHandle) {
@@ -2958,6 +3023,118 @@ int32_t AudioBroadcastStreamALSA::writeToCompressedDriver(char *buffer, int byte
 
     return n;
 }
+
+int32_t AudioBroadcastStreamALSA::writeToCompressedDriver(char *buffer, int bytes, alsa_handle_t *compreRxHandle)
+{
+    ALOGV("writeToCompressedDriver");
+    int n = 0;
+    mPlaybackCv.signal();
+    mWriteCvMutex.lock();
+    mInputMemMutex.lock();
+    if( compreRxHandle == mCompreRxHandle) {
+        ALOGD("write Empty Queue[0] size() = %d, Filled Queue[0] size() = %d ",
+              mInputMemEmptyQueue[0].size(), mInputMemFilledQueue[0].size());
+    } else if(compreRxHandle == mSecCompreRxHandle){
+        ALOGD("write Empty Queue[1] size() = %d, Filled Queue[1] size() = %d ",
+              mInputMemEmptyQueue[1].size(), mInputMemFilledQueue[1].size());
+    }
+
+    if ((mCompreRxHandle!=NULL && mInputMemEmptyQueue[0].empty()) ||
+            (mSecCompreRxHandle!=NULL && mInputMemEmptyQueue[1].empty())) {
+        ALOGD("Write: waiting on mWriteCv");
+        if(mCompreRxHandle) {
+            ALOGD("hw_ptr[0] = %lld status.hw_ptr = %ld appl_ptr = %ld", hw_ptr[0], mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,
+                      mCompreRxHandle->handle->sync_ptr->c.control.appl_ptr);
+        }
+        if(mSecCompreRxHandle) {
+            ALOGD("hw_ptr[1] = %lld status.hw_ptr = %ld appl_ptr = %ld", hw_ptr[1], mSecCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,
+                      mSecCompreRxHandle->handle->sync_ptr->c.control.appl_ptr);
+        }
+        mLock.unlock();
+        mInputMemMutex.unlock();
+        mWriteCv.wait(mWriteCvMutex);
+        mInputMemMutex.lock();
+        mWriteCvMutex.unlock();
+        mLock.lock();
+        if (mSkipWrite) {
+            mSkipWrite = false;
+            mWriteCvMutex.unlock();
+            mInputMemMutex.unlock();
+            return 0;
+        }
+        ALOGD("Write: received a signal to wake up");
+    }
+
+    mWriteCvMutex.unlock();
+    List<BuffersAllocated>::iterator it;
+    pcm * local_handle;
+    if(compreRxHandle && (compreRxHandle == mCompreRxHandle)) {
+        it = mInputMemEmptyQueue[0].begin();
+        BuffersAllocated buf = *it;
+        if(bytes)
+            mInputMemEmptyQueue[0].erase(it);
+
+        memcpy(buf.memBuf, buffer, bytes);
+
+        buf.bytesToWrite = bytes;
+        if(bytes)
+            mInputMemFilledQueue[0].push_back(buf);
+        mInputMemMutex.unlock();
+
+        local_handle = (struct pcm *)mCompreRxHandle->handle;
+        ALOGV("PCM write start");
+        {
+            Mutex::Autolock autoLock(mSyncLock);
+            n = pcm_write(local_handle, buf.memBuf, local_handle->period_size);
+        }
+        ALOGV("PCM write complete");
+    }
+    // write to second handle if present
+    if ( compreRxHandle && (compreRxHandle == mSecCompreRxHandle)) {
+
+        it = mInputMemEmptyQueue[1].begin();
+        BuffersAllocated buf = *it;
+        if (bytes)
+            mInputMemEmptyQueue[1].erase(it);
+        memcpy(buf.memBuf, buffer, bytes);
+        buf.bytesToWrite = bytes;
+        if (bytes)
+            mInputMemFilledQueue[1].push_back(buf);
+        mInputMemMutex.unlock();
+        ALOGV("PCM write start to passthrough device");
+        local_handle = (struct pcm *)mSecCompreRxHandle->handle;
+        {
+            Mutex::Autolock autoLock(mSyncLock);
+            n = pcm_write(local_handle, buf.memBuf, local_handle->period_size);
+        }
+        ALOGV("PCM write complete");
+    }
+    if (bytes < local_handle->period_size) {
+        ALOGD("Last buffer case");
+        uint64_t writeValue = SIGNAL_PLAYBACK_THREAD;
+        sys_broadcast::lib_write(mPlaybackfd, &writeValue, sizeof(uint64_t));
+
+        //TODO : Is this code reqd - start seems to fail?
+        if(compreRxHandle && (compreRxHandle == mCompreRxHandle)) {
+            local_handle = (struct pcm *)mCompreRxHandle->handle;
+            if (ioctl(mCompreRxHandle->handle->fd, SNDRV_PCM_IOCTL_START) < 0)
+                ALOGE("AUDIO Start failed");
+            else
+                mCompreRxHandle->handle->start = 1;
+        }
+        if(compreRxHandle && (compreRxHandle == mSecCompreRxHandle)){
+            local_handle = (struct pcm *)mSecCompreRxHandle->handle;
+            if (ioctl(mSecCompreRxHandle->handle->fd, SNDRV_PCM_IOCTL_START) < 0)
+                ALOGE("AUDIO Start failed");
+            else
+                mSecCompreRxHandle->handle->start = 1;
+        }
+    }
+
+    return n;
+}
+
+
 
 uint32_t AudioBroadcastStreamALSA::read4BytesFromBuffer(char *buf)
 {
@@ -3277,14 +3454,17 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
             return BAD_VALUE;
 
         if(mPCMDevices != 0) {
-            if(mPcmRxHandle == NULL) {
+            if(mCompreRxHandle == NULL) {
                 Mutex::Autolock autoLock(mLock);
                 mRoutePcmAudio = true;
-                status = openPcmDevice(mPCMDevices & ~mTranscodeDevices);
+                status = openTunnelDevice(mPCMDevices & ~mTranscodeDevices);
                 if(status != NO_ERROR) {
                     ALOGE("Error opening PCM device in doRouting");
                     return BAD_VALUE;
                 }
+                mPlaybackPfd[0].fd = mCompreRxHandle->handle->timer_fd;
+                mPlaybackPfd[0].events = (POLLIN | POLLERR | POLLNVAL);
+                mPlaybackPfd[0].revents = 0;
             }
         } else {
             closePcmDevice = true;
@@ -3298,10 +3478,10 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
            close tunnel device -- compressed out --> pcm out
         */
         if((mSpdifFormat == COMPRESSED_FORMAT) ||
-           (mHdmiFormat == COMPRESSED_FORMAT)) {
+           (mHdmiFormat & COMPRESSED_FORMAT)) {
             int comprDevices = devices & ~mPCMDevices;
-            if((prevSpdifFormat == COMPRESSED_FORMAT && mHdmiFormat == COMPRESSED_FORMAT)
-                || (mSpdifFormat == COMPRESSED_FORMAT && prevHdmiFormat == COMPRESSED_FORMAT)) {
+            if((prevSpdifFormat == COMPRESSED_FORMAT && mHdmiFormat & COMPRESSED_FORMAT)
+                || (mSpdifFormat == COMPRESSED_FORMAT && prevHdmiFormat & COMPRESSED_FORMAT)) {
                 ALOGD("Rerouting the AC3 compressed to compressed stream");
                 status = setPlaybackFormat();
                 if(status != NO_ERROR)
@@ -3328,12 +3508,16 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
                     ALOGE("Tunnel device open failure in do routing");
                     return BAD_VALUE;
                 }
-                createPlaybackThread();
+                mPlaybackPfd[2].fd = mSecCompreRxHandle->handle->timer_fd;
+                mPlaybackPfd[2].events = (POLLIN | POLLERR | POLLNVAL);
+                mPlaybackPfd[2].revents = 0;
+
             }
         } else {
-            exitFromPlaybackThread();
             if(mSecCompreRxHandle != NULL) {
-                Mutex::Autolock autoLock(mLock);
+                Mutex::Autolock autoLock(mRoutingLock);
+                Mutex::Autolock autoLock1(mLock);
+                uint64_t writeValue = POLL_FD_MODIFIED;
                 status = closeDevice(mSecCompreRxHandle);
                 if(status != NO_ERROR) {
                     ALOGE("Error closing compr device in doRouting");
@@ -3341,21 +3525,34 @@ status_t AudioBroadcastStreamALSA::doRouting(int devices)
                 }
                 mSecCompreRxHandle = NULL;
                 bufferDeAlloc(PASSTHRUQUEUEINDEX);
+                mPlaybackPfd[2].fd = -1;
+                mPlaybackPfd[2].events = (POLLIN | POLLERR | POLLNVAL);
+                sys_broadcast::lib_write(mPlaybackfd, &writeValue, sizeof(uint64_t));
+                ALOGV("poll fd2 set to -1");
             }
         }
-        if(mPcmRxHandle && mPCMDevices)
-            mALSADevice->switchDeviceUseCase(mPcmRxHandle,
+        if(mCompreRxHandle && mPCMDevices)
+            mALSADevice->switchDeviceUseCase(mCompreRxHandle,
                      mPCMDevices & ~mTranscodeDevices, mParent->mode());
-        if(closePcmDevice && mPcmRxHandle) {
+
+        if(closePcmDevice && mCompreRxHandle) {
+            Mutex::Autolock autoLock(mRoutingLock);
+            Mutex::Autolock autoLock1(mLock);
+            uint64_t writeValue = POLL_FD_MODIFIED;
             alsa_handle_t *tmp_handle;
-            tmp_handle = mPcmRxHandle;
-            mPcmRxHandle = NULL;
+            tmp_handle = mCompreRxHandle;
+            mCompreRxHandle = NULL;
             mRoutePcmAudio = false;
             status_t status = closeDevice(tmp_handle);
             if(status != NO_ERROR) {
                 ALOGE("Error closing the pcm device in doRouting");
                 return BAD_VALUE;
             }
+            bufferDeAlloc(DECODEQUEUEINDEX);
+            mPlaybackPfd[0].fd = -1;
+            mPlaybackPfd[0].events = (POLLIN | POLLERR | POLLNVAL);
+            sys_broadcast::lib_write(mPlaybackfd, &writeValue, sizeof(uint64_t));
+            ALOGV("poll fd0 set to -1");
         }
             /*Device handling for the DTS transcode*/
             if (!mDtsTranscode && mTranscodeHandle &&
@@ -3704,9 +3901,9 @@ void AudioBroadcastStreamALSA::copyBitstreamInternalBuffer(char *buffer,
     mBitstreamSM->copyBitstreamToInternalBuffer((char *)buffer, bytes);
 
     //update input meta data list prior decode
-    if(mPcmRxHandle)
+    if(mCompreRxHandle && mCompreRxHandle->format == SNDRV_PCM_FORMAT_S16_LE)
         update_input_meta_data_list_pre_decode(PCM_OUT);
-    if(mCompreRxHandle || mSecCompreRxHandle)
+    if((mSecCompreRxHandle) || ((mCompreRxHandle && mCompreRxHandle->format != SNDRV_PCM_FORMAT_S16_LE)))
         update_input_meta_data_list_pre_decode(COMPRESSED_OUT);
 }
 
@@ -3738,13 +3935,12 @@ bool AudioBroadcastStreamALSA::decode(char *buffer, size_t bytes)
             mMS11Decoder->copyBitstreamToMS11InpBuf(bufPtr,copyBytesMS11);
             bytesConsumedInDecode = mMS11Decoder->streamDecode(
                                         &outSampleRate, &outChannels);
-            mBitstreamSM->copyResidueBitstreamToStart(bytesConsumedInDecode);
         }
         // update metadata list after each decode
-        if(mPcmRxHandle && mDDFirstFrameBuffered)
+        if(mCompreRxHandle && mCompreRxHandle->format == SNDRV_PCM_FORMAT_S16_LE && bytesConsumedInDecode)
             update_input_meta_data_list_post_decode(PCM_OUT,
                                                     bytesConsumedInDecode);
-        if((mCompreRxHandle  || mSecCompreRxHandle) && mDDFirstFrameBuffered)
+        if( mSecCompreRxHandle && bytesConsumedInDecode)
             update_input_meta_data_list_post_decode(COMPRESSED_OUT,
                                                     bytesConsumedInDecode);
         if(!mDDFirstFrameBuffered)
@@ -3754,11 +3950,12 @@ bool AudioBroadcastStreamALSA::decode(char *buffer, size_t bytes)
         if((mSampleRate != outSampleRate) || (mChannels != outChannels)) {
             mSampleRate = outSampleRate;
             mChannels = outChannels;
-            if(mPcmRxHandle && mRoutePcmAudio) {
-                status_t status = closeDevice(mPcmRxHandle);
+            if(mRoutePcmAudio) {
+                status_t status = closeDevice(mCompreRxHandle);
                 if(status != NO_ERROR)
                     ALOGE("change in sample rate - close pcm device fail");
-                status = openPcmDevice(mPCMDevices);
+                mCompreRxHandle = NULL;
+                status = openTunnelDevice(mPCMDevices);
                 if(status != NO_ERROR)
                     ALOGE("change in sample rate - open pcm device fail");
             }
@@ -3778,14 +3975,23 @@ bool AudioBroadcastStreamALSA::decode(char *buffer, size_t bytes)
                                                         bufPtr);
                 mBitstreamSM->setOutputBufferWritePtr(PCM_2CH_OUT,copyOutputBytesSize);
             }
+            ALOGD("bytesConsumedInDecode %d copyOutputBytesSize %d", bytesConsumedInDecode, copyOutputBytesSize);
         }
-        if((mSpdifFormat == COMPRESSED_FORMAT) ||
-           (mHdmiFormat == COMPRESSED_FORMAT)) {
+        if (((mCompreRxHandle) && (mCompreRxHandle->format == AUDIO_FORMAT_AC3)) ||
+           ((mSecCompreRxHandle) && (mSecCompreRxHandle->format == AUDIO_FORMAT_AC3))){
             bufPtr=mBitstreamSM->getOutputBufferWritePtr(SPDIF_OUT);
             copyOutputBytesSize = mMS11Decoder->copyOutputFromMS11Buf(SPDIF_OUT,
                                                     bufPtr);
             mBitstreamSM->setOutputBufferWritePtr(SPDIF_OUT,copyOutputBytesSize);
+        } else if (((mCompreRxHandle) && (mCompreRxHandle->format == AUDIO_FORMAT_EAC3)) ||
+                   ((mSecCompreRxHandle) && (mSecCompreRxHandle->format == AUDIO_FORMAT_EAC3))){
+            bufPtr=mBitstreamSM->getOutputBufferWritePtr(SPDIF_OUT);
+            copyOutputBytesSize = bytesConsumedInDecode;
+            memcpy(bufPtr, mBitstreamSM->getInputBufferPtr(), copyOutputBytesSize);
+            mBitstreamSM->setOutputBufferWritePtr(SPDIF_OUT,copyOutputBytesSize);
         }
+
+        mBitstreamSM->copyResidueBitstreamToStart(bytesConsumedInDecode);
         if(copyOutputBytesSize &&
            mBitstreamSM->sufficientBitstreamToDecode(mMinBytesReqToDecode) == true)
             continueDecode = true;
@@ -3873,7 +4079,7 @@ bool AudioBroadcastStreamALSA::decode(char *buffer, size_t bytes)
             }
             mChannelStatusSet = true;
         }
-    } else if(mRoutePcmAudio && mPcmRxHandle && mRoutePCMStereoToDSP) {
+    } else if(mRoutePcmAudio && mCompreRxHandle && mRoutePCMStereoToDSP) {
         // Set the channel status after first frame decode/transcode
         if(bytes == 0)
             mBitstreamSM->appendSilenceToBitstreamInternalBuffer(
@@ -3926,7 +4132,7 @@ bool AudioBroadcastStreamALSA::decode(char *buffer, size_t bytes)
             }
             mChannelStatusSet = true;
         }
-    } else if(mRoutePcmAudio && mPcmRxHandle && mRoutePCMMChToDSP) {
+    } else if(mRoutePcmAudio && mCompreRxHandle && mRoutePCMMChToDSP) {
         // Set the channel status after first frame decode/transcode
         if(bytes == 0)
             mBitstreamSM->appendSilenceToBitstreamInternalBuffer(
@@ -3993,32 +4199,45 @@ uint32_t AudioBroadcastStreamALSA::render(bool continueDecode)
     uint32_t renderedPcmBytes = 0;
     int      period_size;
     uint32_t requiredSize;
+#ifdef DEBUG
+    FILE *mFpDumpPCMOutput;
+#endif
 
     Mutex::Autolock autoLock(mLock);
-    if(mPcmRxHandle && mRoutePcmAudio && mRoutePCMStereoToDSP) {
-        period_size = mPcmRxHandle->periodSize;
-        requiredSize = period_size - mOutputMetadataLength;
-        while(mBitstreamSM->sufficientSamplesToRender(PCM_2CH_OUT,
-                                 requiredSize) == true) {
+    if(mCompreRxHandle && mRoutePcmAudio && mRoutePCMStereoToDSP) {
+        period_size = mCompreRxHandle->periodSize;
+        requiredSize = MS11_STEREO_OUTPUT_BYTES;
+
+        ALOGV("requiredSize- %d 2 Channel PCM output", requiredSize);
+        while(!mCloseSession && (mBitstreamSM->sufficientSamplesToRender(PCM_2CH_OUT,
+                                requiredSize) == true)) {
             if(mTimeStampModeSet) {
                 update_time_stamp_pre_write_to_driver(PCM_OUT);
-                ALOGV("ts- %lld", mOutputMetadataPcm.timestamp);
-                memcpy(mPcmWriteTempBuffer, &mOutputMetadataPcm,
+                ALOGD("ts- %lld", mOutputMetadataPcm.timestamp);
+                memcpy(mCompreWriteTempBuffer, &mOutputMetadataPcm,
                            mOutputMetadataLength);
+                memcpy(mCompreWriteTempBuffer+mOutputMetadataLength,
+                           mBitstreamSM->getOutputBufferPtr(PCM_2CH_OUT),
+                           requiredSize);
             }
-            memcpy(mPcmWriteTempBuffer+mOutputMetadataLength,
-                       mBitstreamSM->getOutputBufferPtr(PCM_2CH_OUT),
-                       requiredSize);
-            n = pcm_write(mPcmRxHandle->handle, mPcmWriteTempBuffer,
-                          period_size);
-            ALOGE("pcm_write returned with %d", n);
-            if(n < 0) {
+            else {
+                mOutputMetadataPcm.metadataLength = sizeof(mOutputMetadataPcm);
+                mOutputMetadataPcm.bufferLength = requiredSize;
+                mOutputMetadataPcm.timestamp = 0;
+                memcpy(mCompreWriteTempBuffer, &mOutputMetadataPcm,
+                           mOutputMetadataPcm.metadataLength);
+                memcpy(mCompreWriteTempBuffer+mOutputMetadataPcm.metadataLength,
+                           mBitstreamSM->getOutputBufferPtr(PCM_2CH_OUT),
+                           requiredSize);
+            }
+            ALOGV("bufferLength %d timeStamp %lld",mOutputMetadataPcm.bufferLength,mOutputMetadataPcm.timestamp);
+            n = writeToCompressedDriver(mCompreWriteTempBuffer, period_size, mCompreRxHandle);
+            ALOGD("pcm_write returned with %d", n);
+            if (n < 0) {
                 // Recovery is part of pcm_write. TODO split is later.
                 ALOGE("pcm_write returned n < 0");
                 return static_cast<ssize_t>(n);
             } else {
-                mFrameCount++;
-                renderedPcmBytes += static_cast<ssize_t>((period_size));
                 mBitstreamSM->copyResidueOutputToStart(PCM_2CH_OUT,
                                   requiredSize);
                 if(mTimeStampModeSet)
@@ -4029,30 +4248,50 @@ uint32_t AudioBroadcastStreamALSA::render(bool continueDecode)
             }
         }
     }
-    if(mPcmRxHandle && mRoutePcmAudio && mRoutePCMMChToDSP) {
-        period_size = mPcmRxHandle->periodSize;
-        requiredSize = period_size - mOutputMetadataLength;
-        while(mBitstreamSM->sufficientSamplesToRender(PCM_MCH_OUT,
-                                 requiredSize) == true) {
+    if(mCompreRxHandle && mRoutePcmAudio && mRoutePCMMChToDSP) {
+        period_size = mCompreRxHandle->periodSize;
+//        requiredSize = (period_size - sizeof(mOutputMetadataPcm)) - ((period_size - sizeof(mOutputMetadataPcm))% (mChannels*2)) ; 
+        requiredSize = MS11_MCH_OUTPUT_BYTES;
+        ALOGV("requiredSize- %d Multi Channel PCM output", requiredSize);
+        while(!mCloseSession && (mBitstreamSM->sufficientSamplesToRender(PCM_MCH_OUT,
+                                requiredSize) == true)) {
             if(mTimeStampModeSet) {
                 update_time_stamp_pre_write_to_driver(PCM_OUT);
-                ALOGV("ts- %lld", mOutputMetadataPcm.timestamp);
-                memcpy(mPcmWriteTempBuffer, &mOutputMetadataPcm,
+                memcpy(mCompreWriteTempBuffer, &mOutputMetadataPcm,
                            mOutputMetadataLength);
+                memcpy(mCompreWriteTempBuffer+mOutputMetadataLength,
+                           mBitstreamSM->getOutputBufferPtr(PCM_MCH_OUT),
+                           requiredSize);
             }
-            memcpy(mPcmWriteTempBuffer+mOutputMetadataLength,
-                       mBitstreamSM->getOutputBufferPtr(PCM_MCH_OUT),
-                       requiredSize);
-            n = pcm_write(mPcmRxHandle->handle, mPcmWriteTempBuffer,
-                          period_size);
-            ALOGE("pcm_write returned with %d", n);
-            if(n < 0) {
+            else {
+                mOutputMetadataPcm.metadataLength = sizeof(mOutputMetadataPcm);
+                mOutputMetadataPcm.bufferLength = requiredSize;
+                mOutputMetadataPcm.timestamp = 0;
+                memcpy(mCompreWriteTempBuffer, &mOutputMetadataPcm,
+                           mOutputMetadataPcm.metadataLength);
+                memcpy(mCompreWriteTempBuffer+mOutputMetadataPcm.metadataLength,
+                           mBitstreamSM->getOutputBufferPtr(PCM_MCH_OUT),
+                           requiredSize);
+            }
+            ALOGD("bufferLength %d timeStamp %lld",mOutputMetadataPcm.bufferLength,mOutputMetadataPcm.timestamp);
+            n = writeToCompressedDriver(mCompreWriteTempBuffer, period_size, mCompreRxHandle);
+#ifdef DEBUG
+            mFpDumpPCMOutput = fopen("/data/pcm_output.raw","a");
+
+            if(mFpDumpPCMOutput != NULL) {
+
+                    ALOGD("Dump output to file bytes %d",requiredSize);
+                        fwrite(mBitstreamSM->getOutputBufferPtr(PCM_MCH_OUT), 1,
+                                   requiredSize, mFpDumpPCMOutput);
+                        fclose(mFpDumpPCMOutput);
+            }
+#endif
+            ALOGD("pcm_write returned with %d", n);
+            if (n < 0) {
                 // Recovery is part of pcm_write. TODO split is later.
                 ALOGE("pcm_write returned n < 0");
                 return static_cast<ssize_t>(n);
             } else {
-                mFrameCount++;
-                renderedPcmBytes += static_cast<ssize_t>((period_size));
                 mBitstreamSM->copyResidueOutputToStart(PCM_MCH_OUT,
                                   requiredSize);
                 if(mTimeStampModeSet)
@@ -4065,7 +4304,7 @@ uint32_t AudioBroadcastStreamALSA::render(bool continueDecode)
     }
     if((mCompreRxHandle || mSecCompreRxHandle) &&
        ((mSpdifFormat == COMPRESSED_FORMAT) ||
-        (mHdmiFormat == COMPRESSED_FORMAT) ||
+        (mHdmiFormat & COMPRESSED_FORMAT) ||
         (mUseTunnelDecoder))) {
         if(mCompreRxHandle) period_size = mCompreRxHandle->periodSize;
         else if(mSecCompreRxHandle) period_size = mSecCompreRxHandle->periodSize;
@@ -4073,8 +4312,8 @@ uint32_t AudioBroadcastStreamALSA::render(bool continueDecode)
                           mBitstreamSM->getOutputBufferPtr(SPDIF_OUT);
 
         ALOGV("requiredSize- %d", requiredSize);
-        while(mBitstreamSM->sufficientSamplesToRender(SPDIF_OUT,
-                                1) == true) {
+        while(!mCloseSession &&  (mBitstreamSM->sufficientSamplesToRender(SPDIF_OUT,
+                                1) == true)) {
             if(mTimeStampModeSet) {
                 update_time_stamp_pre_write_to_driver(COMPRESSED_OUT);
                 ALOGD("ts- %lld", mOutputMetadataCompre.timestamp);
@@ -4094,8 +4333,14 @@ uint32_t AudioBroadcastStreamALSA::render(bool continueDecode)
                            mBitstreamSM->getOutputBufferPtr(COMPRESSED_OUT),
                            requiredSize);
             }
-            n = writeToCompressedDriver(mCompreWriteTempBuffer, period_size);
-            ALOGD("pcm_write returned with %d", n);
+            ALOGV("bufferLength %d timeStamp %lld",mOutputMetadataCompre.bufferLength,mOutputMetadataCompre.timestamp);
+
+            if( mSecCompreRxHandle && mUseMS11Decoder)
+                n = writeToCompressedDriver(mCompreWriteTempBuffer, period_size, mSecCompreRxHandle);
+            else
+                n = writeToCompressedDriver(mCompreWriteTempBuffer, period_size);
+
+            ALOGD("%d pcm_write returned with %d", __LINE__,n);
             if (n < 0) {
                 // Recovery is part of pcm_write. TODO split is later.
                 ALOGE("pcm_write returned n < 0");
@@ -4112,9 +4357,9 @@ uint32_t AudioBroadcastStreamALSA::render(bool continueDecode)
         }
     }
     if(!continueDecode) {
-        if(mPcmRxHandle)
+        if(mRoutePcmAudio)
             update_input_meta_data_list_post_write(PCM_OUT);
-        if(mCompreRxHandle || mSecCompreRxHandle)
+        if((!mRoutePcmAudio && mCompreRxHandle) || mSecCompreRxHandle)
             update_input_meta_data_list_post_write(COMPRESSED_OUT);
     }
 
@@ -4130,10 +4375,12 @@ void AudioBroadcastStreamALSA::update_input_meta_data_list_pre_decode(
 
     input_metadata_handle_t input_metadata_handle;
     input_metadata_handle.bufferLength   = mReadMetaData.frameSize;
+    input_metadata_handle.bufNo = mFrameCount;
     input_metadata_handle.consumedLength = 0;
     input_metadata_handle.timestamp      =
                               (uint64_t)((uint64_t)mReadMetaData.timestampMsw <<32) |
                               (uint64_t)(mReadMetaData.timestampLsw);
+    ALOGD("Buffer No %d timeStamp %llu", mFrameCount, input_metadata_handle.timestamp);
     if(type == PCM_OUT) {
         mInputMetadataListPcm.push_back(input_metadata_handle);
         ALOGV("pushing meta data to pcm list");
@@ -4159,12 +4406,13 @@ void AudioBroadcastStreamALSA::update_input_meta_data_list_post_decode(
             if((it->bufferLength - it->consumedLength) >=
                    bytesConsumedInDecode) {
                 it->consumedLength += bytesConsumedInDecode;
-                ALOGV("pcm: it->consumedLength - %d", it->consumedLength);
+                mLastDecodedFrameTimeStamp = it->timestamp;
+                ALOGV("pcm: Buffer %d consumedLength - %d", it->bufNo,it->consumedLength);
                 break;
             } else {
                 bytesConsumedInDecode -= (it->bufferLength - it->consumedLength);
                 it->consumedLength = it->bufferLength;
-                ALOGV("compr: it->consumedLength - %d", it->consumedLength);
+                ALOGV("pcm: Buffer %d consumedLength - %d", it->bufNo ,it->consumedLength);
                 continue;
             }
         }
@@ -4174,12 +4422,13 @@ void AudioBroadcastStreamALSA::update_input_meta_data_list_post_decode(
             if((it->bufferLength - it->consumedLength) >=
                    bytesConsumedInDecode) {
                 it->consumedLength += bytesConsumedInDecode;
-                ALOGV("pcm: it->consumedLength - %d", it->consumedLength);
+                mLastDecodedFrameTimeStamp = it->timestamp;
+                ALOGV("compr: Buffer %d consumedLength - %d", it->bufNo,it->consumedLength);
                 break;
             } else {
                 bytesConsumedInDecode -= (it->bufferLength - it->consumedLength);
                 it->consumedLength = it->bufferLength;
-                ALOGV("compr: it->consumedLength - %d", it->consumedLength);
+                ALOGV("compr: Buffer %d consumedLength - %d", it->bufNo,it->consumedLength);
                 continue;
             }
         }
@@ -4190,35 +4439,56 @@ void AudioBroadcastStreamALSA::update_input_meta_data_list_post_decode(
 void AudioBroadcastStreamALSA::update_time_stamp_pre_write_to_driver(
                                    uint32_t type)
 {
+    TRANSCODER_DELAYINFO delayInfo = {};
+    TRANSCODER_STREAMINFO streamInfo = {};
+    uint64_t transcoder_delay = 0;
+    uint32_t outputFrameDuration=0,inputFrameDuration=0;
     ALOGV("update_time_stamp_pre_write_to_driver");
     if(!mTimeStampModeSet)
         return;
 
+    if(mUseMS11Decoder && mMS11Decoder){
+        if(!mMS11Decoder->getTranscoderDelayAndStreamInfo(&delayInfo,&streamInfo)){
+          transcoder_delay = ((uint64_t)(delayInfo.staticInput2Output + delayInfo.dynamicInput2Output)* 1000000)/streamInfo.samplingRate;
+          inputFrameDuration = ((uint32_t)(streamInfo.frameLength * 1000000)/streamInfo.samplingRate);
+          ALOGD("static %d dynamic %d", delayInfo.staticInput2Output,delayInfo.dynamicInput2Output);
+          outputFrameDuration = MS11_OUTPUT_FRAME_DURATION;
+        }
+    }
     if(type == PCM_OUT) {
         if(!mInputMetadataListPcm.empty()) {
             inputMetadataList::iterator it = mInputMetadataListPcm.begin();
             mOutputMetadataPcm.metadataLength = sizeof(mOutputMetadataPcm);
-            mOutputMetadataPcm.timestamp = it->timestamp +
-                                               mCompleteBufferTimePcm;
-            mOutputMetadataPcm.bufferLength = mPcmRxHandle->periodSize -
-                                                  mOutputMetadataLength;
+            mOutputMetadataPcm.timestamp = mLastDecodedFrameTimeStamp + inputFrameDuration +
+                                           mCompleteBufferTimePcm - (outputFrameDuration + transcoder_delay);
+
+            ALOGD("mLastDecodedFrameTimeStamp %lld transcoder_delay %lld mCompleteBufferTimePcm %d inputFrame %d",
+                   mLastDecodedFrameTimeStamp, transcoder_delay, mCompleteBufferTimePcm, inputFrameDuration);
+            if(mRoutePCMMChToDSP && mUseMS11Decoder)
+               mOutputMetadataPcm.bufferLength = MS11_MCH_OUTPUT_BYTES;
+            else if (mRoutePCMStereoToDSP && mUseMS11Decoder)
+               mOutputMetadataPcm.bufferLength = MS11_STEREO_OUTPUT_BYTES;
+
             if(mPartialBufferTimePcm != 0) {
+                ALOGV("erasing buffer %d from pcm List ", it->bufNo);
                 mInputMetadataListPcm.erase(it);
-                ALOGV("erasing from pcm List");
             }
         }
     } else {
         if(!mInputMetadataListCompre.empty()) {
             inputMetadataList::iterator it = mInputMetadataListCompre.begin();
             mOutputMetadataCompre.metadataLength = sizeof(mOutputMetadataCompre);
-            mOutputMetadataCompre.timestamp = it->timestamp +
-                                                  mCompleteBufferTimeCompre;
+            mOutputMetadataCompre.timestamp = mLastDecodedFrameTimeStamp + inputFrameDuration +
+                                               mCompleteBufferTimePcm - (outputFrameDuration + transcoder_delay);
+            ALOGD("mLastDecodedFrameTimeStamp %lld transcoder_delay %lld mCompleteBufferTimePcm %d inputFrame %d",
+                   mLastDecodedFrameTimeStamp, transcoder_delay, mCompleteBufferTimePcm, inputFrameDuration);
+
             mOutputMetadataCompre.bufferLength =
                           mBitstreamSM->getOutputBufferWritePtr(SPDIF_OUT) -
                           mBitstreamSM->getOutputBufferPtr(SPDIF_OUT);
             if(mPartialBufferTimeCompre != 0) {
+                ALOGV("erasing buffer %d from compressed List",it->bufNo);
                 mInputMetadataListCompre.erase(it);
-                ALOGV("erasing from compressed List");
             }
         }
     }
@@ -4234,23 +4504,23 @@ void AudioBroadcastStreamALSA::update_time_stamp_post_write_to_driver(
     if(!mTimeStampModeSet)
         return;
 
-    float timeInUsecPerByte = (1000000/(mSampleRate*mChannels*2));
+    float timeInUsecPerByte = (float)(1000000/(float)(mSampleRate*mChannels*2));
                                 // 2 bytes per each sample
 
     if(type == PCM_OUT) {
         if(remainingSamples != 0) {
             if(remainingSamples < requiredBufferSize) {
-                mPartialBufferTimePcm = (uint32_t ) ((requiredBufferSize -
+                mPartialBufferTimePcm = (uint32_t ) ((float)(requiredBufferSize -
                                                       remainingSamples) *
                                                       timeInUsecPerByte);
-                mCompleteBufferTimePcm += (uint32_t) ((requiredBufferSize) *
+                mCompleteBufferTimePcm += (uint32_t) ((float)(requiredBufferSize) *
                                                        timeInUsecPerByte);
             } else {
                 if(mPartialBufferTimePcm == 0) {
-                    mCompleteBufferTimePcm += (uint32_t) ((requiredBufferSize) *
+                    mCompleteBufferTimePcm += (uint32_t) ((float)(requiredBufferSize) *
                                                            timeInUsecPerByte);
                 } else {
-                    mCompleteBufferTimePcm = (uint32_t) ((requiredBufferSize) *
+                    mCompleteBufferTimePcm = (uint32_t) ((float)(requiredBufferSize) *
                                                           timeInUsecPerByte) -
                                               mPartialBufferTimePcm;
                 }
@@ -4283,6 +4553,8 @@ void AudioBroadcastStreamALSA::update_time_stamp_post_write_to_driver(
             mCompleteBufferTimeCompre = 0;
         }
     }
+    ALOGV("mCompleteBufferTimePcm %d mPartialBufferTimePcm %d remainingSamples %d \
+               requiredBufferSize %d ", mCompleteBufferTimePcm, mPartialBufferTimePcm, remainingSamples, requiredBufferSize);
     return;
 }
 
@@ -4297,11 +4569,11 @@ void AudioBroadcastStreamALSA::update_input_meta_data_list_post_write(
         if(mPartialBufferTimePcm == 0) {
             for(inputMetadataList::iterator it = mInputMetadataListPcm.begin();
                     it != mInputMetadataListPcm.end();) {
-                ALOGV("pcm: it->consumedLength - %d", it->consumedLength);
-                ALOGV("pcm: it->timestamp - %lld", it->timestamp);
+                ALOGV("pcm: Buffer %d consumedLength - %d", it->bufNo,it->consumedLength);
+                ALOGV("pcm: Buffer %d timestamp - %lld", it->bufNo,it->timestamp);
                 if(it->bufferLength == it->consumedLength) {
+                    ALOGV("erasing buffer %d from pcm List", it->bufNo);
                     it = mInputMetadataListPcm.erase(it);
-                    ALOGV("erasing from pcm List");
                 } else {
                     break;
                 }
@@ -4315,8 +4587,8 @@ void AudioBroadcastStreamALSA::update_input_meta_data_list_post_write(
                 ALOGD("compr: it->bufferLength - %d", it->bufferLength);
                 ALOGD("compr: it->timestamp - %lld", it->timestamp);
                 if(it->bufferLength == it->consumedLength) {
+                    ALOGD("erasing buffer %d from compressed List", it->bufNo);
                     it = mInputMetadataListCompre.erase(it);
-                    ALOGD("erasing from compressed List");
                 } else {
                     ALOGV("Breaking from the loop");
                     break;
