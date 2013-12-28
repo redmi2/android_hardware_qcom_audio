@@ -796,6 +796,11 @@ public:
     // return the number of audio frames written by the audio dsp to DAC since
     // the output has exited standby
     virtual status_t    getRenderPosition(uint32_t *dspFrames);
+    virtual status_t    setAvsyncWindow(int windowId, int ws_msw, int ws_lsw, int we_msw, int we_lsw);
+    virtual status_t    getAvsyncSessionTime(int *session_msw, int *session_lsw,
+        int *absolute_msw, int *absolute_lsw);
+    virtual status_t    getAvsyncInstStatistics(audio_avsync_statistics_t *st);
+    virtual status_t    getAvsyncCumuStatistics(audio_avsync_statistics_t *st);
 
 private:
     Mutex               mLock;
