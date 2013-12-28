@@ -58,7 +58,7 @@
 #include "SoftMS11.h"
 #endif
 
-#define COMPRESS_OFFLOAD_FRAGMENT_SIZE (32 * 1024)
+#define COMPRESS_OFFLOAD_FRAGMENT_SIZE (4 * 1024)
 #define COMPRESS_OFFLOAD_NUM_FRAGMENTS 4
 /* ToDo: Check and update a proper value in msec */
 #define COMPRESS_OFFLOAD_PLAYBACK_LATENCY 96
