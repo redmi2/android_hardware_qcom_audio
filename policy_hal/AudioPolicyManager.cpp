@@ -351,6 +351,139 @@ void AudioPolicyManager::setForceUse(AudioSystem::force_use usage, AudioSystem::
 
 }
 
+audio_io_handle_t AudioPolicyManager::getOutput(AudioSystem::stream_type stream,
+                                    uint32_t samplingRate,
+                                    uint32_t format,
+                                    uint32_t channelMask,
+                                    AudioSystem::output_flags flags,
+                                    const audio_offload_info_t *offloadInfo)
+{
+    audio_io_handle_t output = 0;
+    uint32_t latency = 0;
+    routing_strategy strategy = getStrategy((AudioSystem::stream_type)stream);
+    audio_devices_t device = getDeviceForStrategy(strategy, false /*fromCache*/);
+    IOProfile *profile = NULL;
+    ALOGV("getOutput() device %d, stream %d, samplingRate %d, format %x, channelMask %x, flags %x",
+          device, stream, samplingRate, format, channelMask, flags);
+
+    // open a direct output if required by specified parameters
+    //force direct flag if offload flag is set: offloading implies a direct output stream
+    // and all common behaviors are driven by checking only the direct flag
+    // this should normally be set appropriately in the policy configuration file
+    if ((flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) != 0) {
+        flags = (AudioSystem::output_flags)(flags | AUDIO_OUTPUT_FLAG_DIRECT);
+    }
+
+    if ((format == AudioSystem::PCM_16_BIT) &&(AudioSystem::popCount(channelMask) > 2)) {
+        ALOGV("owerwrite flag(%x) for PCM16 multi-channel(CM:%x) playback", flags ,channelMask);
+        flags = (AudioSystem::output_flags)AUDIO_OUTPUT_FLAG_DIRECT;
+    }
+
+    if (flags & AUDIO_OUTPUT_FLAG_DIRECT) {
+        profile = getProfileForDirectOutput(device,
+                                            samplingRate,
+                                            format,
+                                            channelMask,
+                                            (audio_output_flags_t)flags);
+    }
+
+    if (profile != NULL) {
+        AudioOutputDescriptor *outputDesc = NULL;
+        char propValue[PROPERTY_VALUE_MAX];
+        bool multi_offload_enabled = false;
+
+        if (property_get("audio.offload.multi_inst.enable", propValue, NULL))
+            multi_offload_enabled = atoi(propValue) || !strncmp("true", propValue, 4);
+
+        // if multiple concurrent offload decode is supported
+        // do no check for reuse and also don't close previous output if its offload
+        // previous output will be closed during track destrucution
+        if ((flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) == 0 ||
+            multi_offload_enabled == false) {
+            for (size_t i = 0; i < mOutputs.size(); i++) {
+                AudioOutputDescriptor *desc = mOutputs.valueAt(i);
+                if (!desc->isDuplicated() && (profile == desc->mProfile)) {
+                    outputDesc = desc;
+                    // reuse direct output if currently open and configured with same parameters
+                    if ((samplingRate == outputDesc->mSamplingRate) &&
+                        (format == outputDesc->mFormat) &&
+                        (channelMask == outputDesc->mChannelMask)) {
+                        outputDesc->mDirectOpenCount++;
+                        ALOGV("getOutput() reusing direct output %d", mOutputs.keyAt(i));
+                        return mOutputs.keyAt(i);
+                    }
+                }
+            }
+            // close direct output if currently open and configured with different parameters
+            if (outputDesc != NULL) {
+                closeOutput(outputDesc->mId);
+            }
+        }
+        outputDesc = new AudioOutputDescriptor(profile);
+        outputDesc->mDevice = device;
+        outputDesc->mSamplingRate = samplingRate;
+        outputDesc->mFormat = (audio_format_t)format;
+        outputDesc->mChannelMask = (audio_channel_mask_t)channelMask;
+        outputDesc->mLatency = 0;
+        outputDesc->mFlags =(audio_output_flags_t) (outputDesc->mFlags | flags);
+        outputDesc->mRefCount[stream] = 0;
+        outputDesc->mStopTime[stream] = 0;
+        outputDesc->mDirectOpenCount = 1;
+        output = mpClientInterface->openOutput(profile->mModule->mHandle,
+                                        &outputDesc->mDevice,
+                                        &outputDesc->mSamplingRate,
+                                        &outputDesc->mFormat,
+                                        &outputDesc->mChannelMask,
+                                        &outputDesc->mLatency,
+                                        outputDesc->mFlags,
+                                        offloadInfo);
+
+        // only accept an output with the requested parameters
+        if (output == 0 ||
+            (samplingRate != 0 && samplingRate != outputDesc->mSamplingRate) ||
+            (format != 0 && format != outputDesc->mFormat) ||
+            (channelMask != 0 && channelMask != outputDesc->mChannelMask)) {
+            ALOGV("getOutput() failed opening direct output: output %d samplingRate %d %d,"
+                    "format %d %d, channelMask %04x %04x", output, samplingRate,
+                    outputDesc->mSamplingRate, format, outputDesc->mFormat, channelMask,
+                    outputDesc->mChannelMask);
+            if (output != 0) {
+                mpClientInterface->closeOutput(output);
+            }
+            delete outputDesc;
+            return 0;
+        }
+        audio_io_handle_t srcOutput = getOutputForEffect();
+        addOutput(output, outputDesc);
+        audio_io_handle_t dstOutput = getOutputForEffect();
+        if (dstOutput == output) {
+            mpClientInterface->moveEffects(AUDIO_SESSION_OUTPUT_MIX, srcOutput, dstOutput);
+        }
+        mPreviousOutputs = mOutputs;
+        ALOGV("getOutput() returns new direct output %d", output);
+        return output;
+    }
+
+    // ignoring channel mask due to downmix capability in mixer
+
+    // open a non direct output
+
+    // for non direct outputs, only PCM is supported
+    if (audio_is_linear_pcm((audio_format_t)format)) {
+        // get which output is suitable for the specified stream. The actual
+        // routing change will happen when startOutput() will be called
+        SortedVector<audio_io_handle_t> outputs = getOutputsForDevice(device, mOutputs);
+
+        output = selectOutput(outputs, flags);
+    }
+    ALOGW_IF((output == 0), "getOutput() could not find output for stream %d, samplingRate %d,"
+            "format %d, channels %x, flags %x", stream, samplingRate, format, channelMask, flags);
+
+    ALOGV("getOutput() returns output %d", output);
+
+    return output;
+}
+
 audio_io_handle_t AudioPolicyManager::getInput(int inputSource,
                                     uint32_t samplingRate,
                                     uint32_t format,
@@ -423,7 +556,7 @@ AudioPolicyManager::routing_strategy AudioPolicyManager::getStrategy(AudioSystem
         return STRATEGY_MEDIA;
 #endif
 
-    return getStrategy(stream);
+    return AudioPolicyManagerBase::getStrategy(stream);
 }
 
 audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strategy,

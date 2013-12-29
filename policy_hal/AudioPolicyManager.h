@@ -48,6 +48,12 @@ public:
                                             uint32_t format,
                                             uint32_t channels,
                                             AudioSystem::audio_in_acoustics acoustics);
+        virtual audio_io_handle_t getOutput(AudioSystem::stream_type stream,
+                                    uint32_t samplingRate,
+                                    uint32_t format,
+                                    uint32_t channelMask,
+                                    AudioSystem::output_flags flags,
+                                    const audio_offload_info_t *offloadInfo);
 protected:
         // return the strategy corresponding to a given stream type
         static routing_strategy getStrategy(AudioSystem::stream_type stream);
