@@ -893,6 +893,10 @@ AudioHardwareALSA::openBroadcastStream(uint32_t  devices,
         delete out;
         out = NULL;
     }
+
+    if (out != NULL)
+      mSessions.push_back((AudioStreamOut *)out);
+
     if (status) *status = err;
     return out;
 }
@@ -900,6 +904,15 @@ AudioHardwareALSA::openBroadcastStream(uint32_t  devices,
 void
 AudioHardwareALSA::closeBroadcastStream(AudioBroadcastStream* out)
 {
+    ALOGD("closeBroadCastStream");
+    List <AudioStreamOut *>::iterator it;
+    for(it = mSessions.begin(); it != mSessions.end(); ++it) {
+        if(*it == (AudioStreamOut *)out) {
+            ALOGD("closeOutputStream found matching output removing from session");
+            mSessions.erase(it);
+            break;
+        }
+    }
     delete out;
 }
 
