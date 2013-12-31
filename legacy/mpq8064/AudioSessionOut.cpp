@@ -107,8 +107,6 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
                                       sizeof(mSpdifOutputFormat));
     strlcpy(mHdmiOutputFormat,mParent->mHdmiOutputFormat,
                                       sizeof(mHdmiOutputFormat));
-    updateOutputFormat();
-
     mPcmRxHandle        = NULL;
     mCompreRxHandle     = NULL;
     mSecCompreRxHandle  = NULL;

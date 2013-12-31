@@ -136,6 +136,8 @@ AudioHardwareALSA::AudioHardwareALSA() :
     mA2dpThread = NULL;
     mHdmiRenderFormat = UNCOMPRESSED;
     mSpdifRenderFormat = UNCOMPRESSED;
+    strlcpy(mSpdifOutputFormat,"lpcm", sizeof(mSpdifOutputFormat));
+    strlcpy(mHdmiOutputFormat,"lpcm", sizeof(mHdmiOutputFormat));
 }
 
 AudioHardwareALSA::~AudioHardwareALSA()
