@@ -103,6 +103,10 @@ AudioBroadcastStreamALSA::AudioBroadcastStreamALSA(AudioHardwareALSA *parent,
     mALSADevice     = mParent->mALSADevice;
     mUcMgr          = mParent->mUcMgr;
     mA2dpUseCase    = AudioHardwareALSA::USECASE_NONE;
+    strlcpy(mSpdifOutputFormat,mParent->mSpdifOutputFormat,
+                                      sizeof(mSpdifOutputFormat));
+    strlcpy(mHdmiOutputFormat,mParent->mHdmiOutputFormat,
+                                      sizeof(mHdmiOutputFormat));
 
     ALOGD("devices:%x, format:%d, channels:%d, sampleRate:%d, audioSource:%d",
         devices, format, channels, sampleRate, audioSource);
@@ -153,10 +157,6 @@ AudioBroadcastStreamALSA::AudioBroadcastStreamALSA(AudioHardwareALSA *parent,
         mFormat             = format;
         mAacConfigDataSet   = true;
     }
-    /* ------------------------------------------------------------------------
-    Description: set the output device format
-    -------------------------------------------------------------------------*/
-    updateOutputFormat();
 
     /* ------------------------------------------------------------------------
     Description: Set appropriate flags based on the configuration parameters
