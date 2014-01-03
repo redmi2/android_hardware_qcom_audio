@@ -993,6 +993,7 @@ private:
     struct              pollfd mAdjustClockPfd;
     Mutex               mAdjustClockMutex;
     Condition           mAdjustClockCv;
+    bool                mConfiguringSessions;
 
     //Timer
     pthread_t           mTimerThread;
@@ -1080,6 +1081,7 @@ private:
     void                update_input_meta_data_list_post_write(uint32_t type);
     void                registerAudioSetupCompleCB(cb_func_ptr cb, void* private_data);
     void                captureBuffers(char *bufPtr, uint32_t frameSize);
+    void                 updateDevicesInSessionList(int devices, int state);
 
     //Structure to hold mem buffer information
     class BuffersAllocated {

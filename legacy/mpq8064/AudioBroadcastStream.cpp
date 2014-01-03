@@ -877,6 +877,7 @@ void AudioBroadcastStreamALSA::initialization()
     mChannelStatusSet        = false;
     mSpdifFormat            = INVALID_FORMAT;
     mHdmiFormat             = INVALID_FORMAT;
+    mConfiguringSessions    = false;
 
     mAacConfigDataSet        = false;
     mWMAConfigDataSet        = false;
@@ -1172,6 +1173,46 @@ void AudioBroadcastStreamALSA::setSpdifHdmiRoutingFlags(int devices)
                 mHdmiFormat = COMPRESSED_FORCED_PCM_FORMAT;
         }
     }
+
+    if(devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL && !mConfiguringSessions) {
+        if(mParent->mHdmiRenderFormat == UNCOMPRESSED) {
+            if(mHdmiFormat != PCM_FORMAT && mHdmiFormat != COMPRESSED_FORCED_PCM_FORMAT) {
+                mParent->mHdmiRenderFormat = COMPRESSED;
+                mParent->mLock.unlock();
+                updateDevicesInSessionList(AudioSystem::DEVICE_OUT_AUX_DIGITAL, STANDBY);
+                mParent->mLock.lock();
+            }
+        } else {
+            if(mHdmiFormat == PCM_FORMAT || mHdmiFormat == COMPRESSED_FORCED_PCM_FORMAT){
+                mParent->mHdmiRenderFormat = UNCOMPRESSED;
+            } else {
+                mParent->mHdmiRenderFormat = COMPRESSED;
+            }
+            mParent->mLock.unlock();
+            updateDevicesInSessionList(AudioSystem::DEVICE_OUT_AUX_DIGITAL, STANDBY);
+            mParent->mLock.lock();
+        }
+    }
+    if (devices & AudioSystem::DEVICE_OUT_SPDIF && !mConfiguringSessions) {
+        if (mParent->mSpdifRenderFormat == UNCOMPRESSED) {
+            if(mSpdifFormat != PCM_FORMAT && mSpdifFormat != COMPRESSED_FORCED_PCM_FORMAT) {
+                mParent->mSpdifRenderFormat = COMPRESSED;
+                mParent->mLock.unlock();
+                updateDevicesInSessionList(AudioSystem::DEVICE_OUT_SPDIF, STANDBY);
+                mParent->mLock.lock();
+           }
+        } else {
+            if(mSpdifFormat == PCM_FORMAT || mSpdifFormat == COMPRESSED_FORCED_PCM_FORMAT) {
+                mParent->mSpdifRenderFormat = UNCOMPRESSED;
+            } else {
+                mParent->mSpdifRenderFormat = COMPRESSED;
+            }
+            mParent->mLock.unlock();
+            updateDevicesInSessionList(AudioSystem::DEVICE_OUT_SPDIF, STANDBY);
+            mParent->mLock.lock();
+        }
+    }
+    ALOGD("mSpdifRenderFormat- %x, mHdmiRenderFormat- %x", mParent->mSpdifRenderFormat, mParent->mHdmiRenderFormat);
     ALOGV("mSpdifFormat- %d, mHdmiFormat- %d", mSpdifFormat, mHdmiFormat);
 
     return;
@@ -2839,7 +2880,12 @@ status_t AudioBroadcastStreamALSA::closeDevice(alsa_handle_t *pHandle)
     ALOGV("closeDevice");
     if(pHandle) {
         ALOGV("useCase %s", pHandle->useCase);
+        int devices = pHandle->activeDevice;
         status = mALSADevice->close(pHandle);
+        if(!mConfiguringSessions) {
+            updateDevicesInSessionList(devices, PLAY);
+        }
+
     }
     return status;
 }
@@ -4597,6 +4643,27 @@ void AudioBroadcastStreamALSA::update_input_meta_data_list_post_write(
         }
     }
     return;
+}
+
+/*******************************************************************************
+Description: Ignoring pcm on hdmi or spdif if the required playback on the
+             devices is compressed pass through
+*******************************************************************************/
+void AudioBroadcastStreamALSA::updateDevicesInSessionList(int devices, int state)
+{
+    int device = 0;
+    ALOGD("updateDevicesInSessionList: devices %d state %d", devices, state);
+    if(devices & AudioSystem::DEVICE_OUT_SPDIF)
+        device |= AudioSystem::DEVICE_OUT_SPDIF;
+    if(devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
+        device |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+
+    if (device) {
+        mConfiguringSessions = true;
+        mParent->updateDevicesOfOtherSessions(device, state);
+        mConfiguringSessions = false;
+    }
+    ALOGD("updateDevicesInSessionList: X");
 }
 
 }       // namespace android_audio_legacy
