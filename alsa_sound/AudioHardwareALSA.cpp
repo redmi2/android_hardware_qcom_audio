@@ -78,6 +78,9 @@ extern "C"
 #endif
 }         // extern "C"
 
+#define USECASE_TYPE_RX 1
+#define USECASE_TYPE_TX 2
+
 namespace android_audio_legacy
 {
 
@@ -1672,6 +1675,85 @@ status_t AudioHardwareALSA::setMadObserver(listen_callback_t cb_func)
     ALOGV("setMadObserver: Exit status=%d", status);
     return status;
 }
+
+int AudioHardwareALSA::getConcurrentTxUseCaseType(const char *useCase)
+{
+    ALOGD("use case is %s\n", useCase);
+    if (!strncmp(useCase, SND_USE_CASE_VERB_HIFI_REC,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI_REC)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_HIFI_LOWLATENCY_REC,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_HIFI_LOWLATENCY_REC)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED,
+            MAX_LEN(useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC,
+            MAX_LEN(useCase,SND_USE_CASE_MOD_CAPTURE_MUSIC)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_LOWLATENCY_MUSIC,
+            MAX_LEN(useCase,SND_USE_CASE_MOD_CAPTURE_LOWLATENCY_MUSIC)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED,
+            MAX_LEN(useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED))) {
+        return USECASE_TYPE_TX;
+    } else if (!strncmp(useCase, SND_USE_CASE_VERB_VOICECALL,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_VOICECALL)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_IP_VOICECALL,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_IP_VOICECALL)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_DL_REC,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_DL_REC)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_UL_DL_REC,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_UL_DL_REC)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_INCALL_REC,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_INCALL_REC)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_VOICE,
+            MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_VOICE)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_VOIP,
+            MAX_LEN(useCase,SND_USE_CASE_MOD_PLAY_VOIP)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_DL,
+            MAX_LEN(useCase,SND_USE_CASE_MOD_CAPTURE_VOICE_DL)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL,
+            MAX_LEN(useCase,SND_USE_CASE_MOD_CAPTURE_VOICE_UL_DL)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE,
+            MAX_LEN(useCase, SND_USE_CASE_MOD_CAPTURE_VOICE)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_VOICE2,
+            MAX_LEN(useCase, SND_USE_CASE_VERB_VOICE2)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_VOICE2,
+            MAX_LEN(useCase, SND_USE_CASE_MOD_PLAY_VOICE2)) ||
+        !strncmp(useCase, SND_USE_CASE_VERB_VOLTE,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_VOLTE)) ||
+        !strncmp(useCase, SND_USE_CASE_MOD_PLAY_VOLTE,
+            MAX_LEN(useCase, SND_USE_CASE_MOD_PLAY_VOLTE))) {
+        return (USECASE_TYPE_RX | USECASE_TYPE_TX);
+    }
+    return 0;
+}
+
+bool AudioHardwareALSA::CheckForConcurrentTxUseCaseActive()
+{
+    bool ret = false;
+    unsigned usecase_type = 0;
+    int i, mods_size;
+    char *useCase;
+    const char **mods_list;
+
+    snd_use_case_get(mUcMgr, "_verb", (const char **)&useCase);
+    if (useCase != NULL) {
+        if (strncmp(useCase, SND_USE_CASE_VERB_INACTIVE,
+                            strlen(SND_USE_CASE_VERB_INACTIVE)))
+            usecase_type |= getConcurrentTxUseCaseType(useCase);
+        mods_size = snd_use_case_get_list(mUcMgr, "_enamods", &mods_list);
+        ALOGV("num of modifiers %d\n", mods_size);
+        if (mods_size) {
+            for(i = 0; i < mods_size; i++) {
+                ALOGV("index %d modifier %s\n", i, mods_list[i]);
+                usecase_type |= getConcurrentTxUseCaseType(mods_list[i]);
+            }
+        }
+        ALOGD("usecase_type is %d\n", usecase_type);
+        if (usecase_type & USECASE_TYPE_TX)
+            ret = true;
+    } else 
+        ALOGE("Invalid state, no valid use case found");
+    free(useCase);
+    return ret;
+}
 #endif //QCOM_LISTEN_FEATURE_ENABLE
 
 AudioStreamOut *
@@ -1783,6 +1865,17 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
           mDeviceList.push_back(alsa_handle);
           it = mDeviceList.end();
           it--;
+      #ifdef QCOM_LISTEN_FEATURE_ENABLE
+          {
+            bool txActive;
+            if(mListenHw) {
+                txActive = CheckForConcurrentTxUseCaseActive();
+                if (txActive == false)
+                    mListenHw->notifyEvent(AUDIO_CAPTURE_ACTIVE);
+            }
+          }
+      #endif
+
           ALOGD("openoutput: mALSADevice->route useCase %s mCurDevice %d mVoipOutStreamCount %d mode %d",
                 it->useCase,mCurDevice, mVoipOutStreamCount, mode());
           if((mCurDevice & AudioSystem::DEVICE_OUT_ANLG_DOCK_HEADSET)||
@@ -1813,22 +1906,26 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
           } else {
               snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_PLAY_VOIP);
           }
-      #ifdef QCOM_LISTEN_FEATURE_ENABLE
-          //Notify to listen HAL that capture is active
-          if (mListenHw) {
-              mListenHw->notifyEvent(AUDIO_CAPTURE_ACTIVE);
-          }
-      #endif
 
           err = mALSADevice->startVoipCall(&(*it));
           if (err) {
               ALOGE("Device open failed");
-        #ifdef QCOM_LISTEN_FEATURE_ENABLE
-              //Notify to listen HAL that voip call is inactive
-              if (mListenHw) {
-                  mListenHw->notifyEvent(AUDIO_CAPTURE_INACTIVE);
+              if(!strcmp(it->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) {
+                  snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_INACTIVE);
+              } else {
+                  snd_use_case_set(mUcMgr, "_dismod", SND_USE_CASE_MOD_PLAY_VOIP);
               }
-        #endif
+
+          #ifdef QCOM_LISTEN_FEATURE_ENABLE
+          {
+              bool txActive;
+              if(mListenHw) {
+                  txActive = CheckForConcurrentTxUseCaseActive();
+                  if (txActive == false)
+                      mListenHw->notifyEvent(AUDIO_CAPTURE_INACTIVE);
+              }
+          }
+          #endif
 #ifdef RESOURCE_MANAGER
               status_t err = setParameterForConcurrency(
                       useCase, AudioHardwareALSA::CONCURRENCY_INACTIVE);
@@ -2204,10 +2301,14 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         return in;
     }
 #ifdef QCOM_LISTEN_FEATURE_ENABLE
-    //Notify to listen HAL that Audio capture is active
-    if (mListenHw) {
-        mListenHw->notifyEvent(AUDIO_CAPTURE_ACTIVE);
+{
+    bool txActive;
+    if(mListenHw) {
+        txActive = CheckForConcurrentTxUseCaseActive();
+        if (txActive == false)
+            mListenHw->notifyEvent(AUDIO_CAPTURE_ACTIVE);
     }
+}
 #endif
 
     if((devices == AudioSystem::DEVICE_IN_COMMUNICATION) && (mVoipInStreamCount < 1) &&
@@ -2306,12 +2407,22 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
            err = mALSADevice->startVoipCall(&(*it));
            if (err) {
                ALOGE("Error opening pcm input device");
-        #ifdef QCOM_LISTEN_FEATURE_ENABLE
-               //Notify to listen HAL that Audio capture is inactive
-            if (mListenHw) {
-                   mListenHw->notifyEvent(AUDIO_CAPTURE_INACTIVE);
-            }
-        #endif
+               if(!strcmp(it->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) {
+                   snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_INACTIVE);
+               } else {
+                   snd_use_case_set(mUcMgr, "_dismod", SND_USE_CASE_MOD_PLAY_VOIP);
+               }
+
+           #ifdef QCOM_LISTEN_FEATURE_ENABLE
+           {
+               bool txActive;
+               if(mListenHw) {
+                   txActive = CheckForConcurrentTxUseCaseActive();
+                   if (txActive == false)
+                       mListenHw->notifyEvent(AUDIO_CAPTURE_INACTIVE);
+               }
+           }
+           #endif
 #ifdef RESOURCE_MANAGER
                status_t err = setParameterForConcurrency(
                        useCase, AudioHardwareALSA::CONCURRENCY_INACTIVE);
@@ -2590,12 +2701,16 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         in = new AudioStreamInALSA(this, &(*it), acoustics);
         err = in->set(format, channels, sampleRate, devices);
         if (err) {
-#ifdef QCOM_LISTEN_FEATURE_ENABLE
-            //Notify to listen HAL that Audio capture is inactive
-            if (mListenHw) {
+    #ifdef QCOM_LISTEN_FEATURE_ENABLE
+    {
+        bool txActive;
+        if(mListenHw) {
+            txActive = CheckForConcurrentTxUseCaseActive();
+            if (txActive == false)
                 mListenHw->notifyEvent(AUDIO_CAPTURE_INACTIVE);
-            }
-#endif
+        }
+    }
+    #endif
         }
         if (status) *status = err;
         return in;
@@ -2605,13 +2720,19 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
 void
 AudioHardwareALSA::closeInputStream(AudioStreamIn* in)
 {
-    #ifdef QCOM_LISTEN_FEATURE_ENABLE
-        //Notify to listen HAL that Audio capture is inactive
-        if (mListenHw) {
-            mListenHw->notifyEvent(AUDIO_CAPTURE_INACTIVE);
-        }
-    #endif
+    ALOGD("closeInputStream");
     delete in;
+
+#ifdef QCOM_LISTEN_FEATURE_ENABLE
+{
+    bool txActive;
+    if(mListenHw) {
+        txActive = CheckForConcurrentTxUseCaseActive();
+        if (txActive == false)
+            mListenHw->notifyEvent(AUDIO_CAPTURE_INACTIVE);
+    }
+}
+#endif
 }
 
 status_t AudioHardwareALSA::setMicMute(bool state)
@@ -2827,13 +2948,6 @@ void AudioHardwareALSA::disableVoiceCall(int mode, int device, uint32_t vsid)
         }
     }
 
-#ifdef QCOM_LISTEN_FEATURE_ENABLE
-    //Notify to listen HAL that voice call is inactive
-    if (mListenHw) {
-        mListenHw->notifyEvent(AUDIO_CAPTURE_INACTIVE);
-    }
-#endif
-
 #ifdef QCOM_USBAUDIO_ENABLED
    if(musbPlaybackState & USBPLAYBACKBIT_VOICECALL) {
           ALOGD("Voice call ended on USB");
@@ -2843,6 +2957,18 @@ void AudioHardwareALSA::disableVoiceCall(int mode, int device, uint32_t vsid)
           closeUsbPlaybackIfNothingActive();
    }
 #endif
+
+#ifdef QCOM_LISTEN_FEATURE_ENABLE
+{
+    bool txActive;
+    if(mListenHw) {
+        txActive = CheckForConcurrentTxUseCaseActive();
+        if (txActive == false)
+            mListenHw->notifyEvent(AUDIO_CAPTURE_INACTIVE);
+    }
+}
+#endif
+
 }
 
 status_t AudioHardwareALSA::enableVoiceCall(int mode, int device, uint32_t vsid)
@@ -2862,13 +2988,6 @@ status_t AudioHardwareALSA::enableVoiceCall(int mode, int device, uint32_t vsid)
     if(err != OK) {
         ALOGE("setParameterForConcurrency error for voice call = %d", err);
         return err;
-    }
-#endif
-
-#ifdef QCOM_LISTEN_FEATURE_ENABLE
-    //Notify to listen HAL that voice call is active
-    if (mListenHw) {
-        mListenHw->notifyEvent(AUDIO_CAPTURE_ACTIVE);
     }
 #endif
 
@@ -2912,6 +3031,17 @@ status_t AudioHardwareALSA::enableVoiceCall(int mode, int device, uint32_t vsid)
 
     ALOGV("%s: enable Voice call voice_vsid:%x", __func__, vsid);
 
+#ifdef QCOM_LISTEN_FEATURE_ENABLE
+{
+    bool txActive;
+    if(mListenHw) {
+        txActive = CheckForConcurrentTxUseCaseActive();
+        if (txActive == false)
+            mListenHw->notifyEvent(AUDIO_CAPTURE_ACTIVE);
+    }
+}
+#endif
+
     mALSADevice->route(&(*it), (uint32_t)device, mode);
     if (!strcmp(it->useCase, verb)) {
         snd_use_case_set(mUcMgr, "_verb", verb);
@@ -2926,7 +3056,23 @@ status_t AudioHardwareALSA::enableVoiceCall(int mode, int device, uint32_t vsid)
     }
     else {
         ALOGE("AudioHardwareAlsa: voice call setup was unsuccesfull");
+        if (!strcmp(it->useCase, verb)) {
+            snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_INACTIVE);
+        } else {
+            snd_use_case_set(mUcMgr, "_dismod", modifier);
+        }
+
         mDeviceList.erase(it);
+    #ifdef QCOM_LISTEN_FEATURE_ENABLE
+    {
+        bool txActive;
+        if(mListenHw) {
+            txActive = CheckForConcurrentTxUseCaseActive();
+            if (txActive == false)
+                mListenHw->notifyEvent(AUDIO_CAPTURE_INACTIVE);
+        }
+    }
+    #endif
         return NO_INIT;
     }
 

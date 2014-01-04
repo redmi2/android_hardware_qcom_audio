@@ -1751,11 +1751,7 @@ int ALSADevice::getUseCaseType(const char *useCase)
         !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_A2DP_FM,
             MAX_LEN(useCase, SND_USE_CASE_MOD_CAPTURE_A2DP_FM)) ||
         !strncmp(useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED,
-            MAX_LEN(useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED)) ||
-        !strncmp(useCase, SND_USE_CASE_VERB_LISTEN_VOICE_WAKEUP,
-            MAX_LEN(useCase,SND_USE_CASE_VERB_LISTEN_VOICE_WAKEUP)) ||
-        !strncmp(useCase, SND_USE_CASE_MOD_LISTEN_VOICE_WAKEUP,
-            MAX_LEN(useCase,SND_USE_CASE_MOD_LISTEN_VOICE_WAKEUP))) {
+            MAX_LEN(useCase, SND_USE_CASE_MOD_CAPTURE_MUSIC_COMPRESSED))) {
         return USECASE_TYPE_TX;
     } else if (!strncmp(useCase, SND_USE_CASE_VERB_VOICECALL,
             MAX_LEN(useCase,SND_USE_CASE_VERB_VOICECALL)) ||
@@ -1791,7 +1787,11 @@ int ALSADevice::getUseCaseType(const char *useCase)
             MAX_LEN(useCase, SND_USE_CASE_MOD_PLAY_QCHAT))) {
         return (USECASE_TYPE_RX | USECASE_TYPE_TX);
     } else {
-        ALOGE("unknown use case %s\n", useCase);
+        if(strncmp(useCase, SND_USE_CASE_VERB_LISTEN_VOICE_WAKEUP,
+            MAX_LEN(useCase,SND_USE_CASE_VERB_LISTEN_VOICE_WAKEUP)) &&
+           strncmp(useCase, SND_USE_CASE_MOD_LISTEN_VOICE_WAKEUP,
+            MAX_LEN(useCase,SND_USE_CASE_MOD_LISTEN_VOICE_WAKEUP)))
+            ALOGE("unknown use case %s\n", useCase);
         return 0;
     }
 }
