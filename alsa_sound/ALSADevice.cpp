@@ -444,6 +444,10 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
 #endif
         }
 #endif
+        else if (handle->format == AUDIO_FORMAT_PCM_16_BIT) {
+            codec_id = get_compressed_format("PCM");
+            ALOGV("### PCM CODEC codec_id %d",codec_id);
+        }
         else {
             return UNKNOWN_ERROR;
         }
@@ -1108,7 +1112,7 @@ status_t ALSADevice::open(alsa_handle_t *handle)
     }
 
 #ifdef TARGET_B_FAMILY
-    if(!(isTunnelUseCase(handle->useCase)))
+    if(handle->format == AUDIO_FORMAT_PCM_16_BIT)
         if(handle->channels > 2)
             setChannelMap(handle, MAX_HDMI_CHANNEL_CNT);
 #endif
