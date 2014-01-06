@@ -1291,7 +1291,7 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
                 (mForceUse[AudioSystem::FOR_SYSTEM] == AudioSystem::FORCE_SYSTEM_ENFORCED)) {
             device = mAvailableOutputDevices & AUDIO_DEVICE_OUT_SPEAKER;
             if (device == AUDIO_DEVICE_NONE) {
-                ALOGE("getDeviceForStrategy() speaker device not found for STRATEGY_SONIFICATION");
+                ALOGI("getDeviceForStrategy() speaker device not found for STRATEGY_SONIFICATION");
             }
         }
         // The second device used for sonification is the same as the device used by media strategy
