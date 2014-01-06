@@ -426,6 +426,19 @@ static int broadcast_get_avsync_cumu_statistics(struct audio_broadcast_stream *s
     return out->qcom_out->getAvsyncCumuStatistics(st);
 }
 
+static int broadcast_pause(struct audio_broadcast_stream *stream)
+{
+  struct qcom_broadcast_stream *out =
+      reinterpret_cast<struct qcom_broadcast_stream *>(stream);
+  return out->qcom_out->pause();
+}
+static int broadcast_resume(struct audio_broadcast_stream *stream)
+{
+  struct qcom_broadcast_stream *out =
+      reinterpret_cast<struct qcom_broadcast_stream *>(stream);
+  return out->qcom_out->resume();
+}
+
 /** audio_stream_in implementation **/
 static uint32_t in_get_sample_rate(const struct audio_stream *stream)
 {
@@ -851,6 +864,9 @@ static int adev_open_broadcast_stream(struct audio_hw_device *dev,
     out->stream.get_avsync_session_time = broadcast_get_avsync_session_time;
     out->stream.get_avsync_inst_statistics = broadcast_get_avsync_inst_statistics;
     out->stream.get_avsync_cumu_statistics = broadcast_get_avsync_cumu_statistics;
+    out->stream.pause  = broadcast_pause;
+    out->stream.resume  = broadcast_resume;
+
     *stream_out = &out->stream;
     return 0;
 
