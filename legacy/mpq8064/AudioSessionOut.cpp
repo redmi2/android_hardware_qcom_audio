@@ -2473,22 +2473,65 @@ status_t AudioSessionOutALSA::doRouting(int devices)
         if(mCompreRxHandle) {
             if(mConfiguringSessions) {
                 ALOGD("%s, configuring session", __FUNCTION__);
-                ALOGD("Clear the compr handle");
-                requestAndWaitForEventThreadExit();
-                Mutex::Autolock autoLock(mLock);
-                status = closeDevice(mCompreRxHandle);
-                if(status != NO_ERROR) {
-                    ALOGE("Error closing compr device in doRouting");
-                    return BAD_VALUE;
+                if(mSecDevices && mSecCompreRxHandle) {
+                    ALOGV("%s, clear the secCompr Handle", __FUNCTION__);
+                    Mutex::Autolock autoLock(mLock);
+                    uint64_t writeValue = POLL_FD_MODIFIED;
+                    sys_write::lib_write(mEfd, &writeValue, sizeof(uint64_t));
+                    status = closeDevice(mSecCompreRxHandle);
+                    if(status != NO_ERROR) {
+                        ALOGE("Error closing the pcm device in doRouting");
+                        return BAD_VALUE;
+                    }
+                    mSecCompreRxHandle = NULL;
+                    mUseDualTunnel = false;
+                    pfd[2].fd = -1;
+                    pfd[2].revents = 0;
+                    ALOGV("poll fd2 set to -1");
+                    bufferDeAlloc(PASSTHRUQUEUEINDEX);
+                } else if (mDtsTranscode && mTranscodeHandle) {
+                    ALOGD("%s, clear the transcode handle", __FUNCTION__);
+                    Mutex::Autolock autoLock(mLock);
+                    closeDevice(mTranscodeHandle);
+                    free(mTranscodeHandle);
+                    mTranscodeHandle = NULL;
+                    struct snd_compr_routing params;
+                    params.session_type = TRANSCODE_SESSION;
+                    params.operation = DISCONNECT_STREAM;
+                    if (ioctl(mCompreRxHandle->handle->fd, SNDRV_COMPRESS_SET_ROUTING, &params) < 0) {
+                        ALOGE("disconnect stream failed");
+                    }
                 }
-                mCompreRxHandle = NULL;
-                bufferDeAlloc(DECODEQUEUEINDEX);
-                //TODO: check if secComprHandle is present and take action
+                ALOGV("Clear the compr handle mCompreRxHandle->type[%d], line %d", mCompreRxHandle->type, __LINE__);
+
+                status = setPlaybackFormat();
+
+                int device = 0;
+                if(mHdmiFormat & COMPRESSED_FORMAT &&
+                    mParent->mHdmiRenderFormat == UNCOMPRESSED) {
+                    device |= mCompreRxHandle->activeDevice | AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+                }
+                if(mSpdifFormat == COMPRESSED_FORMAT &&
+                   mParent->mSpdifRenderFormat == UNCOMPRESSED) {
+                    device |= mCompreRxHandle->activeDevice | AudioSystem::DEVICE_OUT_SPDIF;
+                }
+                if((mHdmiFormat & PCM_FORMAT || mHdmiFormat & COMPRESSED_FORCED_PCM_FORMAT) &&
+                    mParent->mHdmiRenderFormat == COMPRESSED) {
+                    device |= mCompreRxHandle->activeDevice & ~AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+                }
+                if((mSpdifFormat == PCM_FORMAT || mSpdifFormat == COMPRESSED_FORCED_PCM_FORMAT) &&
+                    mParent->mSpdifRenderFormat == COMPRESSED) {
+                    device |= mCompreRxHandle->activeDevice & ~AudioSystem::DEVICE_OUT_SPDIF;
+                }
+                ALOGV("%s, device[%x]", __FUNCTION__, device);
+                if(mCompreRxHandle)
+                    mALSADevice->switchDeviceUseCase(mCompreRxHandle, device, mParent->mode());
             }
-            status = setPlaybackFormat();
+            if(!mConfiguringSessions)
+                status = setPlaybackFormat();
             if(status != NO_ERROR)
                 return BAD_VALUE;
-            if(mSecDevices) {
+            if(mSecDevices && !mConfiguringSessions) {
                 if(mSecCompreRxHandle == NULL) {
                     Mutex::Autolock autoLock(mLock);
                     uint64_t writeValue = POLL_FD_MODIFIED;
@@ -2553,7 +2596,7 @@ status_t AudioSessionOutALSA::doRouting(int devices)
                     ALOGE("disconnect stream failed");
                 }
             }
-            if ((mDtsTranscode && mTranscodeHandle == NULL)) {
+            if ((mDtsTranscode && mTranscodeHandle == NULL) && !mConfiguringSessions) {
                 Mutex::Autolock autoLock(mLock);
                 status = openTunnelDevice(mTranscodeDevices);
                 if(status != NO_ERROR) {
@@ -2578,9 +2621,9 @@ status_t AudioSessionOutALSA::doRouting(int devices)
 
         mALSADevice->getDevicesBasedOnOutputChannels(devices,&stereoDevices,&multiChDevices);
 
-        if((mSpdifFormat == COMPRESSED_FORMAT) && (mParent->mSpdifRenderFormat == COMPRESSED))
+        if(mSpdifFormat == COMPRESSED_FORMAT && mParent->mSpdifRenderFormat == COMPRESSED)
           comprDevices |= AudioSystem::DEVICE_OUT_SPDIF;
-        if((mHdmiFormat & COMPRESSED_FORMAT) && mParent->mHdmiRenderFormat == COMPRESSED)
+        if(mHdmiFormat & COMPRESSED_FORMAT && mParent->mHdmiRenderFormat == COMPRESSED)
             comprDevices |= AudioSystem::DEVICE_OUT_AUX_DIGITAL;
 
         stereoDevices = stereoDevices & ~comprDevices;
@@ -2595,6 +2638,7 @@ status_t AudioSessionOutALSA::doRouting(int devices)
              return BAD_VALUE;
 
         if(mConfiguringSessions) {
+            if(mCompreRxHandle) {
                 //clear the compr handle, this is configuringSession..
                 ALOGD("Clear the compr handle, ");
                 requestAndWaitForEventThreadExit();
@@ -2606,10 +2650,45 @@ status_t AudioSessionOutALSA::doRouting(int devices)
                 }
                 mCompreRxHandle = NULL;
                 bufferDeAlloc(DECODEQUEUEINDEX);
-                if(mParent->mHdmiRenderFormat == UNCOMPRESSED)
-                    mALSADevice->setPlaybackFormat("LPCM", AudioSystem::DEVICE_OUT_AUX_DIGITAL);
-                else if(mParent->mSpdifRenderFormat == UNCOMPRESSED)
-                    mALSADevice->setPlaybackFormat("LPCM", AudioSystem::DEVICE_OUT_SPDIF);
+            }
+            status = setPlaybackFormat();
+
+            if(mParent->mHdmiRenderFormat == UNCOMPRESSED &&
+               mParent->mSpdifRenderFormat == UNCOMPRESSED) {
+                if(mStereoPcmRxHandle)
+                    mALSADevice->switchDeviceUseCase(mStereoPcmRxHandle,
+                                                 stereoDevices, mParent->mode());
+                if(mMultiChPcmRxHandle == NULL && multiChDevices) {
+                    status = openPcmDevice(multiChDevices);
+                    if(status != NO_ERROR) {
+                        ALOGE("Error opening Transocde device in doRouting");
+                        return BAD_VALUE;
+                    }
+                    if(mMultiChPcmRxHandle) {
+                        ALOGD("Setting PCM volume to %d (available range is 0 to 0x2000)\n", mStreamVol);
+                        status = mMultiChPcmRxHandle->module->setPlaybackVolume(mStreamVol,
+                                                         mMultiChPcmRxHandle->useCase);
+                    }
+                }
+                //TODO: Need to handle case for AC3 passthru on SPDIF and new session
+                //      (notification tones). In this case AC3 passthru on SPDIF will
+                //      fallback to stereo pcm out on SPDIF. Notifications tones are
+                //      not yet enabled on SPDIF but if enabled handle here.
+            } else {
+                ALOGV("%s, clear the uncompr handles", __FUNCTION__);
+                if (mStereoPcmRxHandle) {
+                    mFrameCountMutex.lock();
+                    closeDevice(mStereoPcmRxHandle);
+                    mStereoPcmRxHandle = NULL;
+                    mFrameCountMutex.unlock();
+                }
+                if (mMultiChPcmRxHandle) {
+                    mFrameCountMutex.lock();
+                    closeDevice(mMultiChPcmRxHandle);
+                    mMultiChPcmRxHandle = NULL;
+                    mFrameCountMutex.unlock();
+                }
+            }
         }
 
         if(((mSpdifFormat == COMPRESSED_FORMAT) ||
@@ -2625,7 +2704,7 @@ status_t AudioSessionOutALSA::doRouting(int devices)
                  createThreadsForTunnelDecode();
             }
         } else if(mCompreRxHandle){
-             ALOGE("Clear the compr handle");
+             ALOGV("Clear the compr handle ... ");
              requestAndWaitForEventThreadExit();
              Mutex::Autolock autoLock(mLock);
              status = closeDevice(mCompreRxHandle);
@@ -2636,7 +2715,7 @@ status_t AudioSessionOutALSA::doRouting(int devices)
              mCompreRxHandle = NULL;
              bufferDeAlloc(DECODEQUEUEINDEX);
         }
-        if(multiChDevices && mMultiChPcmRxHandle==NULL && !stereoDevices && mStereoPcmRxHandle!=NULL){
+        if(multiChDevices && mMultiChPcmRxHandle==NULL && !stereoDevices && mStereoPcmRxHandle!=NULL && !mConfiguringSessions){
              // Switch from a stereoDevice to MultiChannel Device
              // close the stereo session after calculating the buffered data in the stereo driver.
              // Open the MultiChannel driver
@@ -2662,7 +2741,7 @@ status_t AudioSessionOutALSA::doRouting(int devices)
                    status = mMultiChPcmRxHandle->module->setPlaybackVolume(mStreamVol,
                                      mMultiChPcmRxHandle->useCase);
               }
-        }else if(stereoDevices && mStereoPcmRxHandle==NULL && !multiChDevices && mMultiChPcmRxHandle!=NULL){
+        }else if(stereoDevices && mStereoPcmRxHandle==NULL && !multiChDevices && mMultiChPcmRxHandle!=NULL && !mConfiguringSessions){
               // Switch from a MultiChannel Device to a stereo Device
               // Close the multiChannel session after calculating the buffered data .
               Mutex::Autolock autoLock(mLock);
@@ -2687,7 +2766,7 @@ status_t AudioSessionOutALSA::doRouting(int devices)
                    status = mStereoPcmRxHandle->module->setPlaybackVolume(mStreamVol,
                                      mStereoPcmRxHandle->useCase);
               }
-        }else if (multiChDevices && mMultiChPcmRxHandle==NULL && stereoDevices && mStereoPcmRxHandle!=NULL){
+        }else if (multiChDevices && mMultiChPcmRxHandle==NULL && stereoDevices && mStereoPcmRxHandle!=NULL && !mConfiguringSessions){
              // Device swtich from two stereo devices to one Multi Channel and one stereo device
              // reroute the stereo session.
              if(mStereoPcmRxHandle)
@@ -2722,7 +2801,7 @@ status_t AudioSessionOutALSA::doRouting(int devices)
                    status = mMultiChPcmRxHandle->module->setPlaybackVolume(mStreamVol,
                                      mMultiChPcmRxHandle->useCase);
               }
-        } else if (!multiChDevices && mMultiChPcmRxHandle!=NULL && stereoDevices && mStereoPcmRxHandle!=NULL){
+        } else if (!multiChDevices && mMultiChPcmRxHandle!=NULL && stereoDevices && mStereoPcmRxHandle!=NULL && !mConfiguringSessions){
            // Device switch from one stereo and one multi Ch session to two/one stereo session.
              if(mStereoPcmRxHandle)
                   mALSADevice->switchDeviceUseCase(mStereoPcmRxHandle,
@@ -2753,15 +2832,10 @@ status_t AudioSessionOutALSA::doRouting(int devices)
              mMultiChPcmRxHandle = NULL;
              mFrameCountMutex.unlock();
              allocInternalBuffer(PCM_MCH_OUT);
-        }else if (!multiChDevices && mMultiChPcmRxHandle==NULL && stereoDevices && mStereoPcmRxHandle!=NULL){
-             if(mStereoPcmRxHandle && !mConfiguringSessions) {
+        }else if (!multiChDevices && mMultiChPcmRxHandle==NULL && stereoDevices && mStereoPcmRxHandle!=NULL && !mConfiguringSessions){
+             if(mStereoPcmRxHandle) {
                    mALSADevice->switchDeviceUseCase(mStereoPcmRxHandle,
                                 stereoDevices, mParent->mode());
-             } else {
-                 if(mStereoPcmRxHandle) {
-                     closeDevice(mStereoPcmRxHandle);
-                     mStereoPcmRxHandle = NULL;
-                 }
              }
              if(mRouteAudioToA2dp){
                    if (mStereoPcmRxHandle && (mStereoPcmRxHandle->devices & AudioSystem::DEVICE_OUT_PROXY)){
@@ -3075,14 +3149,14 @@ void AudioSessionOutALSA::setSpdifHdmiRoutingFlags(int devices)
     ALOGD("mSpdifRenderFormat- %x, mHdmiRenderFormat- %x", mParent->mSpdifRenderFormat, mParent->mHdmiRenderFormat);
     if(devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL && !mConfiguringSessions) {
         if(mParent->mHdmiRenderFormat == UNCOMPRESSED) {
-            if(mHdmiFormat != PCM_FORMAT && mHdmiFormat != COMPRESSED_FORCED_PCM_FORMAT) {
+            if(!(mHdmiFormat & PCM_FORMAT) && !(mHdmiFormat & COMPRESSED_FORCED_PCM_FORMAT)) {
                 mParent->mHdmiRenderFormat = COMPRESSED;
                 mParent->mLock.unlock();
                 updateDevicesInSessionList(AudioSystem::DEVICE_OUT_AUX_DIGITAL, STANDBY);
                 mParent->mLock.lock();
             }
         } else {
-            if(mHdmiFormat == PCM_FORMAT || mHdmiFormat == COMPRESSED_FORCED_PCM_FORMAT){
+            if(mHdmiFormat & PCM_FORMAT || mHdmiFormat & COMPRESSED_FORCED_PCM_FORMAT){
                 mParent->mHdmiRenderFormat = UNCOMPRESSED;
             } else {
                 mParent->mHdmiRenderFormat = COMPRESSED;
@@ -3112,7 +3186,8 @@ void AudioSessionOutALSA::setSpdifHdmiRoutingFlags(int devices)
         }
     }
     ALOGV("mSpdifFormat- %d, mHdmiFormat- %d", mSpdifFormat, mHdmiFormat);
-    ALOGD("mSpdifRenderFormat- %x, mHdmiRenderFormat- %x", mParent->mSpdifRenderFormat, mParent->mHdmiRenderFormat);
+    ALOGV("mSpdifRenderFormat- %x, mHdmiRenderFormat- %x", mParent->mSpdifRenderFormat, mParent->mHdmiRenderFormat);
+    ALOGV("mSpdifOutputFormat: %s mHdmiOutputFormat: %s", mSpdifOutputFormat, mHdmiOutputFormat);
 
     return;
 }
@@ -3273,10 +3348,10 @@ status_t AudioSessionOutALSA::openPcmDevice(int devices)
     int channels =0;
     status_t status = NO_ERROR;
 
-    if(mSpdifFormat == COMPRESSED_FORMAT) {
+    if(mSpdifFormat == COMPRESSED_FORMAT && mParent->mSpdifRenderFormat == COMPRESSED) {
         devices = devices & ~AudioSystem::DEVICE_OUT_SPDIF;
     }
-    if(mHdmiFormat & COMPRESSED_FORMAT) {
+    if(mHdmiFormat & COMPRESSED_FORMAT && mParent->mHdmiRenderFormat == COMPRESSED) {
         devices = devices & ~AudioSystem::DEVICE_OUT_AUX_DIGITAL;
     }
     if(mCaptureFromProxy) {
@@ -3529,20 +3604,41 @@ status_t AudioSessionOutALSA::setPlaybackFormat()
 
     if(mSpdifFormat == PCM_FORMAT ||
               (mSpdifFormat == COMPRESSED_FORCED_PCM_FORMAT && !(mTranscodeDevices & AudioSystem::DEVICE_OUT_SPDIF))) {
-        status = mALSADevice->setPlaybackFormat("LPCM",
-                                  AudioSystem::DEVICE_OUT_SPDIF);
-    } else if(mSpdifFormat == COMPRESSED_FORMAT || mTranscodeDevices & AudioSystem::DEVICE_OUT_SPDIF) {
+        if(mParent->mSpdifRenderFormat == COMPRESSED) {
             status = mALSADevice->setPlaybackFormat("Compr",
                                   AudioSystem::DEVICE_OUT_SPDIF);
+        } else {
+            status = mALSADevice->setPlaybackFormat("LPCM",
+                                  AudioSystem::DEVICE_OUT_SPDIF);
+        }
+    } else if(mSpdifFormat == COMPRESSED_FORMAT || mTranscodeDevices & AudioSystem::DEVICE_OUT_SPDIF) {
+        if(mParent->mSpdifRenderFormat == COMPRESSED) {
+            status = mALSADevice->setPlaybackFormat("Compr",
+                                  AudioSystem::DEVICE_OUT_SPDIF);
+        } else {
+            status = mALSADevice->setPlaybackFormat("LPCM",
+                                  AudioSystem::DEVICE_OUT_SPDIF);
+        }
     }
     if(mHdmiFormat == PCM_FORMAT ||
                (mHdmiFormat == COMPRESSED_FORCED_PCM_FORMAT && !(mTranscodeDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL))) {
-        status = mALSADevice->setPlaybackFormat("LPCM",
-                                  AudioSystem::DEVICE_OUT_AUX_DIGITAL);
-    } else if ((mHdmiFormat & COMPRESSED_FORMAT) || mTranscodeDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+        if(mParent->mHdmiRenderFormat == COMPRESSED) {
             status = mALSADevice->setPlaybackFormat("Compr",
                                   AudioSystem::DEVICE_OUT_AUX_DIGITAL);
+        } else {
+            status = mALSADevice->setPlaybackFormat("LPCM",
+                                  AudioSystem::DEVICE_OUT_AUX_DIGITAL);
+        }
+    } else if ((mHdmiFormat & COMPRESSED_FORMAT) || mTranscodeDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL) {
+        if(mParent->mHdmiRenderFormat == COMPRESSED) {
+            status = mALSADevice->setPlaybackFormat("Compr",
+                                  AudioSystem::DEVICE_OUT_AUX_DIGITAL);
+        } else {
+            status = mALSADevice->setPlaybackFormat("LPCM",
+                                  AudioSystem::DEVICE_OUT_AUX_DIGITAL);
+        }
     }
+    ALOGV("%s, mHdmiFormat[%d], mSpdifFormat[%d], mHdmiRenderFormat[%d], mSpdifRenderFormat[%d]", __FUNCTION__, mHdmiFormat, mSpdifFormat, mParent->mHdmiRenderFormat, mParent->mSpdifRenderFormat);
     return status;
 }
 

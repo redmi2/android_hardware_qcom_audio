@@ -405,6 +405,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         param.remove(key);
     }
 
+    ALOGV("%s, mSpdifOutputFormat[%s], mHdmiOutputFormat[%s]", __FUNCTION__, mSpdifOutputFormat, mHdmiOutputFormat);
     if (param.size()) {
         status = BAD_VALUE;
     }
@@ -1112,7 +1113,7 @@ AudioHardwareALSA::closeOutputStream(AudioStreamOut* out)
     List <AudioStreamOut *>::iterator it;
     for(it = mSessions.begin(); it != mSessions.end(); ++it) {
         if(*it == out) {
-            ALOGD("closeOutputStream found matching output removing from session");
+            ALOGD("%s, closeOutputStream found matching session [%p] removing from session", __FUNCTION__, out);
             mSessions.erase(it);
             break;
         }
@@ -1777,12 +1778,15 @@ int AudioHardwareALSA::getPCMDevices(int devices) {
 }
 
 void AudioHardwareALSA::standbySessionDevices(int devices) {
+    ALOGV("%s, line %d", __FUNCTION__, __LINE__);
     List <AudioStreamOut * >::iterator it;
     String8 key = String8(STANDBY_DEVICES_KEY);
     AudioParameter param = AudioParameter(key);
     param.addInt(key, devices);
-    for(it = mSessions.begin(); it != mSessions.end(); ++it)
+    for(it = mSessions.begin(); it != mSessions.end(); ++it) {
+        ALOGV("%s, session handle [%p] to be iterated", __FUNCTION__, (*it));
         (*it)->setParameters(param.toString());
+    }
 }
 
 /**
@@ -1806,6 +1810,7 @@ void AudioHardwareALSA::updateDevicesOfOtherSessions(int device, int state)
         if(device & AudioSystem::DEVICE_OUT_SPDIF)
             mSpdifRenderFormat = UNCOMPRESSED;
         for(it = mSessions.begin(); device && it != mSessions.end(); ++it) {
+            ALOGV("%s, resuming session %p ", __FUNCTION__, (*it));
             key = String8(RESUME_DEVICES_KEY);
             AudioParameter param = AudioParameter(key);
             param.addInt(key, device);

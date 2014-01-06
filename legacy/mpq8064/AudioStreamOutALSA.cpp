@@ -139,13 +139,6 @@ status_t AudioStreamOutALSA::setParameters(const String8& keyValuePairs) {
         //TODO:mStandbyDevices &= ~device;
     } else {
         return ALSAStreamOps::setParameters(keyValuePairs);
-        if (param.getInt(keyRouting, device) == NO_ERROR) {
-            if(device == 0 || device == AudioSystem::DEVICE_OUT_SPDIF) {
-                mDevices = AudioSystem::DEVICE_OUT_SPDIF;
-                standby();
-            }
-            //TODO:mStandbyDevices = device & ~mHandle->activeDevice;
-        }
     }
     return NO_ERROR;
 }
