@@ -160,9 +160,9 @@ void AudioSpeakerProtection::initialize(void *handle)
     mALSADevice = mParent->mALSADevice;
     mUcMgr = mParent->mUcMgr;
     acdb_send_audio_cal = (void (*)(int, int)) \
-    ::dlsym(mAcdbHandle,"acdb_loader_send_audio_cal");
+    ::dlsym(mAcdbHandle,"acdb_loader_send_spkr_tx_cal");
     if (!acdb_send_audio_cal) {
-        ALOGE("dlsym:Error:%s Loading acdb_loader_send_audio_cal",
+        ALOGE("dlsym:Error:%s Loading acdb_loader_send_spkr_tx_cal",
         dlerror());
         return;
     }
