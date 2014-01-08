@@ -18,7 +18,7 @@
  */
 
 #define LOG_TAG "msm8974_platform"
-/*#define LOG_NDEBUG 0*/
+#define LOG_NDEBUG 0
 #define LOG_NDDEBUG 0
 
 #include <stdlib.h>
@@ -34,6 +34,7 @@
 
 #define MIXER_XML_PATH "/system/etc/mixer_paths.xml"
 #define MIXER_XML_PATH_AUXPCM "/system/etc/mixer_paths_auxpcm.xml"
+#define MIXER_XML_PATH_I2S "/system/etc/mixer_paths_i2s.xml"
 #define LIB_ACDB_LOADER "libacdbloader.so"
 #define AUDIO_DATA_BLOCK_MIXER_CTL "HDMI EDID"
 
@@ -229,7 +230,7 @@ static const int acdb_device_table[SND_DEVICE_MAX] = {
     [SND_DEVICE_OUT_SPEAKER_REVERSE] = 14,
     [SND_DEVICE_OUT_HEADPHONES] = 10,
     [SND_DEVICE_OUT_SPEAKER_AND_HEADPHONES] = 10,
-    [SND_DEVICE_OUT_VOICE_HANDSET] = 7,
+    [SND_DEVICE_OUT_VOICE_HANDSET] = 10,
     [SND_DEVICE_OUT_VOICE_SPEAKER] = 14,
     [SND_DEVICE_OUT_VOICE_HEADPHONES] = 10,
     [SND_DEVICE_OUT_HDMI] = 18,
@@ -251,7 +252,7 @@ static const int acdb_device_table[SND_DEVICE_MAX] = {
     [SND_DEVICE_OUT_ANC_HANDSET] = 103,
     [SND_DEVICE_OUT_SPEAKER_PROTECTED] = 101,
 
-    [SND_DEVICE_IN_HANDSET_MIC] = 4,
+    [SND_DEVICE_IN_HANDSET_MIC] = 8,
     [SND_DEVICE_IN_HANDSET_MIC_AEC] = 106,
     [SND_DEVICE_IN_HANDSET_MIC_NS] = 107,
     [SND_DEVICE_IN_HANDSET_MIC_AEC_NS] = 108,
@@ -471,10 +472,17 @@ void *platform_init(struct audio_device *adev)
         if (!my_data->hw_info) {
             ALOGE("%s: Failed to init hardware info", __func__);
         } else {
-            if (audio_extn_read_xml(adev, snd_card_num, MIXER_XML_PATH,
-                                    MIXER_XML_PATH_AUXPCM) == -ENOSYS)
+	    property_get("ro.board.platform", platform, "");
+	    property_get("ro.baseband", baseband, "");
+	    if (!strncmp("apq8084", platform, sizeof("apq8084")) &&
+	     	!strncmp("mdm2", baseband, sizeof("mdm2"))) {
+	      	ALOGE(" call MIXER_XML_PATH_I2S");
+		adev->audio_route = audio_route_init(snd_card_num, MIXER_XML_PATH_I2S);
+	    } else if (audio_extn_read_xml(adev, snd_card_num, MIXER_XML_PATH,
+                                    MIXER_XML_PATH_AUXPCM) == -ENOSYS) {
                 adev->audio_route = audio_route_init(snd_card_num,
                                                  MIXER_XML_PATH);
+	}
             if (!adev->audio_route) {
                 ALOGE("%s: Failed to init audio route controls, aborting.",
                        __func__);
@@ -572,14 +580,15 @@ void *platform_init(struct audio_device *adev)
             my_data->acdb_init();
     }
 
-    /* If platform is apq8084 and baseband is MDM, load CSD Client specific
+    /* If platform is apq8084 and baseband is MDM or MDM2, load CSD Client specific
      * symbols. Voice call is handled by MDM and apps processor talks to
      * MDM through CSD Client
      */
-    property_get("ro.board.platform", platform, "");
-    property_get("ro.baseband", baseband, "");
+    //property_get("ro.board.platform", platform, "");
+    //property_get("ro.baseband", baseband, "");
     if (!strncmp("apq8084", platform, sizeof("apq8084")) &&
-        !strncmp("mdm", baseband, sizeof("mdm"))) {
+        (!strncmp("mdm", baseband, sizeof("mdm")) || 
+         !strncmp("mdm2", baseband, sizeof("mdm2")))) {
          my_data->csd = open_csd_client();
     }
 
