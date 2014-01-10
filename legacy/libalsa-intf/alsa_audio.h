@@ -86,6 +86,7 @@ struct pcm {
 #define PCM_PERIOD_SZ_MASK (0xF << PCM_PERIOD_SZ_SHIFT)
 
 #define TIMEOUT_INFINITE  -1
+#define STRING_LENGTH_OF_INTEGER 12
 
 /* Acquire/release a pcm channel.
  * Returns non-zero on error

@@ -42,6 +42,10 @@
 #define SIGNAL_A2DP_THREAD 2
 #define PROXY_CAPTURE_DEVICE_NAME (const char *)("hw:0,8")
 
+#define MAX_AUDIO_OUTPUT_DELAY 100 /* Max audio delay (ms) supported by ADSP */
+#define MIN_AUDIO_OUTPUT_DELAY 0   /* Min audio delay (ms) supported by ADSP */
+
+
 namespace sys_close {
     ssize_t lib_close(int fd) {
         return close(fd);
@@ -51,6 +55,11 @@ namespace sys_close {
 
 namespace android_audio_legacy
 {
+
+const int deviceToPortID[][NUM_DEVICES_WITH_PP_PARAMS] = {
+        {AudioSystem::DEVICE_OUT_AUX_DIGITAL, HDMI_RX},
+        {AudioSystem::DEVICE_OUT_SPDIF, SECONDARY_I2S_RX}
+};
 
 ALSADevice::ALSADevice() {
     mDevSettingsFlag = TTY_OFF;
@@ -1960,6 +1969,71 @@ status_t ALSADevice::setPlaybackFormat(const char *value, int device)
 
     return NO_ERROR;
 }
+
+int ALSADevice::mapDeviceToPort(int device)
+{
+    for(int i=0; i<NUM_DEVICES_WITH_PP_PARAMS; i++)
+        if(deviceToPortID[i][0] == device)
+            return deviceToPortID[i][1];
+    return 0;
+}
+
+
+status_t ALSADevice::setPlaybackOutputDelay(int device, unsigned int delay)
+{
+
+    status_t status = NO_ERROR;
+
+    ALOGD("device - 0x%x, delay = %dms", device, delay);
+    if ((delay < MIN_AUDIO_OUTPUT_DELAY) ||
+        (delay > MAX_AUDIO_OUTPUT_DELAY) ||
+        ((device != AudioSystem::DEVICE_OUT_SPDIF) &&
+         (device != AudioSystem::DEVICE_OUT_AUX_DIGITAL))) {
+
+        ALOGE("%s: Invalid input parameters: delay (%d) output device (%d)",
+              __FUNCTION__, delay, device);
+        return BAD_VALUE;
+    }
+
+    /*Convert the delay value from miliseconds to microseconds*/
+    delay *= 1000;
+
+    char** setValues;
+    int port_id;
+    bool isMemAvailable = true;
+    int memAllocIdx = 0;
+    setValues = (char**)malloc(ADM_PP_PARAM_LATENCY_LENGTH*sizeof(char*));
+    if(setValues) {
+        for(int i=0; i<ADM_PP_PARAM_LATENCY_LENGTH; i++) {
+            setValues[i] = (char*)malloc(STRING_LENGTH_OF_INTEGER*sizeof(char));
+            if(!setValues[i]) {
+                ALOGE("memory allocation for seending device mute failed");
+                isMemAvailable = false;
+                memAllocIdx = i;
+                break;
+            }
+        }
+    } else {
+        ALOGE("memory allocation for set device mute failed");
+        isMemAvailable = false;
+    }
+    if (isMemAvailable) {
+        port_id = mapDeviceToPort(device);
+        sprintf(setValues[0], "%d", ADM_PP_PARAM_LATENCY_ID);
+        sprintf(setValues[1], "%d", port_id);
+        sprintf(setValues[2], "%d", delay);
+
+        setMixerControlExt("Device PP Params", ADM_PP_PARAM_LATENCY_LENGTH, setValues);
+    }
+    for(int i=0; i<memAllocIdx; i++)
+        if(setValues[i])
+            free(setValues[i]);
+    if(setValues)
+        free(setValues);
+    return NO_ERROR;
+
+}
+
 
 status_t ALSADevice::setChannelMap(alsa_handle_t *handle, int maxChannels,
                                        char *channelMap)

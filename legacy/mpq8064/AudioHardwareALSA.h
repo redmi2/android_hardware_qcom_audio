@@ -106,6 +106,8 @@ class AudioBitstreamSM;
 #define STANDBY_DEVICES_KEY "standby_devices"
 #define RESUME_DEVICES_KEY  "resume_devices"
 #define COMPR_STANDBY_DEVICES_KEY   "compr_standby_devices"
+#define SPDIF_DELAY_KEY     "spdif_delay"
+#define HDMI_DELAY_KEY      "hdmi_delay"
 
 #define ANC_FLAG        0x00000001
 #define DMIC_FLAG       0x00000002
@@ -231,6 +233,14 @@ the ones set by MPQ-Platform
 //Required for ADTS Header Parsing
 #define ADTS_HEADER_SYNC_RESULT 0xfff0
 #define ADTS_HEADER_SYNC_MASK 0xfff6
+
+
+#define NUM_DEVICES_WITH_PP_PARAMS 2
+#define HDMI_RX 0x8001
+#define SECONDARY_I2S_RX 0x8002
+#define MI2S_RX 0x8003
+#define ADM_PP_PARAM_LATENCY_ID 1
+#define ADM_PP_PARAM_LATENCY_LENGTH 3
 
 #define MAX_HDMI_CHANNEL_CNT 8
 #define TIME_DURATION_OF_ONE_PERIOD 8 // In msec
@@ -402,6 +412,7 @@ public:
     void        updateHDMIEDIDInfo();
     int         getFormatHDMIIndexEDIDInfo(EDID_AUDIO_FORMAT_ID formatId);
     void        getDevicesBasedOnOutputChannels(int devices, int *stereoDevices, int *multiChDevices);
+    status_t setPlaybackOutputDelay(int outputDevice, unsigned int delay);
 protected:
     friend class AudioHardwareALSA;
 
@@ -417,6 +428,7 @@ private:
     status_t   exitReadFromProxy();
     void       initProxyParams();
     status_t   startProxy();
+    int        mapDeviceToPort(int device);
 
 private:
     bool        isUsecaseMatching(const char *usecase, const char *requsecase);
