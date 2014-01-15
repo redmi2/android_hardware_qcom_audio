@@ -237,7 +237,7 @@ status_t AudioSessionOutALSA::start()
     status_t status = NO_ERROR;
     struct snd_compr_tstamp tstamp;
     uint64_t min_resume_delay = ULLONG_MAX, delay[NUM_DEVICES_SUPPORT_COMPR_DATA] = {0};
-    uint64_t baseDelay = 0;
+    uint64_t baseDelay = 0, buffer_time = 0, base_time = 0;
     ALOGD("start: mSessionState %d", mSessionState);
     if(mSessionState & PAUSE) {
         if (mRouteAudioToA2dp)
@@ -251,12 +251,14 @@ status_t AudioSessionOutALSA::start()
                     if(ioctl(mRxHandle[i]->handle->fd, SNDRV_COMPRESS_TSTAMP, &tstamp)) {
                         ALOGE("Failed SNDRV_COMPRESS_TSTAMP\n");
                     } else {
+                        if (i == 0)
+                            base_time = tstamp.timestamp;
                         baseDelay = mRxHandleBaseTime[i];
                         ALOGVV("baseDelay = %lld\n", baseDelay);
                         if (mRxHandleBaseTime[i] == ULLONG_MAX) {
                             // populate basetime if dirty, and handle started(timestamp>0)
                             if (i > 0) {
-                                mRxHandleBaseTime[i] = delay[i-1] - tstamp.timestamp;
+                                mRxHandleBaseTime[i] = base_time;
                                 baseDelay = mRxHandleBaseTime[i];
                             } else {
                                 ALOGW("improper basetime for handle[%d], time %lld\n",
@@ -264,11 +266,15 @@ status_t AudioSessionOutALSA::start()
                                 baseDelay = 0;
                             }
                         }
-                        delay[i] = tstamp.timestamp + baseDelay;
+                        mRxHandle[i]->handle->sync_ptr->flags = SNDRV_PCM_SYNC_PTR_APPL;
+                        sync_ptr(mRxHandle[i]->handle);
+                        buffer_time = (((mRxHandle[i]->handle->sync_ptr->c.control.appl_ptr - mRxHandle[i]->handle->sync_ptr->s.status.hw_ptr) * 2 * mRxHandle[i]->channels)/mRxHandle[i]->handle->period_size) * 32000;
+                        ALOGVV("appl ptr = %ld, hw_ptr = %ld period_size = %d buffer_time = %lld", mRxHandle[i]->handle->sync_ptr->c.control.appl_ptr,  mRxHandle[i]->handle->sync_ptr->s.status.hw_ptr, mRxHandle[i]->handle->period_size, buffer_time);
+                        delay[i] = tstamp.timestamp + baseDelay - buffer_time;
                         if(min_resume_delay > delay[i])
                             min_resume_delay = delay[i];
-                        ALOGVV("start: Timestamp %lld, delay %lld\n",
-                                                     tstamp.timestamp/1000, delay[i]/1000);
+                        ALOGVV("start: Timestamp %lld, delay %lld buffer_time = %d base_time = %lld\n",
+                                                     tstamp.timestamp/1000, delay[i]/1000, buffer_time, base_time);
                     }
                 }
             }
@@ -351,6 +357,7 @@ status_t AudioSessionOutALSA::flush_l()
                 ALOGE("Ioctl drop failed");
             }
             int n = pcm_prepare(mRxHandle[i]->handle);
+	    mRxHandleBaseTime[i] = 0;
             ALOGV("flush(): prepare completed %d", n);
         }
     }
@@ -370,6 +377,8 @@ status_t AudioSessionOutALSA::flush_l()
     if (mSessionState & EOS) {
         mSessionState &= ~EOS;
         mEOSCv.signal();
+    } else {
+	mSessionState = INIT;
     }
 
     //This is to ensure that the no buffer is written back to the
