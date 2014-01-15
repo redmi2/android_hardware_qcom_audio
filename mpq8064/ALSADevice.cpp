@@ -354,7 +354,7 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
        (!strncmp(handle->useCase, SND_USE_CASE_MOD_PLAY_MUSIC,
                              strlen(SND_USE_CASE_MOD_PLAY_MUSIC)))) {
 
-        handle->latency = PLAYBACK_LATENCY + (handle->handle->period_cnt * PCM_BUFFER_DURATION);
+        handle->latency = (handle->handle->period_cnt * PCM_BUFFER_DURATION);
     }else if (handle->type == PCM_FORMAT)
         handle->latency += (handle->handle->period_cnt * PCM_BUFFER_DURATION);
 
