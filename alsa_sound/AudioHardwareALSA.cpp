@@ -747,6 +747,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
        } else if (cardStatus == "ONLINE") {
            ALOGV("Sound card online set SSRcomplete");
            mALSADevice->mSndCardState = SND_CARD_UP_AFTER_SSR;
+           doRouting(0,NULL);
            return status;
        } else if (cardStatus == "OFFLINE") {
            ALOGV("Sound card online re-set SSRcomplete");
@@ -1519,7 +1520,6 @@ status_t AudioHardwareALSA::doRouting(int device, char* useCase)
             ALOGV("Dorouting updated usecase:%s device:%x activeUsecase",it->useCase, it->devices, activeUsecase);
             if (!((device & AudioSystem::DEVICE_OUT_ALL_A2DP) &&
                   (mCurRxDevice & AUDIO_DEVICE_OUT_ALL_USB))) {
-                /* Music playback case */
                 if ((activeUsecase == USECASE_HIFI_LOW_POWER) ||
                     (activeUsecase == USECASE_HIFI_TUNNEL) ||
                     (activeUsecase == USECASE_HIFI_TUNNEL2) ||
@@ -1537,21 +1537,21 @@ status_t AudioHardwareALSA::doRouting(int device, char* useCase)
                     err = startPlaybackOnExtOut_l(activeUsecase);
                 } else {
                     //WHY NO check for prev device here?
-                    /* For low latency use case */
                     if (device != mCurRxDevice) {
                         if((isExtOutDevice(mCurRxDevice)) &&
                             (isExtOutDevice(device))) {
-                            /* Stop has to be called only if we are switching
-                            from USB to A2DP or vice versa */
                             activeUsecase = getExtOutActiveUseCases_l();
                             stopPlaybackOnExtOut_l(activeUsecase);
+                            mALSADevice->route(&(*it),(uint32_t)device, newMode);
                             mRouteAudioToExtOut = true;
+                            startPlaybackOnExtOut_l(activeUsecase);
+                        } else {
+                           mALSADevice->route(&(*it),(uint32_t)device, newMode);
                         }
-                        mALSADevice->route(&(*it),(uint32_t)device, newMode);
                     }
-
-                    /* open Proxy and start Playbackthread either way */
-                    err = startPlaybackOnExtOut_l(activeUsecase);
+                    if (activeUsecase == USECASE_FM){
+                        err = startPlaybackOnExtOut_l(activeUsecase);
+                    }
                 }
                 if(err) {
                     ALOGW("startPlaybackOnExtOut_l for hardware output failed err = %d", err);
@@ -2620,21 +2620,22 @@ status_t AudioHardwareALSA::setMicMute(bool state)
     ALOGD("setMicMute  newMode %d state:%d",newMode,state);
     if(newMode == AUDIO_MODE_IN_COMMUNICATION) {
         if (mVoipMicMute != state) {
-             mVoipMicMute = state;
-            ALOGD("setMicMute: mVoipMicMute %d", mVoipMicMute);
             if(mALSADevice) {
                 mALSADevice->setVoipMicMute(state);
             }
         }
     } else {
         if (mMicMute != state) {
-              mMicMute = state;
-              ALOGD("setMicMute: mMicMute %d", mMicMute);
               if(mALSADevice) {
                   mALSADevice->setMicMute(state);
               }
         }
     }
+
+    mMicMute = state;
+    mVoipMicMute = state;
+    ALOGD("setMicMute: mMicMute %d; mVoipMicMute %d", mMicMute, mVoipMicMute);
+
     return NO_ERROR;
 }
 
