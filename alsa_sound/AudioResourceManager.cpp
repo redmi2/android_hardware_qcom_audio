@@ -313,6 +313,12 @@ status_t AudioResourceManager::checkUseCaseConflict(
                                 && USECASE_PCM_PLAYBACK == useCase)) {
                          ALOGD("\n Allowing USECASE_VIDEO_RECORD & PCM playback as system property enabled ...\n");
                     }
+                    else if((USECASE_VIDEO_RECORD == useCase && USECASE_PCM_RECORDING == vector->desc->useCase)) {
+                         ALOGD("\n Allowing USECASE_VIDEO_RECORD & PCM recording as system property enabled ...\n");
+                    }
+                    else if((USECASE_VIDEO_RECORD == useCase && USECASE_VOICE_CALL == vector->desc->useCase)) {
+                         ALOGD("\n Allowing USECASE_VIDEO_RECORD & Voice Call as system property enabled ...\n");
+                    }
                     else {
                         err = INVALID_OPERATION;
                     }
