@@ -358,6 +358,7 @@ ssize_t AudioStreamInALSA::read(void *buffer, ssize_t bytes)
             !strcmp(mHandle->useCase, SND_USE_CASE_VERB_FM_A2DP_REC) ||
             !strcmp(mHandle->useCase, SND_USE_CASE_VERB_UL_DL_REC) ||
             !strcmp(mHandle->useCase, SND_USE_CASE_VERB_DL_REC) ||
+            !strcmp(mHandle->useCase, SND_USE_CASE_VERB_UL_REC) ||
             !strcmp(mHandle->useCase, SND_USE_CASE_VERB_INCALL_REC)) {
             snd_use_case_set(mHandle->ucMgr, "_verb", mHandle->useCase);
         } else {
