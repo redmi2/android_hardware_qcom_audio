@@ -136,10 +136,10 @@ int AudioUtil::getBitsPerSampleFromEDID(unsigned char byte,
 }
 
 bool AudioUtil::getHDMIAudioSinkCaps(EDID_AUDIO_INFO* pInfo) {
-    unsigned char channels[16];
-    unsigned char formats[16];
-    unsigned char frequency[16];
-    unsigned char bitrate[16];
+    unsigned char channels;
+    unsigned char formats;
+    unsigned char frequency;
+    unsigned char bitrate;
     unsigned char* data = NULL;
     unsigned char* original_data_ptr = NULL;
     int count = 0;
@@ -180,43 +180,37 @@ bool AudioUtil::getHDMIAudioSinkCaps(EDID_AUDIO_INFO* pInfo) {
         ALOGV("Total length is %d",length);
         unsigned int sad[MAX_SHORT_AUDIO_DESC_CNT];
         int nblockindex = 0;
-        int nCountDesc = 0;
-        while (length >= MIN_AUDIO_DESC_LENGTH && count < MAX_SHORT_AUDIO_DESC_CNT) {
+        while (length >= MIN_AUDIO_DESC_LENGTH && nblockindex < MAX_SHORT_AUDIO_DESC_CNT) {
             sad[nblockindex] = (unsigned int)data[0] + ((unsigned int)data[1] << 8)
                                + ((unsigned int)data[2] << 16);
-            nblockindex+=1;
-            nCountDesc++;
+            nblockindex++;
             length -= MIN_AUDIO_DESC_LENGTH;
             data += MIN_AUDIO_DESC_LENGTH;
         }
         memset(pInfo, 0, sizeof(EDID_AUDIO_INFO));
-        pInfo->nAudioBlocks = nCountDesc;
-        ALOGV("Total # of audio descriptors %d",nCountDesc);
-        int nIndex = 0;
-        while (nCountDesc--) {
-              channels [nIndex]   = (sad[nIndex] & 0x7) + 1;
-              formats  [nIndex]   = (sad[nIndex] & 0xFF) >> 3;
-              frequency[nIndex]   = (sad[nIndex] >> 8) & 0xFF;
-              bitrate  [nIndex]   = (sad[nIndex] >> 16) & 0xFF;
-              nIndex++;
-        }
+        pInfo->nAudioBlocks = nblockindex;
+        ALOGV("Total # of audio descriptors %d", nblockindex);
         bRet = true;
         for (int i = 0; i < pInfo->nAudioBlocks; i++) {
             ALOGV("AUDIO DESC BLOCK # %d\n",i);
 
-            pInfo->AudioBlocksArray[i].nChannels = channels[i];
-            ALOGV("pInfo->AudioBlocksArray[i].nChannels %d\n", pInfo->AudioBlocksArray[i].nChannels);
+            channels = (sad[i] & 0x7) + 1;
+            pInfo->AudioBlocksArray[i].nChannels = channels;
+            ALOGV("pInfo->AudioBlocksArray[i].nChannels %d\n", channels);
 
-            ALOGV("Format Byte %d\n", formats[i]);
-            pInfo->AudioBlocksArray[i].nFormatId = (EDID_AUDIO_FORMAT_ID)printFormatFromEDID(formats[i]);
+            formats = (sad[i] & 0xFF) >> 3;
+            ALOGV("Format Byte %d\n", formats);
+            pInfo->AudioBlocksArray[i].nFormatId = (EDID_AUDIO_FORMAT_ID)printFormatFromEDID(formats);
             ALOGV("pInfo->AudioBlocksArray[i].nFormatId %d",pInfo->AudioBlocksArray[i].nFormatId);
 
-            ALOGV("Frequency Byte %d\n", frequency[i]);
-            pInfo->AudioBlocksArray[i].nSamplingFreq = getSamplingFrequencyFromEDID(frequency[i]);
+            frequency = (sad[i] >> 8) & 0xFF;
+            ALOGV("Frequency Byte %d\n", frequency);
+            pInfo->AudioBlocksArray[i].nSamplingFreq = getSamplingFrequencyFromEDID(frequency);
             ALOGV("pInfo->AudioBlocksArray[i].nSamplingFreq %d",pInfo->AudioBlocksArray[i].nSamplingFreq);
 
-            ALOGV("BitsPerSample Byte %d\n", bitrate[i]);
-            pInfo->AudioBlocksArray[i].nBitsPerSample = getBitsPerSampleFromEDID(bitrate[i],formats[i]);
+            bitrate = (sad[i] >> 16) & 0xFF;
+            ALOGV("BitsPerSample Byte %d\n", bitrate);
+            pInfo->AudioBlocksArray[i].nBitsPerSample = getBitsPerSampleFromEDID(bitrate, formats);
             ALOGV("pInfo->AudioBlocksArray[i].nBitsPerSample %d",pInfo->AudioBlocksArray[i].nBitsPerSample);
         }
             getSpeakerAllocation(pInfo);
