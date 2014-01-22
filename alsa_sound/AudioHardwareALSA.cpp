@@ -548,6 +548,9 @@ status_t AudioHardwareALSA::setVoiceVolume(float v)
             mALSADevice->setVoipVolume(vol);
         } else if (newMode == AUDIO_MODE_IN_CALL){
                mALSADevice->setVoiceVolume(vol);
+        } else {
+            ALOGW("Set Voice/VoIP volume in invalide mode:%d",newMode);
+            return BAD_VALUE;
         }
     }
 
