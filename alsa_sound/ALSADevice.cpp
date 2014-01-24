@@ -67,6 +67,9 @@ static int (*acdb_loader_get_ecrx_device)(int acdb_id);
 #define percent_to_index(val, min, max) \
         ((val) * ((max) - (min)) * 0.01 + (min) + .5)
 
+#define MIXER_OPEN_RETRY_COUNT 200
+#define MIXER_OPEN_RETRY_SLEEP_TIME 50000
+
 namespace sys_close {
     ssize_t lib_close(int fd) {
         return close(fd);
@@ -180,42 +183,67 @@ retry:
         }
     }
 
-    for (i = 0; i < MAX_SOUND_CARDS; i++) {
-        snprintf(device, sizeof(device), "/dev/snd/controlC%u", i);
+    ALOGE("SOUND CARD DETECTED before mixer_open %s", soundCardInfo);
 
-        mMixer = mixer_open(device);
-        if (!mMixer) {
-            /* Check the next card */
-            continue;
-        }
+    int m_open_retry_count = MIXER_OPEN_RETRY_COUNT;
+    mMixer = (struct mixer*)NULL;
+    ALOGD("retry count for mixer_open is %d", m_open_retry_count);
 
-        memset(&mSndCardInfo, 0, sizeof(mSndCardInfo));
+    do {
+        ALOGD("Going to call mixer_open");
 
-        if (ioctl(mMixer->fd, SNDRV_CTL_IOCTL_CARD_INFO, &mSndCardInfo) >= 0) {
-            ALOGD("name %s", mSndCardInfo.name);
-            if (strstr((const char*)mSndCardInfo.name, "msm8974") ||
-                strstr((const char*)mSndCardInfo.name, "msm8960") ||
-                strstr((const char*)mSndCardInfo.name, "msm8930") ||
-                strstr((const char*)mSndCardInfo.name, "msm8x10") ||
-                strstr((const char*)mSndCardInfo.name, "msm8226") ||
-                strstr((const char*)mSndCardInfo.name, "apq8064") ||
-                strstr((const char*)mSndCardInfo.name, "apq8074") ) {
-                break;
+        for (i = 0; i < MAX_SOUND_CARDS; i++) {
+            snprintf(device, sizeof(device), "/dev/snd/controlC%u", i);
+            ALOGD("mixer_open for %s", device);
+
+            mMixer = mixer_open(device);
+            if (!mMixer) {
+                /* Check the next card */
+                ALOGD("mixer_open failed for sound card %d with name %s", i, device);
+                continue;
             }
+
+            memset(&mSndCardInfo, 0, sizeof(mSndCardInfo));
+
+            if (ioctl(mMixer->fd, SNDRV_CTL_IOCTL_CARD_INFO, &mSndCardInfo) >= 0) {
+                ALOGD("name %s", mSndCardInfo.name);
+                ALOGD("mixer_open succeeded with name %s", mSndCardInfo.name);
+                if (strstr((const char*)mSndCardInfo.name, "msm8974") ||
+                    strstr((const char*)mSndCardInfo.name, "msm8960") ||
+                    strstr((const char*)mSndCardInfo.name, "msm8930") ||
+                    strstr((const char*)mSndCardInfo.name, "msm8x10") ||
+                    strstr((const char*)mSndCardInfo.name, "msm8226") ||
+                    strstr((const char*)mSndCardInfo.name, "apq8064") ||
+                    strstr((const char*)mSndCardInfo.name, "apq8074") ) {
+                        ALOGD("mixer_open succeeded, SNDRV_CTL_IOCTL_CARD_INFO succeeded breaking");
+                        goto mixer_open_succeed;
+                } else {
+                    ALOGD("mixer_open succeeded but it doesnt match anything we checked for %s", mSndCardInfo.name);
+                }
+            } else {
+                ALOGD("mixer_open succeeded, but SNDRV_CTL_IOCTL_CARD_INFO failed");
+            }
+
+            mixer_close(mMixer);
+            mMixer = NULL;
         }
+        m_open_retry_count--;
+        ALOGD("will have to retry mixer_open as mMixer is NULL, retry after %d ms time retry_count: %d",\
+            (MIXER_OPEN_RETRY_SLEEP_TIME/1000), m_open_retry_count);
+        usleep(MIXER_OPEN_RETRY_SLEEP_TIME);
+    } while(m_open_retry_count);
 
-        mixer_close(mMixer);
-        mMixer = NULL;
-    }
-
+mixer_open_succeed:
     if (!mMixer) {
-        ALOGE("Could not find a valid sound card");
+        ALOGE("mixer_open failed, Could not open mixer");
         mStatus = NO_INIT;
     } else {
+        mStatus = OK;
         mSndCardNumber = i;
+        ALOGD("mixer_open succeeded with sndcardnumber %d", i);
     }
 
-    ALOGD("ALSA module opened, mSndCardNumber %d", mSndCardNumber);
+    ALOGD("Returning from %s: ALSA module opened, mSndCardNumber %d ", __func__, mSndCardNumber);
 }
 
 //static int s_device_close(hw_device_t* device)

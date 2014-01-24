@@ -158,64 +158,86 @@ struct mixer *mixer_open(const char *device)
     unsigned n, m;
     int fd;
 
+    ALOGD("%s: +", __func__);
     fd = open(device, O_RDWR);
     if (fd < 0) {
-        ALOGE("Control open failed\n");
+        ALOGE("%s: Control open failed\n", __func__);
+        perror("mixer_open failure\n");
         return 0;
     }
 
+    ALOGD("%s: open succeeded with %d", __func__, fd);
+
     memset(&elist, 0, sizeof(elist));
     if (ioctl(fd, SNDRV_CTL_IOCTL_ELEM_LIST, &elist) < 0) {
-        ALOGE("SNDRV_CTL_IOCTL_ELEM_LIST failed\n");
+        ALOGE("%s: SNDRV_CTL_IOCTL_ELEM_LIST failed\n", __func__);
         goto fail;
     }
 
     mixer = calloc(1, sizeof(*mixer));
-    if (!mixer)
+    if (!mixer) {
+        ALOGE("%s: calloc failed", __func__);
         goto fail;
+    }
 
     mixer->ctl = calloc(elist.count, sizeof(struct mixer_ctl));
     mixer->info = calloc(elist.count, sizeof(struct snd_ctl_elem_info));
-    if (!mixer->ctl || !mixer->info)
+    if (!mixer->ctl || !mixer->info) {
+        ALOGD("%s: calloc  for mixer->ctl, or mixer->info failed", __func__);
         goto fail;
+    }
 
     eid = calloc(elist.count, sizeof(struct snd_ctl_elem_id));
-    if (!eid)
+    if (!eid) {
+        ALOGD("%s: calloc  for eid failed", __func__);
         goto fail;
+    }
 
     mixer->count = elist.count;
     mixer->fd = fd;
     elist.space = mixer->count;
     elist.pids = eid;
-    if (ioctl(fd, SNDRV_CTL_IOCTL_ELEM_LIST, &elist) < 0)
+    if (ioctl(fd, SNDRV_CTL_IOCTL_ELEM_LIST, &elist) < 0) {
+        ALOGE("%s: SNDRV_CTL_IOCTL_ELEM_LIST failed ", __func__);
         goto fail;
+    }
 
     for (n = 0; n < mixer->count; n++) {
         struct snd_ctl_elem_info *ei = mixer->info + n;
         ei->id.numid = eid[n].numid;
-        if (ioctl(fd, SNDRV_CTL_IOCTL_ELEM_INFO, ei) < 0)
+        if (ioctl(fd, SNDRV_CTL_IOCTL_ELEM_INFO, ei) < 0) {
+            ALOGE("%s: SNDRV_CTL_IOCTL_ELEM_INFO failed for count %d and eid ", __func__, n);
             goto fail;
+        }
         mixer->ctl[n].info = ei;
         mixer->ctl[n].mixer = mixer;
         if (ei->type == SNDRV_CTL_ELEM_TYPE_ENUMERATED) {
             char **enames = calloc(ei->value.enumerated.items, sizeof(char*));
-            if (!enames)
+            if (!enames) {
+                ALOGE("%s: calloc for enames failed ", __func__);
                 goto fail;
+            }
             mixer->ctl[n].ename = enames;
             for (m = 0; m < ei->value.enumerated.items; m++) {
                 memset(&tmp, 0, sizeof(tmp));
                 tmp.id.numid = ei->id.numid;
                 tmp.value.enumerated.item = m;
-                if (ioctl(fd, SNDRV_CTL_IOCTL_ELEM_INFO, &tmp) < 0)
+                if (ioctl(fd, SNDRV_CTL_IOCTL_ELEM_INFO, &tmp) < 0) {
+                    ALOGE("%s: SNDRV_CTL_IOCTL_ELEM_INFO failed for enumerated \
+                        items with name %s for iteration %d", __func__, tmp.value.enumerated.name, m);
                     goto fail;
+                }
                 enames[m] = strdup(tmp.value.enumerated.name);
-                if (!enames[m])
+                if (!enames[m]) {
+                    ALOGE("%s: SNDRV_CTL_IOCTL_ELEM_INFO failed ", __func__);
                     goto fail;
+                }
             }
         }
     }
 
     free(eid);
+    ALOGD("%s: - succeeded", __func__);
     return mixer;
 
 fail:
@@ -225,6 +247,7 @@ fail:
         mixer_close(mixer);
     else if (fd >= 0)
         close(fd);
+    ALOGD("%s: - failed ", __func__);
     return 0;
 }
 
