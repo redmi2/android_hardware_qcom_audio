@@ -3154,10 +3154,24 @@ void AudioSessionOutALSA::setSpdifHdmiRoutingFlags(int devices)
                 mParent->mLock.unlock();
                 updateDevicesInSessionList(AudioSystem::DEVICE_OUT_AUX_DIGITAL, STANDBY);
                 mParent->mLock.lock();
+            } else if ((mHdmiFormat & COMPRESSED_FORCED_PCM_FORMAT) &&
+                       ((mFormat && AUDIO_FORMAT_PCM_16_BIT_TE) ||
+                        (mFormat && AUDIO_FORMAT_PCM_24_BIT_TE))) {
+                mParent->mHdmiRenderFormat = COMPRESSED;
+                mParent->mLock.unlock();
+                updateDevicesInSessionList(AudioSystem::DEVICE_OUT_AUX_DIGITAL, STANDBY);
+                mParent->mLock.lock();
             }
         } else {
-            if(mHdmiFormat & PCM_FORMAT || mHdmiFormat & COMPRESSED_FORCED_PCM_FORMAT){
+            if(mHdmiFormat & PCM_FORMAT) {
                 mParent->mHdmiRenderFormat = UNCOMPRESSED;
+            } else if(mHdmiFormat & COMPRESSED_FORCED_PCM_FORMAT) {
+                if((mFormat && AUDIO_FORMAT_PCM_16_BIT_TE) ||
+                   (mFormat && AUDIO_FORMAT_PCM_24_BIT_TE)) {
+                    mParent->mHdmiRenderFormat = COMPRESSED;
+                } else {
+                    mParent->mHdmiRenderFormat = UNCOMPRESSED;
+                }
             } else {
                 mParent->mHdmiRenderFormat = COMPRESSED;
             }
@@ -3173,10 +3187,24 @@ void AudioSessionOutALSA::setSpdifHdmiRoutingFlags(int devices)
                 mParent->mLock.unlock();
                 updateDevicesInSessionList(AudioSystem::DEVICE_OUT_SPDIF, STANDBY);
                 mParent->mLock.lock();
+            } else if ((mSpdifFormat == COMPRESSED_FORCED_PCM_FORMAT) &&
+                       ((mFormat && AUDIO_FORMAT_PCM_16_BIT_TE) ||
+                        (mFormat && AUDIO_FORMAT_PCM_24_BIT_TE))) {
+                mParent->mSpdifRenderFormat = COMPRESSED;
+                mParent->mLock.unlock();
+                updateDevicesInSessionList(AudioSystem::DEVICE_OUT_SPDIF, STANDBY);
+                mParent->mLock.lock();
            }
         } else {
-            if(mSpdifFormat == PCM_FORMAT || mSpdifFormat == COMPRESSED_FORCED_PCM_FORMAT) {
+            if(mSpdifFormat == PCM_FORMAT) {
                 mParent->mSpdifRenderFormat = UNCOMPRESSED;
+            } else if (mSpdifFormat == COMPRESSED_FORCED_PCM_FORMAT) {
+                if((mFormat && AUDIO_FORMAT_PCM_16_BIT_TE) ||
+                   (mFormat && AUDIO_FORMAT_PCM_24_BIT_TE)) {
+                    mParent->mSpdifRenderFormat = COMPRESSED;
+                } else {
+                    mParent->mSpdifRenderFormat = UNCOMPRESSED;
+                }
             } else {
                 mParent->mSpdifRenderFormat = COMPRESSED;
             }
