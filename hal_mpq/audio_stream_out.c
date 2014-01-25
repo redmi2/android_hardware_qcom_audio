@@ -1028,13 +1028,32 @@ int update_bitstrm_pointers(struct stream_out *out, int pcm_2ch_len,
     return 0;
 }
 
+bool is_compressed_format(audio_format_t format)
+{
+    switch (format) {
+    case AUDIO_FORMAT_AC3:
+        return true;
+    default:
+        return false;
+   }
+}
+
 /*TODO correct it */
 static int configure_compr(struct stream_out *out,
         struct alsa_handle *handle) {
     handle->compr_config.codec = (struct snd_codec *)
         calloc(1, sizeof(struct snd_codec));
+    if (!handle->compr_config.codec) {
+        ALOGE("error allocating the memory");
+        return -1;
+    }
     handle->compr_config.codec->id =
         get_snd_codec_id(out->format); /*TODO: correct this based on format*/
+    if (is_compressed_format(out->format)) {
+        handle->compr_config.codec->compr_passthr = 1;
+    } else {
+        handle->compr_config.codec->compr_passthr = 0;
+    }
     handle->compr_config.fragment_size = COMPRESS_OFFLOAD_FRAGMENT_SIZE;
     handle->compr_config.fragments = COMPRESS_OFFLOAD_NUM_FRAGMENTS;
     handle->compr_config.codec->sample_rate =
@@ -1332,6 +1351,7 @@ static bool is_supported_format(audio_format_t format)
     case AUDIO_FORMAT_WMA:
     case AUDIO_FORMAT_WMA_PRO:
     case AUDIO_FORMAT_MP2:
+    case AUDIO_FORMAT_AC3:
         return true;
     default:
         ALOGE("%s: Unsupported audio format: %x", __func__, format);
@@ -1363,6 +1383,9 @@ static int get_snd_codec_id(audio_format_t format)
         break;
     case AUDIO_FORMAT_MP2:
         id = SND_AUDIOCODEC_MP2;
+        break;
+    case AUDIO_FORMAT_AC3:
+        id = SND_AUDIOCODEC_AC3;
         break;
     default:
         ALOGE("%s: Unsupported audio format %x", __func__, format);
@@ -1679,6 +1702,66 @@ static int stop_output_stream(struct stream_out *out, struct alsa_handle *handle
     return ret;
 }
 
+int set_mixer_control(struct stream_out *out, const char * mixer_ctl_name,
+        const char *mixer_val)
+{
+   struct audio_device *adev = out->dev;
+   struct mixer_ctl *ctl = NULL;
+   ALOGE("setting mixer ctl %s with value %s", mixer_ctl_name, mixer_val);
+   ctl = mixer_get_ctl_by_name(adev->mixer, mixer_ctl_name);
+   if (!ctl) {
+        ALOGE("%s: could not get ctl for mixer cmd - %s",
+              __func__, mixer_ctl_name);
+      return -EINVAL;
+   }
+
+   return mixer_ctl_set_enum_by_string(ctl, mixer_val);
+}
+
+int configure_devices(struct stream_out *out)
+{
+    if (out->hdmi_format == UNCOMPRESSED) {
+        set_mixer_control(out, "HDMI RX Format", "LPCM");
+        set_mixer_control(out, "HDMI_RX SampleRate", "KHZ_48");
+    }
+    else if(out->hdmi_format == COMPRESSED) {
+        set_mixer_control(out, "HDMI RX Format", "Compr");
+        switch (out->sample_rate) {
+        case 32000:
+            set_mixer_control(out, "HDMI_RX SampleRate", "KHZ_32");
+            break;
+        case 44100:
+            set_mixer_control(out, "HDMI_RX SampleRate", "KHZ_44_1");
+            break;
+        default:
+        case 48000:
+            set_mixer_control(out, "HDMI_RX SampleRate", "KHZ_48");
+            break;
+        }
+    }
+    if (out->spdif_format == UNCOMPRESSED) {
+        set_mixer_control(out, "SPDIF RX Format", "LPCM");
+        set_mixer_control(out, "SPDIF RX SampleRate", "KHZ_48");
+    } else if (out->spdif_format == COMPRESSED) {
+        set_mixer_control(out, "SPDIF RX Format", "Compr");
+        ALOGE("sample rate = %d", out->sample_rate);
+        switch (out->sample_rate) {
+        case 32000:
+            set_mixer_control(out, "SPDIF RX SampleRate", "KHZ_32");
+            break;
+        case 44100:
+            set_mixer_control(out, "SPDIF RX SampleRate", "KHZ_44_1");
+            break;
+        default:
+        case 48000:
+            set_mixer_control(out, "SPDIF RX SampleRate", "KHZ_48");
+            break;
+        }
+    }
+
+    return 0;
+}
+
 int start_output_stream(struct stream_out *out, struct alsa_handle *handle)
 {
     int ret = 0;
@@ -1714,6 +1797,7 @@ int start_output_stream(struct stream_out *out, struct alsa_handle *handle)
 
     ALOGV("%s: Opening PCM device card_id(%d) device_id(%d)",
           __func__, 0, handle->device_id);
+    ret = configure_devices(out);
     if (out->uc_strm_type != OFFLOAD_PLAYBACK_STREAM) {
         handle->compr = NULL;
         handle->pcm = pcm_open(SOUND_CARD, handle->device_id,
@@ -1739,7 +1823,7 @@ int start_output_stream(struct stream_out *out, struct alsa_handle *handle)
         }
         if (out->offload_callback)
             compress_nonblock(handle->compr, out->non_blocking);
-
+        ALOGE("configure_device = %d", ret);
         if (adev->visualizer_start_output != NULL)
             adev->visualizer_start_output(out->handle);
     }
@@ -1945,7 +2029,6 @@ static int out_set_parameters(struct audio_stream *stream, const char *kvpairs)
                 val == AUDIO_DEVICE_NONE) {
             val = AUDIO_DEVICE_OUT_SPEAKER;
         }
-
         /*
          * select_devices() call below switches all the usecases on the same
          * backend to the new device. Refer to check_usecases_codec_backend() in
@@ -1966,6 +2049,7 @@ static int out_set_parameters(struct audio_stream *stream, const char *kvpairs)
          */
         if (val != 0) {
             out->devices = val;
+            update_device_formats(out);
 
             if (!out->standby)
                 select_devices(adev, out->usecase);
@@ -2643,6 +2727,24 @@ static int out_flush(struct audio_stream_out* stream)
     return status;
 }
 
+void update_device_formats(struct stream_out *out) {
+    char value[128];
+    property_get("persist.sys.audio.default", value, "0");
+    if (!strncmp(value,"spdif",sizeof(value)))
+        out->devices = AUDIO_DEVICE_OUT_SPDIF;
+
+    if (is_compressed_format(out->format)) {
+        if (out->devices & AUDIO_DEVICE_OUT_SPDIF)
+            out->spdif_format = COMPRESSED;
+        if (out->devices & AUDIO_DEVICE_OUT_AUX_DIGITAL)
+            out->hdmi_format = COMPRESSED;
+    }
+    if (!(out->devices & AUDIO_DEVICE_OUT_SPDIF))
+        out->spdif_format = INVALID;
+    if (!(out->devices & AUDIO_DEVICE_OUT_AUX_DIGITAL))
+        out->hdmi_format = INVALID;
+}
+
 int adev_open_output_stream(struct audio_hw_device *dev,
                                    audio_io_handle_t handle,
                                    audio_devices_t devices,
@@ -2676,7 +2778,6 @@ int adev_open_output_stream(struct audio_hw_device *dev,
     out->config = config;
     out->handle = handle;
 
-//*TODO: get hdmi/spdif format/channels from routing manager and intialize out->spdif_format & out->hdmi_format*/
     /* Init use case and pcm_config */
     out->hdmi_format = UNCOMPRESSED;
     out->spdif_format = UNCOMPRESSED;
@@ -2698,10 +2799,8 @@ int adev_open_output_stream(struct audio_hw_device *dev,
     out->stream.get_render_position = out_get_render_position;
     out->stream.get_next_write_timestamp = out_get_next_write_timestamp;
     out->stream.get_presentation_position = out_get_presentation_position;
-
+    update_device_formats(out);
     out->standby = 1;
-    /* out->muted = false; by calloc() */
-    /* out->written = 0; by calloc() */
 
     pthread_mutex_init(&out->lock, (const pthread_mutexattr_t *) NULL);
     pthread_cond_init(&out->cond, (const pthread_condattr_t *) NULL);
