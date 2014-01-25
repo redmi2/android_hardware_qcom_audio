@@ -609,7 +609,7 @@ void ALSADevice::switchDeviceUseCase(alsa_handle_t *handle,
 
     enableDevice(handle, bIsUseCaseSet);
 
-    handle->activeDevice = switchTodevices;
+    handle->devices = handle->activeDevice = switchTodevices;
 
     if (use_case != NULL) {
         free(use_case);
