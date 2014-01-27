@@ -2540,7 +2540,7 @@ void AudioPolicyManager::clearComboDevice(routing_strategy &strategy, audio_devi
             case AUDIO_DEVICE_OUT_PROXY:
                 ALOGW("clearComboDevice - No Combo device use case with ULL\
                         for device with two differnet backends");
-                device = mAvailableOutputDevices & ~device;
+                device = AUDIO_DEVICE_NONE;
                 break;
             default:
                 ALOGV("Combo device supported: Device that shares same\
