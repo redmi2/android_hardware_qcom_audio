@@ -1112,10 +1112,18 @@ status_t AudioPolicyManager::stopOutput(audio_io_handle_t output,
 #endif
                         outputDesc->sharesHwModuleWith(desc) &&
                         newDevice != desc->device()) {
+                    uint32_t DelayMs = 0;
+                    //If device switch is combto to single set the delay 0
+                    //This is the workaround to fix the issue ringtone
+                    //Playback issue on combo device.
+                    if((newDevice&desc->device())== newDevice)
+                        DelayMs = outputDesc->mLatency/2;
+                    else
+                        DelayMs = outputDesc->mLatency*2;
                     setOutputDevice(curOutput,
                                     getNewDevice(curOutput, false /*fromCache*/),
                                     true,
-                                    outputDesc->mLatency*2);
+                                    DelayMs);
                 }
             }
             // update the outputs if stopping one with a stream that can affect notification routing
