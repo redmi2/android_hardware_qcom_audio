@@ -1548,6 +1548,10 @@ status_t AudioHardwareALSA::doRouting(int device, char* useCase)
                             mALSADevice->route(&(*it),(uint32_t)device, newMode);
                             mRouteAudioToExtOut = true;
                             startPlaybackOnExtOut_l(activeUsecase);
+                        } else if(isExtOutDevice(device)) {
+                            mALSADevice->route(&(*it),(uint32_t)device, newMode);
+                            mRouteAudioToExtOut = true;
+                            startPlaybackOnExtOut_l(useCaseStringToEnum(it->useCase));
                         } else {
                            mALSADevice->route(&(*it),(uint32_t)device, newMode);
                         }
