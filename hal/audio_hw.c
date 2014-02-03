@@ -152,8 +152,55 @@ static pthread_mutex_t adev_init_lock;
 static unsigned int audio_device_ref_count;
 
 static int set_voice_volume_l(struct audio_device *adev, float volume);
-static uint32_t get_offload_buffer_size();
-static int set_gapless_mode(struct audio_device *adev);
+
+/* Read  offload buffer size from a property.
+ * If value is not power of 2  round it to
+ * power of 2.
+ */
+static uint32_t get_offload_buffer_size()
+{
+    char value[PROPERTY_VALUE_MAX] = {0};
+    uint32_t fragment_size = COMPRESS_OFFLOAD_FRAGMENT_SIZE;
+    if((property_get("audio.offload.buffer.size.kb", value, "")) &&
+            atoi(value)) {
+        fragment_size =  atoi(value) * 1024;
+        //ring buffer size needs to be 4k aligned.
+        CHECK(!(fragment_size * COMPRESS_OFFLOAD_NUM_FRAGMENTS % 4096));
+    }
+    if(fragment_size < MIN_COMPRESS_OFFLOAD_FRAGMENT_SIZE)
+        fragment_size = MIN_COMPRESS_OFFLOAD_FRAGMENT_SIZE;
+    else if(fragment_size > MAX_COMPRESS_OFFLOAD_FRAGMENT_SIZE)
+        fragment_size = MAX_COMPRESS_OFFLOAD_FRAGMENT_SIZE;
+    ALOGVV("%s: fragment_size %d", __func__, fragment_size);
+    return fragment_size;
+}
+
+static int check_and_set_gapless_mode(struct audio_device *adev) {
+
+
+    char value[PROPERTY_VALUE_MAX] = {0};
+    bool gapless_enabled = false;
+    const char *mixer_ctl_name = "Compress Gapless Playback";
+    struct mixer_ctl *ctl;
+
+    ALOGV("%s:", __func__);
+    property_get("audio.offload.gapless.enabled", value, NULL);
+    gapless_enabled = atoi(value) || !strncmp("true", value, 4);
+
+    ctl = mixer_get_ctl_by_name(adev->mixer, mixer_ctl_name);
+    if (!ctl) {
+        ALOGE("%s: Could not get ctl for mixer cmd - %s",
+                               __func__, mixer_ctl_name);
+        return -EINVAL;
+    }
+
+    if (mixer_ctl_set_value(ctl, 0, gapless_enabled) < 0) {
+        ALOGE("%s: Could not set gapless mode %d",
+                       __func__, gapless_enabled);
+         return -EINVAL;
+    }
+    return 0;
+}
 
 static bool is_supported_format(audio_format_t format)
 {
@@ -199,6 +246,10 @@ int enable_audio_route(struct audio_device *adev,
     else
         snd_device = usecase->out_snd_device;
 
+#ifdef DS1_DOLBY_DAP_ENABLED
+    audio_extn_dolby_set_dmid(adev);
+    audio_extn_dolby_set_endpoint(adev);
+#endif
     strcpy(mixer_path, use_case_table[usecase->id]);
     platform_add_backend_name(mixer_path, snd_device);
     ALOGV("%s: apply mixer path: %s", __func__, mixer_path);
@@ -831,6 +882,7 @@ static void *offload_thread_loop(void *context)
 {
     struct stream_out *out = (struct stream_out *) context;
     struct listnode *item;
+    int ret = 0;
 
     setpriority(PRIO_PROCESS, 0, ANDROID_PRIORITY_AUDIO);
     set_sched_policy(0, SP_FOREGROUND);
@@ -880,8 +932,14 @@ static void *offload_thread_loop(void *context)
             event = STREAM_CBK_EVENT_WRITE_READY;
             break;
         case OFFLOAD_CMD_PARTIAL_DRAIN:
-            compress_next_track(out->compr);
-            compress_partial_drain(out->compr);
+            ret = compress_next_track(out->compr);
+            if(ret == 0)
+                compress_partial_drain(out->compr);
+            else if(ret == -ETIMEDOUT)
+                compress_drain(out->compr);
+            else
+                ALOGE("%s: Next track returned error %d",__func__, ret);
+
             send_callback = true;
             event = STREAM_CBK_EVENT_DRAIN_READY;
             break;
@@ -1115,6 +1173,11 @@ int start_output_stream(struct stream_out *out)
         }
         if (out->offload_callback)
             compress_nonblock(out->compr, out->non_blocking);
+
+#ifdef DS1_DOLBY_DDP_ENABLED
+        if (audio_extn_is_dolby_format(out->format))
+            audio_extn_dolby_send_ddp_endp_params(adev);
+#endif
 
         if (adev->visualizer_start_output != NULL)
             adev->visualizer_start_output(out->handle, out->pcm_device_id);
@@ -2053,7 +2116,7 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
             goto error_open;
         }
         if (!is_supported_format(config->offload_info.format) &&
-                !audio_extn_dolby_is_supported_format(config->offload_info.format)) {
+                !audio_extn_is_dolby_format(config->offload_info.format)) {
             ALOGE("%s: Unsupported audio format", __func__);
             ret = -EINVAL;
             goto error_open;
@@ -2076,9 +2139,10 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
         out->stream.drain = out_drain;
         out->stream.flush = out_flush;
 
-        if (audio_extn_dolby_is_supported_format(config->offload_info.format))
+        if (audio_extn_is_dolby_format(config->offload_info.format))
             out->compr_config.codec->id =
-                audio_extn_dolby_get_snd_codec_id(config->offload_info.format);
+                audio_extn_dolby_get_snd_codec_id(adev, out,
+                                                  config->offload_info.format);
         else
             out->compr_config.codec->id =
                 get_snd_codec_id(config->offload_info.format);
@@ -2103,18 +2167,8 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
         ALOGV("%s: offloaded output offload_info version %04x bit rate %d",
                 __func__, config->offload_info.version,
                 config->offload_info.bit_rate);
-
-        if (audio_extn_dolby_is_supported_format(out->format)) {
-            ret = audio_extn_dolby_set_DMID(adev);
-            if (ret != 0) {
-                ALOGE("%s: Dolby DMID cannot be set error:%d",
-                      __func__, ret);
-                goto error_open;
-            }
-        }
-
         //Decide if we need to use gapless mode by default
-        set_gapless_mode(adev);
+        check_and_set_gapless_mode(adev);
 
     } else if (out->flags & AUDIO_OUTPUT_FLAG_INCALL_MUSIC) {
         ret = voice_check_and_set_incall_music_usecase(adev, out);
@@ -2650,55 +2704,6 @@ static int adev_open(const hw_module_t *module, const char *name,
     return 0;
 }
 
-/* Read  offload buffer size from a property.
- * If value is not power of 2  round it to
- * power of 2.
- */
-static uint32_t get_offload_buffer_size()
-{
-    char value[PROPERTY_VALUE_MAX] = {0};
-    uint32_t fragment_size = COMPRESS_OFFLOAD_FRAGMENT_SIZE;
-    if((property_get("audio.offload.buffer.size.kb", value, "")) &&
-            atoi(value)) {
-        fragment_size =  atoi(value) * 1024;
-        //ring buffer size needs to be 4k aligned.
-        CHECK(!(fragment_size * COMPRESS_OFFLOAD_NUM_FRAGMENTS % 4096));
-    }
-    if(fragment_size < MIN_COMPRESS_OFFLOAD_FRAGMENT_SIZE)
-        fragment_size = MIN_COMPRESS_OFFLOAD_FRAGMENT_SIZE;
-    else if(fragment_size > MAX_COMPRESS_OFFLOAD_FRAGMENT_SIZE)
-        fragment_size = MAX_COMPRESS_OFFLOAD_FRAGMENT_SIZE;
-    ALOGVV("%s: fragment_size %d", __func__, fragment_size);
-    return fragment_size;
-}
-
-static int set_gapless_mode(struct audio_device *adev) {
-
-
-    char value[PROPERTY_VALUE_MAX] = {0};
-    bool gapless_enabled = false;
-    const char *mixer_ctl_name = "Compress Gapless Playback";
-    struct mixer_ctl *ctl;
-
-    ALOGV("%s:", __func__);
-    property_get("audio.offload.gapless.enabled", value, NULL);
-    gapless_enabled = atoi(value) || !strncmp("true", value, 4);
-
-    ctl = mixer_get_ctl_by_name(adev->mixer, mixer_ctl_name);
-    if (!ctl) {
-        ALOGE("%s: Could not get ctl for mixer cmd - %s",
-                               __func__, mixer_ctl_name);
-        return -EINVAL;
-    }
-
-    if (mixer_ctl_set_value(ctl, 0, gapless_enabled) < 0) {
-        ALOGE("%s: Could not set gapless mode %d",
-                       __func__, gapless_enabled);
-         return -EINVAL;
-    }
-    return 0;
-
-}
 static struct hw_module_methods_t hal_module_methods = {
     .open = adev_open,
 };
