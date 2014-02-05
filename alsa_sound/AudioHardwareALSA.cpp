@@ -548,6 +548,9 @@ status_t AudioHardwareALSA::setVoiceVolume(float v)
             mALSADevice->setVoipVolume(vol);
         } else if (newMode == AUDIO_MODE_IN_CALL){
                mALSADevice->setVoiceVolume(vol);
+        } else {
+            ALOGW("Set Voice/VoIP volume in invalide mode:%d",newMode);
+            return BAD_VALUE;
         }
     }
 
@@ -1548,6 +1551,10 @@ status_t AudioHardwareALSA::doRouting(int device, char* useCase)
                             mALSADevice->route(&(*it),(uint32_t)device, newMode);
                             mRouteAudioToExtOut = true;
                             startPlaybackOnExtOut_l(activeUsecase);
+                        } else if(isExtOutDevice(device)) {
+                            mALSADevice->route(&(*it),(uint32_t)device, newMode);
+                            mRouteAudioToExtOut = true;
+                            startPlaybackOnExtOut_l(useCaseStringToEnum(it->useCase));
                         } else {
                            mALSADevice->route(&(*it),(uint32_t)device, newMode);
                         }
