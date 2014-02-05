@@ -2169,6 +2169,8 @@ status_t AudioPolicyManager::checkAndSetVolume(int stream,
                                                    int delayMs,
                                                    bool force)
 {
+    status_t status = BAD_VALUE;
+
     // do not change actual stream volume if the stream is muted
     if (mOutputs.valueFor(output)->mMuteCount[stream] != 0) {
         ALOGVV("checkAndSetVolume() stream %d muted count %d",
@@ -2257,10 +2259,14 @@ status_t AudioPolicyManager::checkAndSetVolume(int stream,
         }
 
         if (voiceVolume != mLastALSAvoiceVolume && output == mPrimaryOutput) {
-            mpClientInterface->setVoiceVolume(voiceVolume, delayMs);
-            //Cache the voiceVolume only when in Call
-            if (isInCall())
-                mLastALSAvoiceVolume = voiceVolume;
+            //Set the voiceVolume only when in Call and cache the volume only
+            //when the volume is applied successfully
+            if (isInCall()) {
+                status = mpClientInterface->setVoiceVolume(voiceVolume, delayMs);
+                if (status == NO_ERROR) {
+                    mLastALSAvoiceVolume = voiceVolume;
+                }
+            }
         }
     }
 
@@ -2540,7 +2546,7 @@ void AudioPolicyManager::clearComboDevice(routing_strategy &strategy, audio_devi
             case AUDIO_DEVICE_OUT_PROXY:
                 ALOGW("clearComboDevice - No Combo device use case with ULL\
                         for device with two differnet backends");
-                device = mAvailableOutputDevices & ~device;
+                device = AUDIO_DEVICE_NONE;
                 break;
             default:
                 ALOGV("Combo device supported: Device that shares same\
