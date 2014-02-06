@@ -239,15 +239,14 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
                       device = AudioSystem::DEVICE_IN_BUILTIN_MIC;
                   }
               }
-           } else {
-               ALOGE("setParameters(): keyRouting with device2 %#x", device);
-               if (mParent->isExtOutDevice(device)) {
-                   mParent->mRouteAudioToExtOut = true;
-                   ALOGD("setParameters(): device %#x", device);
-               }
-               char * usecase = (mHandle != NULL)? mHandle->useCase: NULL;
-               err = mParent->doRouting(device,usecase);
            }
+           ALOGE("setParameters(): keyRouting with device2 %#x", device);
+           if (mParent->isExtOutDevice(device)) {
+               mParent->mRouteAudioToExtOut = true;
+               ALOGD("setParameters(): device %#x", device);
+           }
+           char * usecase = (mHandle != NULL)? mHandle->useCase: NULL;
+           err = mParent->doRouting(device,usecase);
            if(err) {
               ALOGE("doRouting failed = %d",err);
            } else {
