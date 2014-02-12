@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
  * Copyright (C) 2013 The Android Open Source Project
@@ -174,51 +174,25 @@ enum {
 #define INCALL_MUSIC_UPLINK_PCM_DEVICE 1
 #define INCALL_MUSIC_UPLINK2_PCM_DEVICE 16
 #define SPKR_PROT_CALIB_RX_PCM_DEVICE 5
-#define SPKR_PROT_CALIB_TX_PCM_DEVICE 25
+#define SPKR_PROT_CALIB_TX_PCM_DEVICE 22
 #define PLAYBACK_OFFLOAD_DEVICE 9
 #define COMPRESS_VOIP_CALL_PCM_DEVICE 3
 
-#ifdef PLATFORM_MSM8610
+
 #define LOWLATENCY_PCM_DEVICE 12
 #define EC_REF_RX "I2S_RX"
-#else
-#define LOWLATENCY_PCM_DEVICE 15
-#define EC_REF_RX "SLIM_RX"
-#endif
-#ifdef PLATFORM_MSM8x26
-#define COMPRESS_CAPTURE_DEVICE 20
-#else
 #define COMPRESS_CAPTURE_DEVICE 19
-#endif
 
-#ifdef PLATFORM_MSM8x26
-#define VOICE_CALL_PCM_DEVICE 2
-#define VOICE2_CALL_PCM_DEVICE 14
-#define VOLTE_CALL_PCM_DEVICE 17
-#define QCHAT_CALL_PCM_DEVICE 18
-#elif PLATFORM_APQ8084
-#define VOICE_CALL_PCM_DEVICE 20
-#define VOICE2_CALL_PCM_DEVICE 13
-#define VOLTE_CALL_PCM_DEVICE 21
-#define QCHAT_CALL_PCM_DEVICE 06
-#elif PLATFORM_MSM8610
 #define VOICE_CALL_PCM_DEVICE 2
 #define VOICE2_CALL_PCM_DEVICE 13
 #define VOLTE_CALL_PCM_DEVICE 15
 #define QCHAT_CALL_PCM_DEVICE 14
-#else
-#define VOICE_CALL_PCM_DEVICE 2
-#define VOICE2_CALL_PCM_DEVICE 22
-#define VOLTE_CALL_PCM_DEVICE 14
-#define QCHAT_CALL_PCM_DEVICE 20
-#endif
 
 #define LIB_CSD_CLIENT "libcsd-client.so"
 /* CSD-CLIENT related functions */
 typedef int (*init_t)();
 typedef int (*deinit_t)();
 typedef int (*disable_device_t)();
-typedef int (*enable_device_config_t)(int, int);
 typedef int (*enable_device_t)(int, int, uint32_t);
 typedef int (*volume_t)(uint32_t, int);
 typedef int (*mic_mute_t)(uint32_t, int);
@@ -235,7 +209,6 @@ struct csd_data {
     init_t init;
     deinit_t deinit;
     disable_device_t disable_device;
-    enable_device_config_t enable_device_config;
     enable_device_t enable_device;
     volume_t volume;
     mic_mute_t mic_mute;
