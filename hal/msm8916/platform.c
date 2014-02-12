@@ -17,7 +17,7 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "msm8974_platform"
+#define LOG_TAG "msm8916_platform"
 /*#define LOG_NDEBUG 0*/
 #define LOG_NDDEBUG 0
 
@@ -76,7 +76,7 @@ struct audio_block_header
 
 /* Audio calibration related functions */
 typedef void (*acdb_deallocate_t)();
-typedef int  (*acdb_init_t)(char *);
+typedef int  (*acdb_init_t)();
 typedef void (*acdb_send_audio_cal_t)(int, int);
 typedef void (*acdb_send_voice_cal_t)(int, int);
 typedef int (*acdb_reload_vocvoltable_t)(int);
@@ -416,13 +416,6 @@ static struct csd_data *open_csd_client()
                   __func__, dlerror());
             goto error;
         }
-        csd->enable_device_config = (enable_device_config_t)dlsym(csd->csd_client,
-                                               "csd_client_enable_device_config");
-        if (csd->enable_device_config == NULL) {
-            ALOGE("%s: dlsym error %s for csd_client_enable_device_config",
-                  __func__, dlerror());
-            goto error;
-        }
         csd->enable_device = (enable_device_t)dlsym(csd->csd_client,
                                              "csd_client_enable_device");
         if (csd->enable_device == NULL) {
@@ -650,26 +643,15 @@ void *platform_init(struct audio_device *adev)
                   __func__, LIB_ACDB_LOADER);
 
         my_data->acdb_init = (acdb_init_t)dlsym(my_data->acdb_handle,
-                                                    "acdb_loader_init_v2");
+                                                    "acdb_loader_init_ACDB");
         if (my_data->acdb_init == NULL)
-            ALOGE("%s: dlsym error %s for acdb_loader_init_v2", __func__, dlerror());
+            ALOGE("%s: dlsym error %s for acdb_loader_init_ACDB", __func__, dlerror());
         else
-            my_data->acdb_init(snd_card_name);
+            my_data->acdb_init();
     }
 
     /* Initialize ACDB ID's */
     platform_info_init();
-
-    /* If platform is apq8084 and baseband is MDM, load CSD Client specific
-     * symbols. Voice call is handled by MDM and apps processor talks to
-     * MDM through CSD Client
-     */
-    property_get("ro.board.platform", platform, "");
-    property_get("ro.baseband", baseband, "");
-    if (!strncmp("apq8084", platform, sizeof("apq8084")) &&
-        !strncmp("mdm", baseband, sizeof("mdm"))) {
-         my_data->csd = open_csd_client();
-    }
 
     /* init usb */
     audio_extn_usb_init(adev);
@@ -731,7 +713,7 @@ void platform_add_backend_name(char *mixer_path, snd_device_t snd_device)
     else if (snd_device == SND_DEVICE_OUT_HDMI)
         strlcat(mixer_path, " hdmi", MIXER_PATH_MAX_LENGTH);
     else if (snd_device == SND_DEVICE_OUT_SPEAKER_AND_HDMI)
-        strcat(mixer_path, " speaker-and-hdmi");
+        strlcat(mixer_path, " speaker-and-hdmi", MIXER_PATH_MAX_LENGTH);
     else if (snd_device == SND_DEVICE_OUT_AFE_PROXY)
         strlcat(mixer_path, " afe-proxy", MIXER_PATH_MAX_LENGTH);
     else if (snd_device == SND_DEVICE_OUT_USB_HEADSET)
@@ -833,32 +815,6 @@ int platform_switch_voice_call_device_pre(void *platform)
         if (ret < 0) {
             ALOGE("%s: csd_client_disable_device, failed, error %d",
                   __func__, ret);
-        }
-    }
-    return ret;
-}
-
-int platform_switch_voice_call_enable_device_config(void *platform,
-                                                    snd_device_t out_snd_device,
-                                                    snd_device_t in_snd_device)
-{
-    struct platform_data *my_data = (struct platform_data *)platform;
-    int acdb_rx_id, acdb_tx_id;
-    int ret = 0;
-
-    acdb_rx_id = acdb_device_table[out_snd_device];
-    acdb_tx_id = acdb_device_table[in_snd_device];
-
-    if (my_data->csd != NULL) {
-        if (acdb_rx_id > 0 && acdb_tx_id > 0) {
-            ret = my_data->csd->enable_device_config(acdb_rx_id, acdb_tx_id);
-            if (ret < 0) {
-                ALOGE("%s: csd_enable_device_config, failed, error %d",
-                      __func__, ret);
-            }
-        } else {
-            ALOGE("%s: Incorrect ACDB IDs (rx: %d tx: %d)", __func__,
-                  acdb_rx_id, acdb_tx_id);
         }
     }
     return ret;
@@ -1329,8 +1285,7 @@ snd_device_t platform_get_input_snd_device(void *platform, audio_devices_t out_d
         if (in_device & AUDIO_DEVICE_IN_BUILTIN_MIC) {
             if (audio_extn_ssr_get_enabled() && channel_count == 6)
                 snd_device = SND_DEVICE_IN_QUAD_MIC;
-            else if (my_data->fluence_type & (FLUENCE_DUAL_MIC | FLUENCE_QUAD_MIC) &&
-                    channel_count == 2)
+            else if (channel_count == 2)
                 snd_device = SND_DEVICE_IN_HANDSET_STEREO_DMIC;
             else
                 snd_device = SND_DEVICE_IN_HANDSET_MIC;
@@ -1515,9 +1470,8 @@ int platform_set_parameters(void *platform, struct str_parms *parms)
     char value[256] = {0};
     int val;
     int ret = 0, err;
-    char *kv_pairs = str_parms_to_str(parms);
 
-    ALOGV_IF(kv_pairs != NULL, "%s: enter: %s", __func__, kv_pairs);
+    ALOGV("%s: enter: %s", __func__, str_parms_to_str(parms));
 
     err = str_parms_get_int(parms, AUDIO_PARAMETER_KEY_BTSCO, &val);
     if (err >= 0) {
@@ -1562,7 +1516,6 @@ int platform_set_parameters(void *platform, struct str_parms *parms)
     }
 
     ALOGV("%s: exit with code(%d)", __func__, ret);
-    free(kv_pairs);
     return ret;
 }
 
@@ -1661,7 +1614,6 @@ void platform_get_parameters(void *platform,
     char value[256] = {0};
     int ret;
     int fluence_type;
-    char *kv_pairs = NULL;
 
     ret = str_parms_get_str(query, AUDIO_PARAMETER_KEY_FLUENCE_TYPE,
                             value, sizeof(value));
@@ -1697,9 +1649,7 @@ void platform_get_parameters(void *platform,
         str_parms_add_str(reply, AUDIO_PARAMETER_KEY_VOLUME_BOOST, value);
     }
 
-    kv_pairs = str_parms_to_str(reply);
-    ALOGV_IF(kv_pairs != NULL, "%s: exit: returns - %s", __func__, kv_pairs);
-    free(reply);
+    ALOGV("%s: exit: returns - %s", __func__, str_parms_to_str(reply));
 }
 
 /* Delay in Us */
