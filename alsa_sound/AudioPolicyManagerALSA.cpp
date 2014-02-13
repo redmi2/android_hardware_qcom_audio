@@ -2169,6 +2169,8 @@ status_t AudioPolicyManager::checkAndSetVolume(int stream,
                                                    int delayMs,
                                                    bool force)
 {
+    status_t status = BAD_VALUE;
+
     // do not change actual stream volume if the stream is muted
     if (mOutputs.valueFor(output)->mMuteCount[stream] != 0) {
         ALOGVV("checkAndSetVolume() stream %d muted count %d",
@@ -2257,10 +2259,14 @@ status_t AudioPolicyManager::checkAndSetVolume(int stream,
         }
 
         if (voiceVolume != mLastALSAvoiceVolume && output == mPrimaryOutput) {
-            mpClientInterface->setVoiceVolume(voiceVolume, delayMs);
-            //Cache the voiceVolume only when in Call
-            if (isInCall())
-                mLastALSAvoiceVolume = voiceVolume;
+            //Set the voiceVolume only when in Call and cache the volume only
+            //when the volume is applied successfully
+            if (isInCall()) {
+                status = mpClientInterface->setVoiceVolume(voiceVolume, delayMs);
+                if (status == NO_ERROR) {
+                    mLastALSAvoiceVolume = voiceVolume;
+                }
+            }
         }
     }
 
