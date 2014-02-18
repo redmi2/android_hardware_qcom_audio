@@ -2344,7 +2344,8 @@ uint32_t AudioSessionOutALSA::render(bool continueDecode/* used for time stamp m
                 mLock.unlock();
                 return 0;
             }
-            if (mRxHandle[index] != NULL && mRxHandle[index]->handle != NULL)
+            if (mRxHandle[index] != NULL && mRxHandle[index]->handle != NULL &&
+                    mRxHandle[index]->handle->fd == pTempHandle.fd)
                 memcpy(mRxHandle[index]->handle, &pTempHandle, sizeof(struct pcm));
             if(renderType == ROUTE_UNCOMPRESSED ||
                (renderType == ROUTE_UNCOMPRESSED_MCH && !mOpenDecodeRoute)) {
