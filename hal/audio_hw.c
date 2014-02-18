@@ -662,6 +662,12 @@ int select_devices(struct audio_device *adev, audio_usecase_t uc_id)
                    in_snd_device = hfp_usecase->in_snd_device;
                    out_snd_device = hfp_usecase->out_snd_device;
             }
+        } else if (audio_extn_hfp_is_active(adev)) {
+            hfp_usecase = get_usecase_from_list(adev, USECASE_AUDIO_HFP_SCO);
+            if (hfp_usecase->devices & AUDIO_DEVICE_OUT_ALL_CODEC_BACKEND) {
+                   in_snd_device = hfp_usecase->in_snd_device;
+                   out_snd_device = hfp_usecase->out_snd_device;
+            }
         }
         if (usecase->type == PCM_PLAYBACK) {
             usecase->devices = usecase->stream.out->devices;
@@ -1895,11 +1901,10 @@ static int in_set_parameters(struct audio_stream *stream, const char *kvpairs)
                 (voice_extn_compress_voip_is_format_supported(in->format)) &&
                 (in->config.rate == 8000 || in->config.rate == 16000) &&
                 (popcount(in->channel_mask) == 1)) {
-                ret = voice_extn_compress_voip_open_input_stream(in);
-                if (ret != 0) {
+                err = voice_extn_compress_voip_open_input_stream(in);
+                if (err != 0) {
                     ALOGE("%s: Compress voip input cannot be opened, error:%d",
-                          __func__, ret);
-                    goto done;
+                          __func__, err);
                 }
             }
         }
