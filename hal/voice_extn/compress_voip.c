@@ -422,8 +422,9 @@ int voice_extn_compress_voip_set_parameters(struct audio_device *adev,
     int ret = 0, err, rate;
     int min_rate, max_rate;
     bool flag;
+    char *kv_pairs = str_parms_to_str(parms);
 
-    ALOGV("%s: enter: %s", __func__, str_parms_to_str(parms));
+    ALOGV_IF(kv_pairs != NULL, "%s: enter: %s", __func__, kv_pairs);
 
     err = str_parms_get_str(parms, AUDIO_PARAMETER_KEY_VOIP_RATE,
                             value, sizeof(value));
@@ -464,6 +465,7 @@ int voice_extn_compress_voip_set_parameters(struct audio_device *adev,
 
 done:
     ALOGV("%s: exit", __func__);
+    free(kv_pairs);
     return ret;
 }
 
@@ -516,6 +518,7 @@ void voice_extn_compress_voip_in_get_parameters(struct stream_in *in,
 {
     int ret, val;
     char value[32]={0};
+    char *kv_pairs = NULL;
 
     ALOGV("%s: enter", __func__);
 
@@ -528,7 +531,9 @@ void voice_extn_compress_voip_in_get_parameters(struct stream_in *in,
             str_parms_add_int(reply, AUDIO_PARAMETER_KEY_VOIP_CHECK, false);
     }
 
-    ALOGD("%s: exit: return - %s", __func__, str_parms_to_str(reply));
+    kv_pairs = str_parms_to_str(reply);
+    ALOGD_IF(kv_pairs != NULL, "%s: exit: return - %s", __func__, kv_pairs);
+    free(kv_pairs);
 }
 
 int voice_extn_compress_voip_out_get_buffer_size(struct stream_out *out)
