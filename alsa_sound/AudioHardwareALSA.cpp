@@ -614,7 +614,7 @@ status_t AudioHardwareALSA::setMode(int mode)
     }
 
     if (mode == AUDIO_MODE_IN_CALL) {
-        if (mCallState == CALL_INACTIVE) {
+        if (mCallState == CALL_INACTIVE && !isAnyCallActive()) {
             ALOGV("%s() defaulting vsid and call state",__func__);
             mCallState = CALL_ACTIVE;
             mVSID = VOICE_SESSION_VSID;
