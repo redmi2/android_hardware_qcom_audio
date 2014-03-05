@@ -144,30 +144,37 @@ ALSADevice::ALSADevice() {
         mStatus = NO_INIT;
         return;
     } else {
-        while ((fgets(soundCardInfo, sizeof(soundCardInfo), fp) != NULL)) {
-            if (strstr(soundCardInfo, "no soundcards")) {
-                ALOGE("NO SOUND CARD DETECTED %s", soundCardInfo);
-                if (sleep_retry < SOUND_CARD_SLEEP_RETRY) {
-                    ALOGD("Sleeping for 1 second");
-                    fclose(fp);
-                    usleep(SOUND_CARD_SLEEP_WAIT * 1000);
-                    sleep_retry++;
-                    if((fp = fopen("/proc/asound/cards", "r")) == NULL) {
-                        ALOGE("Cannot open /proc/asound/cards file to get sound card info");
-                        mStatus = NO_INIT;
-                        return;
-                    }
-                    continue;
-                } else {
-                    ALOGE("Failed %d attempts for sound card detection", sleep_retry);
-                    fclose(fp);
-                    mStatus = NO_INIT;
-                    return;
-                }
-            } else {
-                break;
+        while(1) {
+            if (fgets(soundCardInfo, sizeof(soundCardInfo), fp) == NULL) {
+               ALOGD("Soundcard info is NULL retry\n");
+               goto retry;
+           }
+           if ((fgets(soundCardInfo, sizeof(soundCardInfo), fp) != NULL)) {
+               if (strstr(soundCardInfo, "no soundcards")) {
+                   ALOGE("NO SOUND CARD DETECTED %s", soundCardInfo);
+retry:
+                   if (sleep_retry < SOUND_CARD_SLEEP_RETRY) {
+                        ALOGD("Sleeping for 1 second");
+                        fclose(fp);
+                        usleep(SOUND_CARD_SLEEP_WAIT * 1000);
+                        sleep_retry++;
+                        if((fp = fopen("/proc/asound/cards", "r")) == NULL) {
+                            ALOGE("Cannot open /proc/asound/cards file to get sound card info");
+                            mStatus = NO_INIT;
+                            return;
+                        }
+                        continue;
+                   } else {
+                       ALOGE("Failed %d attempts for sound card detection", sleep_retry);
+                       fclose(fp);
+                       mStatus = NO_INIT;
+                       return;
+                   }
+               } else {
+                   break;
+               }
             }
-        }
+       }
         if(fp) {
            fclose(fp);
         }
