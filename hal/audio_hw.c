@@ -705,10 +705,6 @@ int select_devices(struct audio_device *adev, audio_usecase_t uc_id)
         return 0;
     }
 
-    /* Added as part of bringup, remove when required */
-    out_snd_device = AUDIO_DEVICE_OUT_WIRED_HEADSET;
-    in_snd_device = SND_DEVICE_IN_HEADSET_MIC;
-
     ALOGD("%s: out_snd_device(%d: %s) in_snd_device(%d: %s)", __func__,
           out_snd_device, platform_get_snd_device_name(out_snd_device),
           in_snd_device,  platform_get_snd_device_name(in_snd_device));

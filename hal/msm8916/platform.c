@@ -51,7 +51,7 @@
 #define EDID_FORMAT_LPCM    1
 
 /* Retry for delay in FW loading*/
-#define RETRY_NUMBER 20
+#define RETRY_NUMBER 10
 #define RETRY_US 500000
 #define MAX_SND_CARD 8
 
