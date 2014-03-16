@@ -80,6 +80,7 @@ typedef enum {
     USECASE_VOICE2_CALL,
     USECASE_VOLTE_CALL,
     USECASE_QCHAT_CALL,
+    USECASE_VOWLAN_CALL,
     USECASE_COMPRESS_VOIP_CALL,
 
     USECASE_INCALL_REC_UPLINK,
@@ -223,6 +224,7 @@ struct audio_device {
     bool speaker_lr_swap;
     struct voice voice;
     unsigned int cur_hdmi_channels;
+    unsigned int cur_wfd_channels;
 
     int snd_card;
     void *platform;
