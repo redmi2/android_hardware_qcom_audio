@@ -1017,6 +1017,44 @@ int platform_set_mic_mute(void *platform, bool state)
     return ret;
 }
 
+int platform_set_device_mute(void *platform, bool state, char *dir)
+{
+    struct platform_data *my_data = (struct platform_data *)platform;
+    struct audio_device *adev = my_data->adev;
+    struct mixer_ctl *ctl;
+    char *mixer_ctl_name = NULL;
+    int ret = 0;
+    uint32_t set_values[ ] = {0,
+                              ALL_SESSION_VSID,
+                              0};
+    if(dir == NULL) {
+        ALOGE("%s: Invalid direction:%s", __func__, dir);
+        return -EINVAL;
+    }
+
+    if (!strncmp("rx", dir, sizeof("rx"))) {
+        mixer_ctl_name = "Voice Rx Device Mute";
+    } else if (!strncmp("tx", dir, sizeof("tx"))) {
+        mixer_ctl_name = "Voice Tx Device Mute";
+    } else {
+        return -EINVAL;
+    }
+
+    set_values[0] = state;
+    ctl = mixer_get_ctl_by_name(adev->mixer, mixer_ctl_name);
+    if (!ctl) {
+        ALOGE("%s: Could not get ctl for mixer cmd - %s",
+              __func__, mixer_ctl_name);
+        return -EINVAL;
+    }
+
+    ALOGV("%s: Setting device mute state: %d, mixer ctrl:%s",
+          __func__,state, mixer_ctl_name);
+    mixer_ctl_set_array(ctl, set_values, ARRAY_SIZE(set_values));
+
+    return ret;
+}
+
 snd_device_t platform_get_output_snd_device(void *platform, audio_devices_t devices)
 {
     struct platform_data *my_data = (struct platform_data *)platform;
@@ -1141,14 +1179,17 @@ snd_device_t platform_get_output_snd_device(void *platform, audio_devices_t devi
         snd_device = SND_DEVICE_OUT_HDMI ;
     } else if (devices & AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET ||
                devices & AUDIO_DEVICE_OUT_DGTL_DOCK_HEADSET) {
+        ALOGD("%s: setting USB hadset channel capability(2) for Proxy", __func__);
+        audio_extn_set_afe_proxy_channel_mixer(adev, 2);
         snd_device = SND_DEVICE_OUT_USB_HEADSET;
     } else if (devices & AUDIO_DEVICE_OUT_FM_TX) {
         snd_device = SND_DEVICE_OUT_TRANSMISSION_FM;
     } else if (devices & AUDIO_DEVICE_OUT_EARPIECE) {
         snd_device = SND_DEVICE_OUT_HANDSET;
     } else if (devices & AUDIO_DEVICE_OUT_PROXY) {
-        ALOGD("%s: setting sink capability for Proxy", __func__);
-        audio_extn_set_afe_proxy_channel_mixer(adev);
+        channel_count = audio_extn_get_afe_proxy_channel_count();
+        ALOGD("%s: setting sink capability(%d) for Proxy", __func__, channel_count);
+        audio_extn_set_afe_proxy_channel_mixer(adev, channel_count);
         snd_device = SND_DEVICE_OUT_AFE_PROXY;
     } else {
         ALOGE("%s: Unknown device(s) %#x", __func__, devices);
