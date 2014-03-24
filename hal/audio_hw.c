@@ -119,6 +119,7 @@ const char * const use_case_table[AUDIO_USECASE_MAX] = {
     [USECASE_VOICE2_CALL] = "voice2-call",
     [USECASE_VOLTE_CALL] = "volte-call",
     [USECASE_QCHAT_CALL] = "qchat-call",
+    [USECASE_VOWLAN_CALL] = "vowlan-call",
     [USECASE_COMPRESS_VOIP_CALL] = "compress-voip-call",
     [USECASE_INCALL_REC_UPLINK] = "incall-rec-uplink",
     [USECASE_INCALL_REC_DOWNLINK] = "incall-rec-downlink",
@@ -1337,9 +1338,19 @@ static int parse_compress_metadata(struct stream_out *out, struct str_parms *par
     struct compr_gapless_mdata tmp_mdata;
     tmp_mdata.encoder_delay = 0;
     tmp_mdata.encoder_padding = 0;
+
     if (!out || !parms) {
         ALOGE("%s: return invalid ",__func__);
         return -EINVAL;
+    }
+
+    ret = str_parms_get_str(parms, AUDIO_OFFLOAD_CODEC_FORMAT, value, sizeof(value));
+    if (ret >= 0) {
+        if (atoi(value) == SND_AUDIOSTREAMFORMAT_MP4ADTS) {
+            out->compr_config.codec->format = SND_AUDIOSTREAMFORMAT_MP4ADTS;
+            ALOGV("ADTS format is set in offload mode");
+        }
+        out->send_new_metadata = 1;
     }
 
     ret = str_parms_get_str(parms, AUDIO_OFFLOAD_CODEC_SAMPLE_RATE, value, sizeof(value));
@@ -2167,6 +2178,7 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
         out->compr_config.codec->ch_in =
                     popcount(config->channel_mask);
         out->compr_config.codec->ch_out = out->compr_config.codec->ch_in;
+        out->compr_config.codec->format = SND_AUDIOSTREAMFORMAT_RAW;
 
         if (config->offload_info.format == AUDIO_FORMAT_PCM_16_BIT_OFFLOAD)
             out->compr_config.codec->format = SNDRV_PCM_FORMAT_S16_LE;
@@ -2659,6 +2671,7 @@ static int adev_open(const hw_module_t *module, const char *name,
     adev->snd_dev_ref_cnt = calloc(SND_DEVICE_MAX, sizeof(int));
     voice_init(adev);
     list_init(&adev->usecase_list);
+    adev->cur_wfd_channels = 2;
 
     /* Loads platform specific libraries dynamically */
     adev->platform = platform_init(adev);
