@@ -131,7 +131,7 @@ void audio_extn_set_anc_parameters(struct audio_device *adev,
 #endif /* ANC_HEADSET_ENABLED */
 
 #ifndef AFE_PROXY_ENABLED
-#define audio_extn_set_afe_proxy_parameters(parms)        (0)
+#define audio_extn_set_afe_proxy_parameters(adev, parms)  (0)
 #define audio_extn_get_afe_proxy_parameters(query, reply) (0)
 #else
 /* Front left channel. */
@@ -168,6 +168,10 @@ static int32_t afe_proxy_set_channel_mapping(struct audio_device *adev,
     ALOGV("%s channel_count:%d",__func__, channel_count);
 
     switch (channel_count) {
+    case 2:
+        set_values[0] = PCM_CHANNEL_FL;
+        set_values[1] = PCM_CHANNEL_FR;
+        break;
     case 6:
         set_values[0] = PCM_CHANNEL_FL;
         set_values[1] = PCM_CHANNEL_FR;
@@ -205,7 +209,8 @@ static int32_t afe_proxy_set_channel_mapping(struct audio_device *adev,
     return ret;
 }
 
-int32_t audio_extn_set_afe_proxy_channel_mixer(struct audio_device *adev)
+int32_t audio_extn_set_afe_proxy_channel_mixer(struct audio_device *adev,
+                                    int channel_count)
 {
     int32_t ret = 0;
     const char *channel_cnt_str = NULL;
@@ -216,9 +221,8 @@ int32_t audio_extn_set_afe_proxy_channel_mixer(struct audio_device *adev)
     /* use the existing channel count set by hardware params to
     configure the back end for stereo as usb/a2dp would be
     stereo by default */
-    ALOGD("%s: channels = %d", __func__,
-           aextnmod.proxy_channel_num);
-    switch (aextnmod.proxy_channel_num) {
+    ALOGD("%s: channels = %d", __func__, channel_count);
+    switch (channel_count) {
     case 8: channel_cnt_str = "Eight"; break;
     case 7: channel_cnt_str = "Seven"; break;
     case 6: channel_cnt_str = "Six"; break;
@@ -228,7 +232,7 @@ int32_t audio_extn_set_afe_proxy_channel_mixer(struct audio_device *adev)
     default: channel_cnt_str = "Two"; break;
     }
 
-    if(aextnmod.proxy_channel_num >= 2 && aextnmod.proxy_channel_num < 8) {
+    if(channel_count >= 2 && channel_count <= 8) {
        ctl = mixer_get_ctl_by_name(adev->mixer, mixer_ctl_name);
        if (!ctl) {
             ALOGE("%s: could not get ctl for mixer cmd - %s",
@@ -238,16 +242,19 @@ int32_t audio_extn_set_afe_proxy_channel_mixer(struct audio_device *adev)
     }
     mixer_ctl_set_enum_by_string(ctl, channel_cnt_str);
 
-    if (aextnmod.proxy_channel_num == 6 ||
-          aextnmod.proxy_channel_num == 8)
-        ret = afe_proxy_set_channel_mapping(adev,
-                             aextnmod.proxy_channel_num);
+    if (channel_count == 6 || channel_count == 8 || channel_count == 2) {
+        ret = afe_proxy_set_channel_mapping(adev, channel_count);
+    } else {
+        ALOGE("%s: set unsupported channel count(%d)",  __func__, channel_count);
+        ret = -EINVAL;
+    }
 
     ALOGD("%s: exit", __func__);
     return ret;
 }
 
-void audio_extn_set_afe_proxy_parameters(struct str_parms *parms)
+void audio_extn_set_afe_proxy_parameters(struct audio_device *adev,
+                                         struct str_parms *parms)
 {
     int ret, val;
     char value[32]={0};
@@ -257,6 +264,7 @@ void audio_extn_set_afe_proxy_parameters(struct str_parms *parms)
     if (ret >= 0) {
         val = atoi(value);
         aextnmod.proxy_channel_num = val;
+        adev->cur_wfd_channels = val;
         ALOGD("%s: channel capability set to: %d", __func__,
                aextnmod.proxy_channel_num);
     }
@@ -309,13 +317,19 @@ int32_t audio_extn_read_afe_proxy_channel_masks(struct stream_out *out)
     }
     return ret;
 }
+
+int32_t audio_extn_get_afe_proxy_channel_count()
+{
+    return aextnmod.proxy_channel_num;
+}
+
 #endif /* AFE_PROXY_ENABLED */
 
 void audio_extn_set_parameters(struct audio_device *adev,
                                struct str_parms *parms)
 {
    audio_extn_set_anc_parameters(adev, parms);
-   audio_extn_set_afe_proxy_parameters(parms);
+   audio_extn_set_afe_proxy_parameters(adev, parms);
    audio_extn_fm_set_parameters(adev, parms);
    audio_extn_listen_set_parameters(adev, parms);
    audio_extn_hfp_set_parameters(adev, parms);
