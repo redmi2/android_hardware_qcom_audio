@@ -118,9 +118,11 @@ uint32_t AudioPolicyManager::checkDeviceMuteStrategies(AudioOutputDescriptor *ou
                     continue;
                 }
                 audio_io_handle_t curOutput = mOutputs.keyAt(j);
-                ALOGVV("checkDeviceMuteStrategies() %s strategy %d (curDevice %04x) on output %d",
-                      mute ? "muting" : "unmuting", i, curDevice, curOutput);
-                setStrategyMute((routing_strategy)i, mute, curOutput, mute ? 0 : delayMs * 4);
+                if (doMute) {
+                    ALOGVV("checkDeviceMuteStrategies() %s strategy %d (curDevice %04x) on output %d",
+                          mute ? "muting" : "unmuting", i, curDevice, curOutput);
+                    setStrategyMute((routing_strategy)i, mute, curOutput, mute ? 0 : delayMs * 4);
+                }
 #ifdef QCOM_APM_VERSION_JBMR2
                 if (desc->isStrategyActive((routing_strategy)i)) {
 #else
