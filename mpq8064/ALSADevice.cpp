@@ -2654,11 +2654,11 @@ int ALSADevice::getHDMIMaxChannelForEDIDFormat(EDID_AUDIO_FORMAT_ID formatId)
         // 8 channels boils to 0x0b for the 6 channels
         if(mHdmiOutputChannels == 6)
             mChannelAllocation = 0x0B;
-        else if(mHdmiOutputChannels == 2)
-            mChannelAllocation = 0x0;
     } else {
         mChannelAllocation = mEDIDInfo.channelAllocation;
     }
+    if(hdmiChannels == 2)
+        mChannelAllocation = 0x0;
     return hdmiChannels;
 }
 
