@@ -139,7 +139,7 @@ enum {
 #define DEFAULT_OUTPUT_SAMPLING_RATE 48000
 
 #define ALL_SESSION_VSID                0xFFFFFFFF
-#define DEFAULT_MUTE_RAMP_DURATION      500
+#define DEFAULT_MUTE_RAMP_DURATION_MS   20
 #define DEFAULT_VOLUME_RAMP_DURATION_MS 20
 #define MIXER_PATH_MAX_LENGTH 100
 
@@ -180,7 +180,17 @@ enum {
 #define HFP_PCM_RX 5
 
 #define INCALL_MUSIC_UPLINK_PCM_DEVICE 1
+
+#ifdef PLATFORM_MSM8610
+#define INCALL_MUSIC_UPLINK2_PCM_DEVICE 14
+#elif PLATFORM_MSM8x26
 #define INCALL_MUSIC_UPLINK2_PCM_DEVICE 16
+#elif PLATFORM_MSM8974
+#define INCALL_MUSIC_UPLINK2_PCM_DEVICE 35
+#else
+#define INCALL_MUSIC_UPLINK2_PCM_DEVICE -1
+#endif
+
 #define SPKR_PROT_CALIB_RX_PCM_DEVICE 5
 #define SPKR_PROT_CALIB_TX_PCM_DEVICE 25
 #define PLAYBACK_OFFLOAD_DEVICE 9
@@ -240,8 +250,8 @@ typedef int (*deinit_t)();
 typedef int (*disable_device_t)();
 typedef int (*enable_device_config_t)(int, int);
 typedef int (*enable_device_t)(int, int, uint32_t);
-typedef int (*volume_t)(uint32_t, int);
-typedef int (*mic_mute_t)(uint32_t, int);
+typedef int (*volume_t)(uint32_t, int, uint16_t);
+typedef int (*mic_mute_t)(uint32_t, int, uint16_t);
 typedef int (*slow_talk_t)(uint32_t, uint8_t);
 typedef int (*start_voice_t)(uint32_t);
 typedef int (*stop_voice_t)(uint32_t);
