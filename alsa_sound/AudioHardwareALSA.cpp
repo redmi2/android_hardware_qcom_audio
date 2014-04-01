@@ -1778,6 +1778,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
          devices, *channels, *sampleRate, flags);
 
     status_t err = BAD_VALUE;
+
 #ifdef QCOM_OUTPUT_FLAGS_ENABLED
     if (flags & (AUDIO_OUTPUT_FLAG_LPA | AUDIO_OUTPUT_FLAG_TUNNEL)) {
         int type = !(flags & AUDIO_OUTPUT_FLAG_LPA); //0 for LPA, 1 for tunnel
@@ -1807,10 +1808,9 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
         mRouteAudioToExtOut = true;
     }
 
-#ifdef QCOM_OUTPUT_FLAGS_ENABLED
+    bool voipstream_active = false;
     if((flags & AUDIO_OUTPUT_FLAG_DIRECT) && (flags & AUDIO_OUTPUT_FLAG_VOIP_RX)&&
-       ((*sampleRate == VOIP_SAMPLING_RATE_8K) || (*sampleRate == VOIP_SAMPLING_RATE_16K))) {
-        bool voipstream_active = false;
+        ((*sampleRate == VOIP_SAMPLING_RATE_8K) || (*sampleRate == VOIP_SAMPLING_RATE_16K))) {
         for(it = mDeviceList.begin();
             it != mDeviceList.end(); ++it) {
                 if((!strcmp(it->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
@@ -1820,17 +1820,31 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
                     break;
                 }
         }
-      if(voipstream_active == false) {
+    }
+
 #ifdef RESOURCE_MANAGER
-         String8 useCase;
-         useCase.setTo("USECASE_VOIP_CALL");
-         status_t err = setParameterForConcurrency(
-                 useCase, AudioHardwareALSA::CONCURRENCY_ACTIVE);
-         if(err != OK) {
-             ALOGE("set-ParameterForConcurrency for USECASE_VOIP_CALL=%d", err);
-             return NULL;
-         }
+    bool isvoipconcsupported = true;
+    String8 useCase;
+    useCase.setTo("USECASE_VOIP_CALL");
+    if(voipstream_active == false) {
+        status_t err = setParameterForConcurrency(
+             useCase, AudioHardwareALSA::CONCURRENCY_ACTIVE);
+        if(err != OK) {
+         ALOGE("set-ParameterForConcurrency for USECASE_VOIP_CALL=%d failed try with regular output", err);
+         isvoipconcsupported = false;
+        }
+    }
 #endif
+
+
+#ifdef QCOM_OUTPUT_FLAGS_ENABLED
+    if((flags & AUDIO_OUTPUT_FLAG_DIRECT) && (flags & AUDIO_OUTPUT_FLAG_VOIP_RX)&&
+       ((*sampleRate == VOIP_SAMPLING_RATE_8K) || (*sampleRate == VOIP_SAMPLING_RATE_16K))
+#ifdef RESOURCE_MANAGER
+        && isvoipconcsupported
+#endif
+        ) {
+      if(voipstream_active == false) {
          mVoipOutStreamCount = 0;
          mVoipMicMute = false;
          alsa_handle_t alsa_handle;
@@ -2334,9 +2348,9 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
 }
 #endif
 
+    bool voipstream_active = false;
     if((devices == AudioSystem::DEVICE_IN_COMMUNICATION) && (mVoipInStreamCount < 1) &&
        ((*sampleRate == VOIP_SAMPLING_RATE_8K) || (*sampleRate == VOIP_SAMPLING_RATE_16K))) {
-        bool voipstream_active = false;
         for(it = mDeviceList.begin();
             it != mDeviceList.end(); ++it) {
                 if((!strcmp(it->useCase, SND_USE_CASE_VERB_IP_VOICECALL)) ||
@@ -2346,17 +2360,29 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
                     break;
                 }
         }
-        if(voipstream_active == false) {
+    }
 #ifdef RESOURCE_MANAGER
-           String8 useCase;
-           useCase.setTo("USECASE_VOIP_CALL");
-           status_t err = setParameterForConcurrency(
-                   useCase, AudioHardwareALSA::CONCURRENCY_ACTIVE);
-           if(err != OK) {
-               ALOGE("set-ParameterForConcurrency for USECASE_VOIP_CALL = %d", err);
-               return NULL;
-           }
+    bool isvoipconcsupported = true;
+    String8 useCase;
+    useCase.setTo("USECASE_VOIP_CALL");
+    if(voipstream_active == false) {
+        status_t err = setParameterForConcurrency(
+               useCase, AudioHardwareALSA::CONCURRENCY_ACTIVE);
+        if(err != OK) {
+           ALOGE("set-ParameterForConcurrency for USECASE_VOIP_CALL = %d", err);
+           isvoipconcsupported = false;
+           //return NULL;
+        }
+    }
 #endif
+
+    if((devices == AudioSystem::DEVICE_IN_COMMUNICATION) && (mVoipInStreamCount < 1) &&
+       ((*sampleRate == VOIP_SAMPLING_RATE_8K) || (*sampleRate == VOIP_SAMPLING_RATE_16K))
+#ifdef RESOURCE_MANAGER
+        && isvoipconcsupported
+#endif
+     ) {
+        if(voipstream_active == false) {
            mVoipInStreamCount = 0;
            mVoipMicMute = false;
            alsa_handle_t alsa_handle;
