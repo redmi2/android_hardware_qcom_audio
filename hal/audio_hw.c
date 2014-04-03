@@ -296,6 +296,18 @@ int enable_snd_device(struct audio_device *adev,
         return 0;
     }
 
+    /* Set BT sample rate before enabling the devices. Adding sample rate mixer
+     * control in use-case does not work because rate update takes place after
+     * AFE port open due to the limitation of mixer control order execution.
+     */
+    if (snd_device == SND_DEVICE_OUT_BT_SCO) {
+        audio_route_apply_path(adev->audio_route, BT_SCO_SAMPLE_RATE);
+        audio_route_update_mixer(adev->audio_route);
+    } else if (snd_device == SND_DEVICE_OUT_BT_SCO_WB) {
+        audio_route_apply_path(adev->audio_route, BT_SCO_WB_SAMPLE_RATE);
+        audio_route_update_mixer(adev->audio_route);
+    }
+
     /* start usb playback thread */
     if(SND_DEVICE_OUT_USB_HEADSET == snd_device ||
        SND_DEVICE_OUT_SPEAKER_AND_USB_HEADSET == snd_device)
@@ -305,13 +317,14 @@ int enable_snd_device(struct audio_device *adev,
     if(SND_DEVICE_IN_USB_HEADSET_MIC == snd_device)
        audio_extn_usb_start_capture(adev);
 
-    if (snd_device == SND_DEVICE_OUT_SPEAKER &&
+    if ((snd_device == SND_DEVICE_OUT_SPEAKER ||
+        snd_device == SND_DEVICE_OUT_VOICE_SPEAKER) &&
         audio_extn_spkr_prot_is_enabled()) {
-       if (audio_extn_spkr_prot_start_processing(snd_device)) {
-          ALOGE("%s: spkr_start_processing failed", __func__);
-          return -EINVAL;
-      }
-    }  else {
+        if (audio_extn_spkr_prot_start_processing(snd_device)) {
+            ALOGE("%s: spkr_start_processing failed", __func__);
+            return -EINVAL;
+        }
+    } else {
         ALOGV("%s: snd_device(%d: %s)", __func__,
         snd_device, device_name);
         if (platform_send_audio_calibration(adev->platform, snd_device) < 0) {
@@ -364,7 +377,8 @@ int disable_snd_device(struct audio_device *adev,
         if(SND_DEVICE_IN_USB_HEADSET_MIC == snd_device)
             audio_extn_usb_stop_capture(adev);
 
-        if (snd_device == SND_DEVICE_OUT_SPEAKER &&
+        if ((snd_device == SND_DEVICE_OUT_SPEAKER ||
+            snd_device == SND_DEVICE_OUT_VOICE_SPEAKER) &&
             audio_extn_spkr_prot_is_enabled()) {
             audio_extn_spkr_prot_stop_processing();
         } else
