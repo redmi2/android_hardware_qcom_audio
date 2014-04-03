@@ -39,6 +39,16 @@ bool audio_extn_should_use_fb_anc(void);
 bool audio_extn_should_use_handset_anc(int in_channels);
 #endif
 
+#ifndef FLUENCE_ENABLED
+#define audio_extn_set_fluence_parameters(adev, parms) (0)
+#define audio_extn_get_fluence_parameters(adev, query, reply) (0)
+#else
+void audio_extn_set_fluence_parameters(struct audio_device *adev,
+                                           struct str_parms *parms);
+int audio_extn_get_fluence_parameters(struct audio_device *adev,
+                  struct str_parms *query, struct str_parms *reply);
+#endif
+
 #ifndef AFE_PROXY_ENABLED
 #define audio_extn_set_afe_proxy_channel_mixer(adev,channel_count)     (0)
 #define audio_extn_read_afe_proxy_channel_masks(out)                   (0)
@@ -166,7 +176,7 @@ void audio_extn_dolby_set_dmid(struct audio_device *adev);
 #endif
 
 #ifndef DS1_DOLBY_DDP_ENABLED
-#define audio_extn_dolby_set_endpoint()                 (0)
+#define audio_extn_dolby_set_endpoint(adev)                 (0)
 #else
 void audio_extn_dolby_set_endpoint(struct audio_device *adev);
 #endif
@@ -174,7 +184,7 @@ void audio_extn_dolby_set_endpoint(struct audio_device *adev);
 #ifndef DS1_DOLBY_DDP_ENABLED
 #define audio_extn_ddp_set_parameters(adev, parms)      (0)
 #define audio_extn_is_dolby_format(format)              (0)
-#define audio_extn_dolby_get_snd_codec_id(format)       (0)
+#define audio_extn_dolby_get_snd_codec_id(adev, out, format)       (0)
 #define audio_extn_dolby_send_ddp_endp_params(adev)     (0)
 #else
 bool audio_extn_is_dolby_format(audio_format_t format);
