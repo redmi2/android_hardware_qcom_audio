@@ -837,6 +837,13 @@ void platform_add_backend_name(char *mixer_path, snd_device_t snd_device)
         strlcat(mixer_path, " capture-fm", MIXER_PATH_MAX_LENGTH);
     else if (snd_device == SND_DEVICE_OUT_TRANSMISSION_FM)
         strlcat(mixer_path, " transmission-fm", MIXER_PATH_MAX_LENGTH);
+    else if (snd_device == SND_DEVICE_OUT_VOICE_SPEAKER &&
+             audio_extn_spkr_prot_is_enabled() ) {
+        char platform[PROPERTY_VALUE_MAX];
+        property_get("ro.board.platform", platform, "");
+        if (!strncmp("apq8084", platform, sizeof("apq8084")))
+            strlcat(mixer_path, " speaker-protected", MIXER_PATH_MAX_LENGTH);
+    }
 }
 
 int platform_get_pcm_device_id(audio_usecase_t usecase, int device_type)
@@ -938,21 +945,28 @@ int platform_switch_voice_call_enable_device_config(void *platform,
     int acdb_rx_id, acdb_tx_id;
     int ret = 0;
 
-    acdb_rx_id = acdb_device_table[out_snd_device];
+    if (my_data->csd == NULL)
+        return ret;
+
+    if (out_snd_device == SND_DEVICE_OUT_VOICE_SPEAKER &&
+        audio_extn_spkr_prot_is_enabled())
+        acdb_rx_id = acdb_device_table[SND_DEVICE_OUT_SPEAKER_PROTECTED];
+    else
+        acdb_rx_id = acdb_device_table[out_snd_device];
+
     acdb_tx_id = acdb_device_table[in_snd_device];
 
-    if (my_data->csd != NULL) {
-        if (acdb_rx_id > 0 && acdb_tx_id > 0) {
-            ret = my_data->csd->enable_device_config(acdb_rx_id, acdb_tx_id);
-            if (ret < 0) {
-                ALOGE("%s: csd_enable_device_config, failed, error %d",
-                      __func__, ret);
-            }
-        } else {
-            ALOGE("%s: Incorrect ACDB IDs (rx: %d tx: %d)", __func__,
-                  acdb_rx_id, acdb_tx_id);
+    if (acdb_rx_id > 0 && acdb_tx_id > 0) {
+        ret = my_data->csd->enable_device_config(acdb_rx_id, acdb_tx_id);
+        if (ret < 0) {
+            ALOGE("%s: csd_enable_device_config, failed, error %d",
+                  __func__, ret);
         }
+    } else {
+        ALOGE("%s: Incorrect ACDB IDs (rx: %d tx: %d)", __func__,
+              acdb_rx_id, acdb_tx_id);
     }
+
     return ret;
 }
 
@@ -987,22 +1001,28 @@ int platform_switch_voice_call_usecase_route_post(void *platform,
     int acdb_rx_id, acdb_tx_id;
     int ret = 0;
 
-    acdb_rx_id = acdb_device_table[out_snd_device];
+    if (my_data->csd == NULL)
+        return ret;
+
+    if (out_snd_device == SND_DEVICE_OUT_VOICE_SPEAKER &&
+        audio_extn_spkr_prot_is_enabled())
+        acdb_rx_id = acdb_device_table[SND_DEVICE_OUT_SPEAKER_PROTECTED];
+    else
+        acdb_rx_id = acdb_device_table[out_snd_device];
+
     acdb_tx_id = acdb_device_table[in_snd_device];
 
-    if (my_data->csd != NULL) {
-        if (acdb_rx_id > 0 && acdb_tx_id > 0) {
-            ret = my_data->csd->enable_device(acdb_rx_id, acdb_tx_id,
-                                              my_data->adev->acdb_settings);
-            if (ret < 0) {
-                ALOGE("%s: csd_enable_device, failed, error %d",
-                      __func__, ret);
-            }
-        } else {
-            ALOGE("%s: Incorrect ACDB IDs (rx: %d tx: %d)", __func__,
-                  acdb_rx_id, acdb_tx_id);
+    if (acdb_rx_id > 0 && acdb_tx_id > 0) {
+        ret = my_data->csd->enable_device(acdb_rx_id, acdb_tx_id,
+                                          my_data->adev->acdb_settings);
+        if (ret < 0) {
+            ALOGE("%s: csd_enable_device, failed, error %d", __func__, ret);
         }
+    } else {
+        ALOGE("%s: Incorrect ACDB IDs (rx: %d tx: %d)", __func__,
+              acdb_rx_id, acdb_tx_id);
     }
+
     return ret;
 }
 
@@ -1075,7 +1095,8 @@ int platform_set_voice_volume(void *platform, int volume)
     mixer_ctl_set_array(ctl, set_values, ARRAY_SIZE(set_values));
 
     if (my_data->csd != NULL) {
-        ret = my_data->csd->volume(ALL_SESSION_VSID, volume);
+        ret = my_data->csd->volume(ALL_SESSION_VSID, volume,
+                                   DEFAULT_VOLUME_RAMP_DURATION_MS);
         if (ret < 0) {
             ALOGE("%s: csd_volume error %d", __func__, ret);
         }
@@ -1092,7 +1113,7 @@ int platform_set_mic_mute(void *platform, bool state)
     int ret = 0;
     uint32_t set_values[ ] = {0,
                               ALL_SESSION_VSID,
-                              DEFAULT_VOLUME_RAMP_DURATION_MS};
+                              DEFAULT_MUTE_RAMP_DURATION_MS};
 
     set_values[0] = state;
     ctl = mixer_get_ctl_by_name(adev->mixer, mixer_ctl_name);
@@ -1105,7 +1126,8 @@ int platform_set_mic_mute(void *platform, bool state)
     mixer_ctl_set_array(ctl, set_values, ARRAY_SIZE(set_values));
 
     if (my_data->csd != NULL) {
-        ret = my_data->csd->mic_mute(ALL_SESSION_VSID, state);
+        ret = my_data->csd->mic_mute(ALL_SESSION_VSID, state,
+                                     DEFAULT_MUTE_RAMP_DURATION_MS);
         if (ret < 0) {
             ALOGE("%s: csd_mic_mute error %d", __func__, ret);
         }
@@ -1686,11 +1708,6 @@ int platform_set_parameters(void *platform, struct str_parms *parms)
     if (err >= 0) {
         str_parms_del(parms, AUDIO_PARAMETER_KEY_BTSCO);
         my_data->btsco_sample_rate = val;
-        if (val == SAMPLE_RATE_16KHZ) {
-            audio_route_apply_path(my_data->adev->audio_route,
-                                   "bt-sco-wb-samplerate");
-            audio_route_update_mixer(my_data->adev->audio_route);
-        }
     }
 
     err = str_parms_get_str(parms, AUDIO_PARAMETER_KEY_SLOWTALK, value, sizeof(value));
