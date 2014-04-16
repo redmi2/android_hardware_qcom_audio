@@ -162,7 +162,10 @@ status_t ALSADevice::setHardwareParams(alsa_handle_t *handle)
             }
             hdmiChannels = channel_count;
             pcm_set_channel_map(NULL, mMixer, MAX_HDMI_CHANNEL_CNT, mEDIDInfo.channelMap);
-            setChannelAlloc(mEDIDInfo.channelAllocation);
+            if(hdmiChannels == 2)
+                setChannelAlloc(0x0);
+            else
+                setChannelAlloc(mEDIDInfo.channelAllocation);
     }
 
     params = (snd_pcm_hw_params*) calloc(1, sizeof(struct snd_pcm_hw_params));
