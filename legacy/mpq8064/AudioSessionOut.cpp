@@ -2049,10 +2049,6 @@ status_t AudioSessionOutALSA::standby()
          }
          mRouteAudioToA2dp = false;
     }
-    if (mPowerLock) {
-        release_wake_lock ("AudioOutLock");
-        mPowerLock = false;
-    }
     return NO_ERROR;
 }
 

@@ -228,7 +228,7 @@ void AudioBitstreamSM::copyResidueBitstreamToStart(size_t bytesConsumedInDecode)
 {
     size_t remainingBytes = ms11InputBufferWritePtr -
                                   (bytesConsumedInDecode+ms11InputBuffer);
-    memcpy(ms11InputBuffer, ms11InputBuffer+bytesConsumedInDecode, remainingBytes);
+    memmove(ms11InputBuffer, ms11InputBuffer+bytesConsumedInDecode, remainingBytes);
     ms11InputBufferWritePtr = ms11InputBuffer+remainingBytes;
 }
 
@@ -242,15 +242,15 @@ void AudioBitstreamSM::copyResidueOutputToStart(int format, size_t samplesRender
     if(format == PCM_MCH_OUT)
     {
         remainingBytes = ms11PCMMChOutputBufferWritePtr-(ms11PCMMChOutputBuffer+samplesRendered);
-        memcpy(ms11PCMMChOutputBuffer, ms11PCMMChOutputBuffer+samplesRendered, remainingBytes);
+        memmove(ms11PCMMChOutputBuffer, ms11PCMMChOutputBuffer+samplesRendered, remainingBytes);
         ms11PCMMChOutputBufferWritePtr = ms11PCMMChOutputBuffer + remainingBytes;
     } else if(format == PCM_2CH_OUT) {
         remainingBytes = ms11PCM2ChOutputBufferWritePtr-(ms11PCM2ChOutputBuffer+samplesRendered);
-        memcpy(ms11PCM2ChOutputBuffer, ms11PCM2ChOutputBuffer+samplesRendered, remainingBytes);
+        memmove(ms11PCM2ChOutputBuffer, ms11PCM2ChOutputBuffer+samplesRendered, remainingBytes);
         ms11PCM2ChOutputBufferWritePtr = ms11PCM2ChOutputBuffer + remainingBytes;
     } else {
         remainingBytes = ms11DDEncOutputBufferWritePtr-(ms11DDEncOutputBuffer+samplesRendered);
-        memcpy(ms11DDEncOutputBuffer, ms11DDEncOutputBuffer+samplesRendered, remainingBytes);
+        memmove(ms11DDEncOutputBuffer, ms11DDEncOutputBuffer+samplesRendered, remainingBytes);
         ms11DDEncOutputBufferWritePtr = ms11DDEncOutputBuffer + remainingBytes;
     }
 }
