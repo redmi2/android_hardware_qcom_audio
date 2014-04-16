@@ -379,6 +379,12 @@ status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
     String8 keyStandby = String8(STANDBY_DEVICES_KEY);
     int device;
     if (param.getInt(key, device) == NO_ERROR) {
+        // if session is paused and the HDMI device is connected, deroute the
+        // HDMI as the device needs to be closed in case the HDMI is disconnected in
+        // between the pause.
+        if(device == 0 && (mDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL))
+            device = mDevices & ~AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+
         // Ignore routing if device is 0.
         if(device) {
             device |= AudioSystem::DEVICE_OUT_SPDIF;
