@@ -129,7 +129,6 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     mCurDevice           = 0;
     mOutputMetadataLength = 0;
     mTranscodeDevices     = 0;
-    mFirstBuffer         = true;
     mADTSHeaderPresent    = false;
     mFirstAACBuffer      = NULL;
     mEventThreadStarted  = false;
@@ -722,8 +721,8 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
         /* check for sync word, if present then configure MS11 for fileplayback mode OFF
            This is specifically done to handle Widevine usecase, in which the ADTS HEADER is
            not stripped off by the Widevine parser */
-        if((mFirstBuffer == true) && (mFormat == AUDIO_FORMAT_AAC || mFormat == AUDIO_FORMAT_HE_AAC_V1 ||
-            mFormat == AUDIO_FORMAT_AAC_ADIF || mFormat == AUDIO_FORMAT_HE_AAC_V2)){
+        if(mFormat == AUDIO_FORMAT_AAC || mFormat == AUDIO_FORMAT_HE_AAC_V1 ||
+            mFormat == AUDIO_FORMAT_AAC_ADIF || mFormat == AUDIO_FORMAT_HE_AAC_V2){
 
             uint16_t uData = (*((char *)buffer) << 8) + *((char *)buffer + 1) ;
 
@@ -785,7 +784,6 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
         char    *bufPtr;
         uint32_t outSampleRate=mSampleRate,outChannels=mChannels;
         mBitstreamSM->copyBitstreamToInternalBuffer((char *)buffer, bytes);
-        mFirstBuffer = false;
 
         do
         {
