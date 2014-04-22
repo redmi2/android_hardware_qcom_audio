@@ -725,7 +725,6 @@ private:
     AudioEventObserver *mObserver;
     output_metadata_handle_t mOutputMetadataTunnel;
     uint32_t            mOutputMetadataLength;
-    bool                mFirstBuffer;
     bool                mADTSHeaderPresent;
     int                 mStereoDevices;
     int                 mMultiChDevices ;
