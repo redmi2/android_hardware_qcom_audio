@@ -113,11 +113,7 @@ status_t AudioStreamOutALSA::setParameters(const String8& keyValuePairs) {
     int device;
     if(param.getInt(keyStandby, device) == NO_ERROR && device) {
         //TODO:mStandbyDevices |= (mHandle->activeDevice & device);
-        if(mHandle->handle == NULL) {
-           mHandle->activeDevice &= ~device;
-           if(mHandle->activeDevice == 0)
-               mHandle->playbackMode = STANDBY;
-        } else if((mHandle->activeDevice & device) == mHandle->activeDevice) {
+        if((mHandle->activeDevice & device) == mHandle->activeDevice) {
             mHandle->playbackMode = STANDBY;
             standby();
         } else if(mHandle->activeDevice & device) {
