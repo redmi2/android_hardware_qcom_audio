@@ -439,22 +439,21 @@ static void check_usecases_codec_backend(struct audio_device *adev,
         /* Make sure all the streams are de-routed before disabling the device */
         audio_route_update_mixer(adev->audio_route);
 
+        /* Make sure the previous devices to be disabled first and then enable the
+           selected devices */
         list_for_each(node, &adev->usecase_list) {
             usecase = node_to_item(node, struct audio_usecase, list);
             if (switch_device[usecase->id]) {
-                disable_snd_device(adev, usecase->out_snd_device, false);
+                disable_snd_device(adev, usecase->out_snd_device, true);
             }
         }
 
         list_for_each(node, &adev->usecase_list) {
             usecase = node_to_item(node, struct audio_usecase, list);
             if (switch_device[usecase->id]) {
-                enable_snd_device(adev, snd_device, false);
+                enable_snd_device(adev, snd_device, true);
             }
         }
-
-        /* Make sure new snd device is enabled before re-routing the streams */
-        audio_route_update_mixer(adev->audio_route);
 
         /* Re-route all the usecases on the shared backend other than the
            specified usecase to new snd devices */
@@ -509,22 +508,21 @@ static void check_and_route_capture_usecases(struct audio_device *adev,
         /* Make sure all the streams are de-routed before disabling the device */
         audio_route_update_mixer(adev->audio_route);
 
+        /* Make sure the previous devices to be disabled first and then enable the
+           selected devices */
         list_for_each(node, &adev->usecase_list) {
             usecase = node_to_item(node, struct audio_usecase, list);
             if (switch_device[usecase->id]) {
-                disable_snd_device(adev, usecase->in_snd_device, false);
+                disable_snd_device(adev, usecase->in_snd_device, true);
             }
         }
 
         list_for_each(node, &adev->usecase_list) {
             usecase = node_to_item(node, struct audio_usecase, list);
             if (switch_device[usecase->id]) {
-                enable_snd_device(adev, snd_device, false);
+                enable_snd_device(adev, snd_device, true);
             }
         }
-
-        /* Make sure new snd device is enabled before re-routing the streams */
-        audio_route_update_mixer(adev->audio_route);
 
         /* Re-route all the usecases on the shared backend other than the
            specified usecase to new snd devices */
@@ -700,12 +698,12 @@ int select_devices(struct audio_device *adev, audio_usecase_t uc_id)
     /* Disable current sound devices */
     if (usecase->out_snd_device != SND_DEVICE_NONE) {
         disable_audio_route(adev, usecase, true);
-        disable_snd_device(adev, usecase->out_snd_device, false);
+        disable_snd_device(adev, usecase->out_snd_device, true);
     }
 
     if (usecase->in_snd_device != SND_DEVICE_NONE) {
         disable_audio_route(adev, usecase, true);
-        disable_snd_device(adev, usecase->in_snd_device, false);
+        disable_snd_device(adev, usecase->in_snd_device, true);
     }
 
     /* Applicable only on the targets that has external modem.
@@ -1426,13 +1424,14 @@ static int out_set_parameters(struct audio_stream *stream, const char *kvpairs)
         pthread_mutex_lock(&adev->lock);
 
         /*
-         * When HDMI cable is unplugged the music playback is paused and
-         * the policy manager sends routing=0. But the audioflinger
-         * continues to write data until standby time (3sec).
-         * As the HDMI core is turned off, the write gets blocked.
+         * When HDMI cable is unplugged/usb hs is disconnected the
+         * music playback is paused and the policy manager sends routing=0
+         * But the audioflingercontinues to write data until standby time
+         * (3sec). As the HDMI core is turned off, the write gets blocked.
          * Avoid this by routing audio to speaker until standby.
          */
-        if (out->devices == AUDIO_DEVICE_OUT_AUX_DIGITAL &&
+        if ((out->devices == AUDIO_DEVICE_OUT_AUX_DIGITAL ||
+                out->devices == AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET) &&
                 val == AUDIO_DEVICE_NONE) {
             val = AUDIO_DEVICE_OUT_SPEAKER;
         }
