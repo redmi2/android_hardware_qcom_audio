@@ -610,7 +610,8 @@ void ALSADevice::switchDeviceUseCase(alsa_handle_t *handle,
     snd_use_case_get(handle->ucMgr, "_verb", (const char **)&use_case);
     bIsUseCaseSet = ((use_case == NULL) ||
         (!strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
-            strlen(SND_USE_CASE_VERB_INACTIVE))));
+            strlen(SND_USE_CASE_VERB_INACTIVE))) ||
+        (!strncmp(use_case, handle->useCase, MAX_STR_LEN)));
 
     enableDevice(handle, bIsUseCaseSet);
 
@@ -1196,7 +1197,13 @@ status_t ALSADevice::close(alsa_handle_t *handle)
 {
     int ret;
     status_t err = NO_ERROR;
-     struct pcm *h = handle->rxHandle;
+    struct pcm *h = handle->rxHandle;
+    char * use_case = NULL;
+    bool bIsUseCaseSet = false;
+
+    snd_use_case_get(handle->ucMgr, "_verb", (const char **)&use_case);
+    bIsUseCaseSet = ((use_case != NULL) && (handle->handle != NULL) &&
+                        (!strncmp(use_case, handle->useCase, MAX_STR_LEN)));
 
     handle->rxHandle = 0;
     ALOGD("close: handle %p h %p", handle, h);
@@ -1224,6 +1231,9 @@ status_t ALSADevice::close(alsa_handle_t *handle)
                                   strlen(SND_USE_CASE_MOD_PLAY_LPA)))) {
         disableDevice(handle);
     }
+
+    if (bIsUseCaseSet)
+        snd_use_case_set(handle->ucMgr, "_verb", SND_USE_CASE_VERB_INACTIVE);
 
     return err;
 }
@@ -1388,68 +1398,72 @@ void ALSADevice::disableDevice(alsa_handle_t *handle)
     unsigned usecase_type = 0;
     int64_t deviceToDisable,actualDevices;
     int bitNo=MAX_NO_BITS;
+    bool bIsUseCaseSet = false;
 
     snd_use_case_get(handle->ucMgr, "_verb", (const char **)&use_case);
+    bIsUseCaseSet = ((use_case != NULL) && (!strncmp(use_case, handle->useCase, MAX_STR_LEN)));
     ALOGD("disableDevice device = %llx verb  %s mode %d use case %s",
           devices, (use_case == NULL) ? "NULL" : use_case, handle->mode, handle->useCase);
 
-    {
-        while (devices != 0) {
-            // Disable devices from leftmost bit, so that if speaker is present,Slimbus virtual port
-            // is disabled first than the speaker.
+    while (devices != 0) {
+        // Disable devices from leftmost bit, so that if speaker is present,Slimbus virtual port
+        // is disabled first than the speaker.
 
-            for(;bitNo >= 0;bitNo--){
-                 if(deviceToDisable = (devices & (0x1<<bitNo)))
-                 break;
-            }
+        for(;bitNo >= 0;bitNo--){
+            if(deviceToDisable = (devices & (0x1<<bitNo)))
+            break;
+        }
 
-            actualDevices = getDevices(deviceToDisable, &rxDevice, &txDevice);
+        actualDevices = getDevices(deviceToDisable, &rxDevice, &txDevice);
 
 
-            for (ALSAHandleList::iterator it = mDeviceList->begin(); it != mDeviceList->end(); ++it) {
-                if (it->useCase != NULL) {
-                    if (strcmp(it->useCase, handle->useCase)) {
-                        if ((&(*it)) != handle && handle->activeDevice && it->activeDevice && (getDevices(it->activeDevice, NULL, NULL) & actualDevices)) {
-                            ALOGD("disableRxDevice - false use case %s active Device %llx deviceToDisable %llx",
+        for (ALSAHandleList::iterator it = mDeviceList->begin(); it != mDeviceList->end(); ++it) {
+            if (it->useCase != NULL) {
+                if (strcmp(it->useCase, handle->useCase)) {
+                    if ((&(*it)) != handle && handle->activeDevice && it->activeDevice && (getDevices(it->activeDevice, NULL, NULL) & actualDevices)) {
+                        ALOGD("disableRxDevice - false use case %s active Device %llx deviceToDisable %llx",
                                   it->useCase, it->activeDevice, deviceToDisable);
-                            if(getDeviceType(getDevices(it->activeDevice, NULL, NULL) & actualDevices, 0) & getUseCaseType(it->useCase) & DEVICE_TYPE_RX)
-                                disableRxDevice = false;
-                            if(getDeviceType(getDevices(it->activeDevice, NULL, NULL) & actualDevices, 0) & getUseCaseType(it->useCase) & DEVICE_TYPE_TX)
-                                disableTxDevice = false;
-                        }
+                        if(getDeviceType(getDevices(it->activeDevice, NULL, NULL) & actualDevices, 0) & getUseCaseType(it->useCase) & DEVICE_TYPE_RX)
+                            disableRxDevice = false;
+                        if(getDeviceType(getDevices(it->activeDevice, NULL, NULL) & actualDevices, 0) & getUseCaseType(it->useCase) & DEVICE_TYPE_TX)
+                            disableTxDevice = false;
                     }
                 }
             }
-
-
-
-            if(rxDevice) {
-                usecase_type = getUseCaseType(handle->useCase);
-                if (usecase_type & DEVICE_TYPE_RX) {
-                    if(disableRxDevice)
-                        snd_use_case_set_case(handle->ucMgr, "_disdev", rxDevice, handle->useCase);
-                    else
-                        snd_use_case_set_case(handle->ucMgr, "_dismod", handle->useCase, rxDevice);
-                }
-                free(rxDevice);
-                rxDevice = NULL;
-            }
-
-            if(txDevice) {
-                usecase_type = getUseCaseType(handle->useCase);
-                if (usecase_type & USECASE_TYPE_TX) {
-                    if(disableTxDevice)
-                        snd_use_case_set_case(handle->ucMgr, "_disdev", txDevice, handle->useCase);
-                    else
-                        snd_use_case_set_case(handle->ucMgr, "_dismod", handle->useCase, txDevice);
-                }
-                free(txDevice);
-                txDevice = NULL;
-            }
-            devices = devices & (~deviceToDisable);
-            disableRxDevice = true;
-            disableTxDevice = true;
         }
+
+
+
+        if(rxDevice) {
+            usecase_type = getUseCaseType(handle->useCase);
+            if (usecase_type & DEVICE_TYPE_RX) {
+                if(disableRxDevice)
+                    snd_use_case_set_case(handle->ucMgr, "_disdev", rxDevice, handle->useCase);
+                else if(bIsUseCaseSet)
+                    snd_use_case_set_case(handle->ucMgr, "_disverb", handle->useCase, rxDevice);
+                else
+                    snd_use_case_set_case(handle->ucMgr, "_dismod", handle->useCase, rxDevice);
+            }
+            free(rxDevice);
+            rxDevice = NULL;
+        }
+
+        if(txDevice) {
+            usecase_type = getUseCaseType(handle->useCase);
+            if (usecase_type & USECASE_TYPE_TX) {
+                if(disableTxDevice)
+                    snd_use_case_set_case(handle->ucMgr, "_disdev", txDevice, handle->useCase);
+                else if(bIsUseCaseSet)
+                    snd_use_case_set_case(handle->ucMgr, "_disverb", handle->useCase, txDevice);
+                else
+                    snd_use_case_set_case(handle->ucMgr, "_dismod", handle->useCase, txDevice);
+            }
+            free(txDevice);
+            txDevice = NULL;
+        }
+        devices = devices & (~deviceToDisable);
+        disableRxDevice = true;
+        disableTxDevice = true;
     }
     handle->activeDevice = 0;
 }

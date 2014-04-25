@@ -138,6 +138,7 @@ AudioHardwareALSA::AudioHardwareALSA() :
     mSpdifRenderFormat = UNCOMPRESSED;
     strlcpy(mSpdifOutputFormat,"lpcm", sizeof(mSpdifOutputFormat));
     strlcpy(mHdmiOutputFormat,"lpcm", sizeof(mHdmiOutputFormat));
+    mScreenState = true;
 }
 
 AudioHardwareALSA::~AudioHardwareALSA()
@@ -422,6 +423,19 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
       mALSADevice->setPlaybackOutputDelay(AudioSystem::DEVICE_OUT_AUX_DIGITAL,
                                           devValue);
       param.remove(key);
+    }
+
+    key = String8(AudioParameter::keyScreenState);
+    if (param.get(key, value) == NO_ERROR) {
+        if(!strncmp(value, "on", 2))
+            mScreenState = true;
+        else if(!strncmp(value, "off", 3))
+            mScreenState = false;
+
+        List <AudioStreamOut *>::iterator it;
+        for(it = mSessions.begin(); it != mSessions.end(); ++it) {
+            (*it)->setParameters(param.toString());
+        }
     }
 
     if (param.size()) {
@@ -1119,6 +1133,7 @@ AudioHardwareALSA::openOutputStream(uint32_t devices,
           mSessions.push_back(out);
       }
 
+      pcm_prepare(it->handle);
       if (status) *status = err;
       return out;
     }
