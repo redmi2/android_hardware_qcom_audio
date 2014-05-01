@@ -566,6 +566,7 @@ public:
     status_t            setVolume(float left, float right);
 
     virtual status_t    standby();
+    virtual status_t    standby_l();
 
     virtual status_t    setParameters(const String8& keyValuePairs);
 
@@ -1342,6 +1343,7 @@ protected:
     Mutex               mLock;
 
 
+    bool                mScreenState;
     uint32_t            mCurDevice;
     uint32_t            mCurMode;
     /* The flag holds all the audio related device settings from

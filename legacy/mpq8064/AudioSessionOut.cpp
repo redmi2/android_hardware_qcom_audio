@@ -376,6 +376,8 @@ status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
     AudioParameter param = AudioParameter(keyValuePairs);
     String8 key = String8(AudioParameter::keyRouting);
     String8 keyStandby = String8(STANDBY_DEVICES_KEY);
+    String8 keyScreen = String8(AudioParameter::keyScreenState);
+    String8 value;
     int device;
     if (param.getInt(key, device) == NO_ERROR) {
         // if session is paused and the HDMI device is connected, deroute the
@@ -397,7 +399,9 @@ status_t AudioSessionOutALSA::setParameters(const String8& keyValuePairs)
         mConfiguringSessions = true;
         doRouting(mDevices);
         mConfiguringSessions = false;
-    }else {
+    } else if (param.get(keyScreen, value) == NO_ERROR) {
+        ALOGD("Session playback in progrees during the screen on/off");
+    } else {
         mControlLock.unlock();
         mParent->setParameters(keyValuePairs);
     }
