@@ -1908,6 +1908,10 @@ status_t ALSADevice::setPlaybackVolume(int value, char *useCase)
     status_t err = NO_ERROR;
     char volMixerCtrlStr[128];
 
+    /* Add new use case checks at correct order/place, strncmp 3rd
+     * argument should be longest strings length otherwise
+     * strncmp will not give desired results.
+     */
     if((!strncmp(useCase, SND_USE_CASE_VERB_HIFI2,
            strlen(SND_USE_CASE_VERB_HIFI2))) ||
        (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC2,
@@ -1930,16 +1934,16 @@ status_t ALSADevice::setPlaybackVolume(int value, char *useCase)
     else if(!strncmp(useCase, SND_USE_CASE_MOD_PLAY_MUSIC7,
                 strlen(SND_USE_CASE_MOD_PLAY_MUSIC7)))
         strlcpy(volMixerCtrlStr, "HIFI7 RX Volume", sizeof(volMixerCtrlStr));
-    else if((!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
-                strlen(SND_USE_CASE_VERB_HIFI_TUNNEL))) ||
-            (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL1,
-                strlen(SND_USE_CASE_MOD_PLAY_TUNNEL1))))
-        strlcpy(volMixerCtrlStr, "COMPRESSED RX Volume", sizeof(volMixerCtrlStr));
     else if((!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL2,
                 strlen(SND_USE_CASE_VERB_HIFI_TUNNEL2))) ||
             (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL2,
                 strlen(SND_USE_CASE_MOD_PLAY_TUNNEL2))))
         strlcpy(volMixerCtrlStr, "COMPRESSED2 RX Volume", sizeof(volMixerCtrlStr));
+    else if((!strncmp(useCase, SND_USE_CASE_VERB_HIFI_TUNNEL,
+                strlen(SND_USE_CASE_VERB_HIFI_TUNNEL))) ||
+            (!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL1,
+                strlen(SND_USE_CASE_MOD_PLAY_TUNNEL1))))
+        strlcpy(volMixerCtrlStr, "COMPRESSED RX Volume", sizeof(volMixerCtrlStr));
     else if(!strncmp(useCase, SND_USE_CASE_MOD_PLAY_TUNNEL3,
                 strlen(SND_USE_CASE_MOD_PLAY_TUNNEL3)))
         strlcpy(volMixerCtrlStr, "COMPRESSED3 RX Volume", sizeof(volMixerCtrlStr));
