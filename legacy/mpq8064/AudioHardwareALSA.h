@@ -761,6 +761,7 @@ private:
     void                updateOutputFormat();
     void                updateRoutingFlags(int devices);
     void                setSpdifHdmiRoutingFlags(int devices);
+    void                updateSessionDevices(int devices);
     status_t            setPlaybackFormat();
     void                setChannelMap(alsa_handle_t *handle);
     void                setPCMChannelMap(alsa_handle_t *handle);

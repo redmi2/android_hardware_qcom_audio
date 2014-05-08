@@ -272,6 +272,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     }
 
     updateRoutingFlags(mDevices);
+    updateSessionDevices(mDevices);
 
     ALOGV("mRoutePcmAudio=%d, mUseTunnelDecoder =%d, mUseDualTunnel=%d",
         mRoutePcmAudio, mUseTunnelDecoder, mUseDualTunnel);
@@ -2470,8 +2471,10 @@ status_t AudioSessionOutALSA::doRouting(int devices)
        }
     }
 
+    int pDevices = mDevices;
     mDevices = devices;
     updateRoutingFlags(devices);
+    updateSessionDevices(mDevices & ~pDevices);
 
     if(mUseTunnelDecoder) {
         if(mCompreRxHandle) {
@@ -2810,6 +2813,7 @@ status_t AudioSessionOutALSA::doRouting(int devices)
              if(mStereoPcmRxHandle)
                   mALSADevice->switchDeviceUseCase(mStereoPcmRxHandle,
                                stereoDevices, mParent->mode());
+
              if(mRouteAudioToA2dp){
                   if (mStereoPcmRxHandle && (mStereoPcmRxHandle->devices & AudioSystem::DEVICE_OUT_PROXY)){
                          mA2dpUseCase = mParent->useCaseStringToEnum(mStereoPcmRxHandle->useCase);
@@ -3150,7 +3154,13 @@ void AudioSessionOutALSA::setSpdifHdmiRoutingFlags(int devices)
                 mHdmiFormat = COMPRESSED_FORCED_PCM_FORMAT;
         }
     }
-    ALOGD("mSpdifRenderFormat- %x, mHdmiRenderFormat- %x", mParent->mSpdifRenderFormat, mParent->mHdmiRenderFormat);
+    ALOGV("mSpdifFormat- %d, mHdmiFormat- %d", mSpdifFormat, mHdmiFormat);
+
+    return;
+}
+
+void AudioSessionOutALSA::updateSessionDevices(int devices) {
+    ALOGD(" mSpdifRenderFormat- %x, mHdmiRenderFormat- %x", mParent->mSpdifRenderFormat, mParent->mHdmiRenderFormat);
     if(devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL && !mConfiguringSessions) {
         if(mParent->mHdmiRenderFormat == UNCOMPRESSED) {
             if(!(mHdmiFormat & PCM_FORMAT) && !(mHdmiFormat & COMPRESSED_FORCED_PCM_FORMAT)) {
@@ -3189,11 +3199,8 @@ void AudioSessionOutALSA::setSpdifHdmiRoutingFlags(int devices)
             mParent->mLock.lock();
         }
     }
-    ALOGV("mSpdifFormat- %d, mHdmiFormat- %d", mSpdifFormat, mHdmiFormat);
-    ALOGV("mSpdifRenderFormat- %x, mHdmiRenderFormat- %x", mParent->mSpdifRenderFormat, mParent->mHdmiRenderFormat);
+    ALOGV("mSpdifRenderFormat- %x mHdmiRenderFormat- %x", mParent->mSpdifRenderFormat, mParent->mHdmiRenderFormat);
     ALOGV("mSpdifOutputFormat: %s mHdmiOutputFormat: %s", mSpdifOutputFormat, mHdmiOutputFormat);
-
-    return;
 }
 
 void AudioSessionOutALSA::fixUpHdmiFormatBasedOnEDID(){
