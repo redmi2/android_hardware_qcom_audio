@@ -32,6 +32,7 @@
 #include "audio_extn.h"
 #include "voice_extn.h"
 #include "sound/compress_params.h"
+#include "platform_parser.h"
 
 #define MIXER_XML_PATH "/system/etc/mixer_paths.xml"
 #define MIXER_XML_PATH_AUXPCM "/system/etc/mixer_paths_auxpcm.xml"
@@ -44,15 +45,15 @@
 #define COMPRESS_OFFLOAD_FRAGMENT_SIZE (32 * 1024)
 
 /* Used in calculating fragment size for pcm offload */
-#define PCM_OFFLOAD_BUFFER_DURATION_FOR_AV 2000 /* 2 secs */
-#define PCM_OFFLOAD_BUFFER_DURATION_FOR_AV_STREAMING 100 /* 100 millisecs */
+#define PCM_OFFLOAD_BUFFER_DURATION_FOR_AV 1000 /* 1 sec */
+#define PCM_OFFLOAD_BUFFER_DURATION_FOR_AV_STREAMING 80 /* 80 millisecs */
 
 /* MAX PCM fragment size cannot be increased  further due
  * to flinger's cblk size of 1mb,and it has to be a multiple of
  * 24 - lcm of channels supported by DSP
  */
 #define MAX_PCM_OFFLOAD_FRAGMENT_SIZE (240 * 1024)
-#define MIN_PCM_OFFLOAD_FRAGMENT_SIZE (32 * 1024)
+#define MIN_PCM_OFFLOAD_FRAGMENT_SIZE (4 * 1024)
 
 #define ALIGN( num, to ) (((num) + (to-1)) & (~(to-1)))
 /*
@@ -242,7 +243,7 @@ static const char * const device_table[SND_DEVICE_MAX] = {
 };
 
 /* ACDB IDs (audio DSP path configuration IDs) for each sound device */
-static const int acdb_device_table[SND_DEVICE_MAX] = {
+static int acdb_device_table[SND_DEVICE_MAX] = {
     [SND_DEVICE_NONE] = -1,
     [SND_DEVICE_OUT_HANDSET] = 7,
     [SND_DEVICE_OUT_SPEAKER] = 14,
@@ -592,6 +593,9 @@ void *platform_init(struct audio_device *adev)
             my_data->acdb_init();
     }
 
+    /* Initialize ACDB ID's */
+    platform_info_init();
+
     /* If platform is apq8084 and baseband is MDM, load CSD Client specific
      * symbols. Voice call is handled by MDM and apps processor talks to
      * MDM through CSD Client
@@ -725,6 +729,22 @@ int platform_set_fluence_type(void *platform, char *value)
         my_data->fluence_type = fluence_type;
         adev->acdb_settings = (adev->acdb_settings & FLUENCE_MODE_CLEAR) | fluence_flag;
     }
+done:
+    return ret;
+}
+
+int platform_set_snd_device_acdb_id(snd_device_t snd_device, unsigned int acdb_id)
+{
+    int ret = 0;
+
+    if ((snd_device < SND_DEVICE_MIN) || (snd_device >= SND_DEVICE_MAX)) {
+        ALOGE("%s: Invalid snd_device = %d",
+            __func__, snd_device);
+        ret = -EINVAL;
+        goto done;
+    }
+
+    acdb_device_table[snd_device] = acdb_id;
 done:
     return ret;
 }
@@ -1728,14 +1748,21 @@ uint32_t platform_get_pcm_offload_buffer_size(audio_offload_info_t* info)
     } else if (info->has_video && info->is_streaming) {
         fragment_size = (PCM_OFFLOAD_BUFFER_DURATION_FOR_AV_STREAMING
                                      * info->sample_rate
-                                     * bits_per_sample
+                                     * (bits_per_sample >> 3)
                                      * popcount(info->channel_mask))/1000;
 
     } else if (info->has_video) {
         fragment_size = (PCM_OFFLOAD_BUFFER_DURATION_FOR_AV
                                      * info->sample_rate
-                                     * bits_per_sample
+                                     * (bits_per_sample >> 3)
                                      * popcount(info->channel_mask))/1000;
+    }
+
+    char value[PROPERTY_VALUE_MAX] = {0};
+    if((property_get("audio.offload.pcm.buffer.size", value, "")) &&
+            atoi(value)) {
+        fragment_size =  atoi(value) * 1024;
+        ALOGV("Using buffer size from sys prop %d", fragment_size);
     }
 
     fragment_size = ALIGN( fragment_size, 1024);
