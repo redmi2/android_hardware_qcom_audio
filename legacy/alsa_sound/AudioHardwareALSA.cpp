@@ -212,6 +212,9 @@ AudioHardwareALSA::AudioHardwareALSA() :
             } else if (strstr(soundCardInfo, "msm8974-taiko-liquid-snd-card")) {
                 codec_rev = 43;
                 break;
+            } else if (strstr(soundCardInfo, "apq8064-auto-snd-card")) {
+                codec_rev = 44;
+                break;
             } else if(strstr(soundCardInfo, "no soundcards")) {
                 ALOGE("NO SOUND CARD DETECTED");
                 if(sleep_retry < SOUND_CARD_SLEEP_RETRY) {
@@ -254,6 +257,8 @@ AudioHardwareALSA::AudioHardwareALSA() :
        case 42: strcpy(ucm_name_str, "snd_soc_msm_Taiko_Fluid");
                 break;
        case 43: strcpy(ucm_name_str, "snd_soc_msm_Taiko_liquid");
+                break;
+       case 44: strcpy(ucm_name_str, "snd_soc_msm_auto");
                 break;
        default:
            property_get("ro.board.platform", platform, "");

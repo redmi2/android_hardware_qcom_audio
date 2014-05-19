@@ -193,6 +193,7 @@ static const char *card_list[] = {
     "snd_soc_msm_Taiko_Fluid",
     "snd_soc_msm_Taiko_liquid",
     "snd_soc_msm_I2SFusion",
+    "snd_soc_msm_auto",
     "us_soc_msm",
 };
 
@@ -215,6 +216,7 @@ static card_mapping_t card_mapping_list[] = {
     {"snd_soc_msm_Taiko_Fluid", 0},
     {"snd_soc_msm_Taiko_liquid", 0},
     {"snd_soc_msm_I2SFusion", 0},
+    {"snd_soc_msm_auto", 0},
     {"us_soc_msm", 0},
 };
 
