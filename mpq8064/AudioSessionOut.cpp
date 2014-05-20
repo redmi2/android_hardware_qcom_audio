@@ -16,7 +16,6 @@
  ** See the License for the specific language governing permissions and
  ** limitations under the License.
  */
- 
 #include <errno.h>
 #include <stdarg.h>
 #include <sys/stat.h>
@@ -254,27 +253,35 @@ status_t AudioSessionOutALSA::start()
                         if (i == 0)
                             base_time = tstamp.timestamp;
                         baseDelay = mRxHandleBaseTime[i];
-                        ALOGVV("baseDelay = %lld\n", baseDelay);
+                        ALOGV("baseDelay = %lld\n", baseDelay);
                         if (mRxHandleBaseTime[i] == ULLONG_MAX) {
                             // populate basetime if dirty, and handle started(timestamp>0)
                             if (i > 0) {
-                                mRxHandleBaseTime[i] = base_time;
+                                mRxHandle[0]->handle->sync_ptr->flags = SNDRV_PCM_SYNC_PTR_APPL;
+                                sync_ptr(mRxHandle[0]->handle);
+                                buffer_time = (((mRxHandle[0]->handle->sync_ptr->c.control.appl_ptr -
+                                                  mRxHandle[0]->handle->sync_ptr->s.status.hw_ptr)
+                                                 * 2 * mRxHandle[0]->channels)/mRxHandle[0]->handle->period_size) * 32000;
+
+                                ALOGV("appl ptr[0] = %ld, hw_ptr[0] = %ld period_size[0] = %d buffer_time[0] = %lld",
+                                          mRxHandle[0]->handle->sync_ptr->c.control.appl_ptr,
+                                          mRxHandle[0]->handle->sync_ptr->s.status.hw_ptr,
+                                          mRxHandle[0]->handle->period_size, buffer_time);
+
+                                mRxHandleBaseTime[i] = base_time + buffer_time;
                                 baseDelay = mRxHandleBaseTime[i];
                             } else {
                                 ALOGW("improper basetime for handle[%d], time %lld\n",
-                                        i, tstamp.timestamp);
+                                                                     i, tstamp.timestamp);
                                 baseDelay = 0;
                             }
                         }
-                        mRxHandle[i]->handle->sync_ptr->flags = SNDRV_PCM_SYNC_PTR_APPL;
-                        sync_ptr(mRxHandle[i]->handle);
-                        buffer_time = (((mRxHandle[i]->handle->sync_ptr->c.control.appl_ptr - mRxHandle[i]->handle->sync_ptr->s.status.hw_ptr) * 2 * mRxHandle[i]->channels)/mRxHandle[i]->handle->period_size) * 32000;
-                        ALOGVV("appl ptr = %ld, hw_ptr = %ld period_size = %d buffer_time = %lld", mRxHandle[i]->handle->sync_ptr->c.control.appl_ptr,  mRxHandle[i]->handle->sync_ptr->s.status.hw_ptr, mRxHandle[i]->handle->period_size, buffer_time);
-                        delay[i] = tstamp.timestamp + baseDelay - buffer_time;
+                        delay[i] = tstamp.timestamp + baseDelay;
                         if(min_resume_delay > delay[i])
                             min_resume_delay = delay[i];
-                        ALOGVV("start: Timestamp %lld, delay %lld buffer_time = %d base_time = %lld\n",
-                                                     tstamp.timestamp/1000, delay[i]/1000, buffer_time, base_time);
+                        ALOGV("start: Timestamp %lld delay %lld buffer_time = %d base_time = %lld\n",
+                                        tstamp.timestamp/1000,
+                                        delay[i]/1000, buffer_time, base_time);
                     }
                 }
             }
