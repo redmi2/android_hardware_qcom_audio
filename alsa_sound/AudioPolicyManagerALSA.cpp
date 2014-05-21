@@ -1867,6 +1867,18 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
                 device2 = mAvailableOutputDevices & AUDIO_DEVICE_OUT_REMOTE_SUBMIX;
             }
             if ((device2 == AUDIO_DEVICE_NONE) &&
+                (mForceUse[AudioSystem::FOR_COMMUNICATION] == AudioSystem::FORCE_BT_SCO)) {
+                if (device2 == AUDIO_DEVICE_NONE) {
+                    device2 = mAvailableOutputDevices & AUDIO_DEVICE_OUT_BLUETOOTH_SCO_HEADSET;
+                }
+                if (device2 == AUDIO_DEVICE_NONE) {
+                    device2 = mAvailableOutputDevices & AUDIO_DEVICE_OUT_BLUETOOTH_SCO;
+                }
+                if (device2 == AUDIO_DEVICE_NONE) {
+                    device2 = mAvailableOutputDevices & AUDIO_DEVICE_OUT_BLUETOOTH_SCO_CARKIT;
+                }
+            }
+            if ((device2 == AUDIO_DEVICE_NONE) &&
                     (mForceUse[AudioSystem::FOR_MEDIA] != AudioSystem::FORCE_NO_BT_A2DP) &&
                     !mA2dpSuspended) {
                 if (device2 == AUDIO_DEVICE_NONE) {
