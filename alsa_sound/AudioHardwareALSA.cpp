@@ -1523,7 +1523,7 @@ status_t AudioHardwareALSA::doRouting(int device, char* useCase)
                         }
                 }
             }
-            ALOGV("Dorouting updated usecase:%s device:%x activeUsecase",it->useCase, it->devices, activeUsecase);
+            ALOGV("Dorouting updated usecase:%s device:%x activeUsecase:%d",it->useCase, it->devices, activeUsecase);
             if (!((device & AudioSystem::DEVICE_OUT_ALL_A2DP) &&
                   (mCurRxDevice & AUDIO_DEVICE_OUT_ALL_USB))) {
                 if ((activeUsecase == USECASE_HIFI_LOW_POWER) ||
@@ -1554,7 +1554,9 @@ status_t AudioHardwareALSA::doRouting(int device, char* useCase)
                         } else if(isExtOutDevice(device)) {
                             mALSADevice->route(&(*it),(uint32_t)device, newMode);
                             mRouteAudioToExtOut = true;
-                            startPlaybackOnExtOut_l(useCaseStringToEnum(it->useCase));
+                            if (useCaseStringToEnum(it->useCase) == USECASE_HIFI_LOWLATENCY) {
+                                startPlaybackOnExtOut_l(useCaseStringToEnum(it->useCase));
+                            }
                         } else {
                            mALSADevice->route(&(*it),(uint32_t)device, newMode);
                         }
