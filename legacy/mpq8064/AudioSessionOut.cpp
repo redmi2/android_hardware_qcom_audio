@@ -129,6 +129,7 @@ AudioSessionOutALSA::AudioSessionOutALSA(AudioHardwareALSA *parent,
     mCurDevice           = 0;
     mOutputMetadataLength = 0;
     mTranscodeDevices     = 0;
+    mIsMS11FilePlaybackMode = true;
     mADTSHeaderPresent    = false;
     mFirstAACBuffer      = NULL;
     mEventThreadStarted  = false;
@@ -725,8 +726,8 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
         /* check for sync word, if present then configure MS11 for fileplayback mode OFF
            This is specifically done to handle Widevine usecase, in which the ADTS HEADER is
            not stripped off by the Widevine parser */
-        if(mFormat == AUDIO_FORMAT_AAC || mFormat == AUDIO_FORMAT_HE_AAC_V1 ||
-            mFormat == AUDIO_FORMAT_AAC_ADIF || mFormat == AUDIO_FORMAT_HE_AAC_V2){
+        if((mIsMS11FilePlaybackMode == true) && (mFormat == AUDIO_FORMAT_AAC || mFormat == AUDIO_FORMAT_HE_AAC_V1 ||
+            mFormat == AUDIO_FORMAT_AAC_ADIF || mFormat == AUDIO_FORMAT_HE_AAC_V2)){
 
             uint16_t uData = (*((char *)buffer) << 8) + *((char *)buffer + 1) ;
 
@@ -741,13 +742,14 @@ ssize_t AudioSessionOutALSA::write(const void *buffer, size_t bytes)
                     return -1;
                 }
                 ALOGD("mChannels %d mSampleRate %d",mChannels,mSampleRate);
+                mIsMS11FilePlaybackMode = false;
                 if(mMS11Decoder->setUseCaseAndOpenStream(FORMAT_DOLBY_PULSE_MAIN,mChannels,
-                    mSampleRate,false)){
+                    mSampleRate, mIsMS11FilePlaybackMode)){
                     ALOGE("SetUseCaseAndOpen MS11 failed");
                     delete mMS11Decoder;
                     return -1;
                 }
-              mADTSHeaderPresent= true;
+                mADTSHeaderPresent= true;
             }
         }
 
