@@ -362,7 +362,7 @@ int disable_snd_device(struct audio_device *adev,
 
         /* exit usb capture thread */
         if(SND_DEVICE_IN_USB_HEADSET_MIC == snd_device)
-            audio_extn_usb_stop_capture(adev);
+            audio_extn_usb_stop_capture();
 
         if (snd_device == SND_DEVICE_OUT_SPEAKER &&
             audio_extn_spkr_prot_is_enabled()) {
@@ -923,18 +923,18 @@ static void *offload_thread_loop(void *context)
         send_callback = false;
         switch(cmd->cmd) {
         case OFFLOAD_CMD_WAIT_FOR_BUFFER:
-            ALOGD("copl(%x):calling compress_wait", (unsigned int)out);
+            ALOGD("copl(%p):calling compress_wait", out);
             compress_wait(out->compr, -1);
-            ALOGD("copl(%x):out of compress_wait", (unsigned int)out);
+            ALOGD("copl(%p):out of compress_wait", out);
             send_callback = true;
             event = STREAM_CBK_EVENT_WRITE_READY;
             break;
         case OFFLOAD_CMD_PARTIAL_DRAIN:
             ret = compress_next_track(out->compr);
             if(ret == 0) {
-                ALOGD("copl(%x):calling compress_partial_drain", (unsigned int)out);
+                ALOGD("copl(%p):calling compress_partial_drain", out);
                 compress_partial_drain(out->compr);
-                ALOGD("copl(%x):out of compress_partial_drain", (unsigned int)out);
+                ALOGD("copl(%p):out of compress_partial_drain", out);
             }
             else if(ret == -ETIMEDOUT)
                 compress_drain(out->compr);
@@ -944,9 +944,9 @@ static void *offload_thread_loop(void *context)
             event = STREAM_CBK_EVENT_DRAIN_READY;
             break;
         case OFFLOAD_CMD_DRAIN:
-            ALOGD("copl(%x):calling compress_drain", (unsigned int)out);
+            ALOGD("copl(%p):calling compress_drain", out);
             compress_drain(out->compr);
-            ALOGD("copl(%x):calling compress_drain", (unsigned int)out);
+            ALOGD("copl(%p):calling compress_drain", out);
             send_callback = true;
             event = STREAM_CBK_EVENT_DRAIN_READY;
             break;
@@ -1326,7 +1326,7 @@ static int out_standby(struct audio_stream *stream)
                 out->pcm = NULL;
             }
         } else {
-            ALOGD("copl(%x):standby", (unsigned int)out);
+            ALOGD("copl(%p):standby", out);
             stop_compressed_output_l(out);
             out->gapless_mdata.encoder_delay = 0;
             out->gapless_mdata.encoder_padding = 0;
@@ -1610,9 +1610,9 @@ static ssize_t out_write(struct audio_stream_out *stream, const void *buffer,
     }
 
     if (out->usecase == USECASE_AUDIO_PLAYBACK_OFFLOAD) {
-        ALOGD("copl(%x): writing buffer (%d bytes) to compress device", (unsigned int)out, bytes);
+        ALOGD("copl(%p): writing buffer (%d bytes) to compress device", out, bytes);
         if (out->send_new_metadata) {
-            ALOGD("copl(%x):send new gapless metadata", (unsigned int)out);
+            ALOGD("copl(%p):send new gapless metadata", out);
             compress_set_gapless_metadata(out->compr, &out->gapless_mdata);
             out->send_new_metadata = 0;
         }
@@ -1753,7 +1753,7 @@ static int out_pause(struct audio_stream_out* stream)
     int status = -ENOSYS;
     ALOGV("%s", __func__);
     if (out->usecase == USECASE_AUDIO_PLAYBACK_OFFLOAD) {
-        ALOGD("copl(%x):pause compress driver", (unsigned int)out);
+        ALOGD("copl(%p):pause compress driver", out);
         pthread_mutex_lock(&out->lock);
         if (out->compr != NULL && out->offload_state == OFFLOAD_STATE_PLAYING) {
             status = compress_pause(out->compr);
@@ -1770,7 +1770,7 @@ static int out_resume(struct audio_stream_out* stream)
     int status = -ENOSYS;
     ALOGV("%s", __func__);
     if (out->usecase == USECASE_AUDIO_PLAYBACK_OFFLOAD) {
-        ALOGD("copl(%x):resume compress driver", (unsigned int)out);
+        ALOGD("copl(%p):resume compress driver", out);
         status = 0;
         pthread_mutex_lock(&out->lock);
         if (out->compr != NULL && out->offload_state == OFFLOAD_STATE_PAUSED) {
@@ -1803,11 +1803,11 @@ static int out_flush(struct audio_stream_out* stream)
     struct stream_out *out = (struct stream_out *)stream;
     ALOGV("%s", __func__);
     if (out->usecase == USECASE_AUDIO_PLAYBACK_OFFLOAD) {
-        ALOGD("copl(%x):calling compress flush", (unsigned int)out);
+        ALOGD("copl(%p):calling compress flush", out);
         pthread_mutex_lock(&out->lock);
         stop_compressed_output_l(out);
         pthread_mutex_unlock(&out->lock);
-        ALOGD("copl(%x):out of compress flush", (unsigned int)out);
+        ALOGD("copl(%p):out of compress flush", out);
         return 0;
     }
     return -ENOSYS;
