@@ -126,7 +126,7 @@ static int32_t fm_stop(struct audio_device *adev)
     disable_audio_route(adev, uc_info, true);
 
     /* 3. Disable the rx and tx devices */
-    disable_snd_device(adev, uc_info->out_snd_device, false);
+    disable_snd_device(adev, uc_info->out_snd_device, true);
     disable_snd_device(adev, uc_info->in_snd_device, true);
 
     list_remove(&uc_info->list);
