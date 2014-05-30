@@ -32,7 +32,10 @@
 #include "audio_extn.h"
 #include "voice_extn.h"
 #include "sound/compress_params.h"
+
+#ifdef PLATFORM_APQ8084
 #include "mdm_detect.h"
+#endif
 
 #define MIXER_XML_PATH "/system/etc/mixer_paths.xml"
 #define MIXER_XML_PATH_AUXPCM "/system/etc/mixer_paths_auxpcm.xml"
@@ -575,6 +578,7 @@ void close_csd_client(struct csd_data *csd)
 
 static void platform_csd_init(struct platform_data *plat_data)
 {
+#ifdef PLATFORM_APQ8084
     struct dev_info mdm_detect_info;
     int ret = 0;
 
@@ -591,6 +595,9 @@ static void platform_csd_init(struct platform_data *plat_data)
 
     if (mdm_detect_info.num_modems > 0)
         plat_data->csd = open_csd_client(plat_data->is_i2s_ext_modem);
+#else
+    plat_data->csd = NULL;
+#endif
 }
 
 static bool platform_is_i2s_ext_modem(const char *snd_card_name,

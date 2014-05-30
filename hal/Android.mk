@@ -135,8 +135,7 @@ LOCAL_SHARED_LIBRARIES := \
 	libtinycompress \
 	libaudioroute \
 	libdl \
-	libexpat \
-        libmdmdetect
+	libexpat
 
 LOCAL_C_INCLUDES += \
 	external/tinyalsa/include \
@@ -146,8 +145,14 @@ LOCAL_C_INCLUDES += \
 	$(call include-path-for, audio-effects) \
 	$(LOCAL_PATH)/$(AUDIO_PLATFORM) \
 	$(LOCAL_PATH)/audio_extn \
-	$(LOCAL_PATH)/voice_extn \
+	$(LOCAL_PATH)/voice_extn
+
+ifneq ($(filter apq8084,$(TARGET_BOARD_PLATFORM)),)
+LOCAL_SHARED_LIBRARIES += \
+        libmdmdetect
+LOCAL_C_INCLUDES += \
         $(TARGET_OUT_HEADERS)/libmdmdetect/inc
+endif
 
 ifeq ($(strip $(AUDIO_FEATURE_ENABLED_LISTEN)),true)
     LOCAL_CFLAGS += -DAUDIO_LISTEN_ENABLED
