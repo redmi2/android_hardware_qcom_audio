@@ -1816,7 +1816,7 @@ void AudioHardwareALSA::standbySessionDevices(int devices) {
     String8 key = String8(STANDBY_DEVICES_KEY);
     AudioParameter param = AudioParameter(key);
     param.addInt(key, devices);
-    for(it = mSessions.begin(); it != mSessions.end(); ++it) {
+    for(it = mSessions.begin(); it != mSessions.end() && (*it) != NULL; ++it) {
         ALOGV("%s, session handle [%p] to be iterated", __FUNCTION__, (*it));
         (*it)->setParameters(param.toString());
     }
@@ -1842,7 +1842,7 @@ void AudioHardwareALSA::updateDevicesOfOtherSessions(int device, int state)
             mHdmiRenderFormat = UNCOMPRESSED;
         if(device & AudioSystem::DEVICE_OUT_SPDIF)
             mSpdifRenderFormat = UNCOMPRESSED;
-        for(it = mSessions.begin(); device && it != mSessions.end(); ++it) {
+        for(it = mSessions.begin(); device && it != mSessions.end() && (*it) != NULL; ++it) {
             ALOGV("%s, resuming session %p ", __FUNCTION__, (*it));
             key = String8(RESUME_DEVICES_KEY);
             AudioParameter param = AudioParameter(key);
