@@ -544,10 +544,13 @@ status_t AudioHardwareALSA::setVoiceVolume(float v)
     vol = 100 - vol;
 
     if (mALSADevice) {
-        if(newMode == AUDIO_MODE_IN_COMMUNICATION) {
-            mALSADevice->setVoipVolume(vol);
-        } else if (newMode == AUDIO_MODE_IN_CALL){
-               mALSADevice->setVoiceVolume(vol);
+        /* Check for MODE_IN_COMMUNICATION is removed as Direct Output is used
+	 * for voicemail cases where stream is opened without any mode set or
+	 * mode set to IN_CALL and user still expect volume to be updated for
+	 * direct output stream */
+        mALSADevice->setVoipVolume(vol);
+        if (newMode == AUDIO_MODE_IN_CALL) {
+            mALSADevice->setVoiceVolume(vol);
         } else {
             ALOGW("Set Voice/VoIP volume in invalide mode:%d",newMode);
             return BAD_VALUE;
