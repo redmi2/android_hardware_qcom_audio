@@ -29,7 +29,7 @@
 
 #define LOG_TAG "AudioBroadcastStreamALSA"
 //#define LOG_NDEBUG 0
-#define LOG_NDDEBUG 0
+//#define LOG_NDDEBUG 0
 #include <utils/Log.h>
 #include <utils/String8.h>
 
@@ -511,12 +511,12 @@ status_t AudioBroadcastStreamALSA::setAvsyncWindow(int windowId, int ws_msw, int
     window.we_msw = we_msw;
     window.we_lsw = we_lsw;
 
-    ALOGD("setAvsyncWindow1: Enter, ws_msw=%d, ws_lsw=%d, we_msw=%d, we_lsw=%d",
+    ALOGV("setAvsyncWindow1: Enter, ws_msw=%d, ws_lsw=%d, we_msw=%d, we_lsw=%d",
          ws_msw, ws_lsw, we_msw, we_lsw);
 
     if ( mCompreRxHandle || mSecCompreRxHandle && mTimeStampModeSet){
         if(windowId == QCOM_BROADCAST_AVSYNC_RENDER_WINDOW) {
-            ALOGD("setAvsyncWindow: Inside RenderWindow");
+            ALOGV("setAvsyncWindow: Inside RenderWindow");
             cmdId = SNDRV_COMPRESS_SET_AVSYNC_RENDER_WINDOW;
             if(window.ws_msw == RENDER_WINDOWS_START_MSW && window.ws_lsw == RENDER_WINDOWS_START_LSW
                && window.we_msw == RENDER_WINDOWS_END_MSW && window.we_lsw == RENDER_WINDOWS_END_LSW){
@@ -535,23 +535,23 @@ status_t AudioBroadcastStreamALSA::setAvsyncWindow(int windowId, int ws_msw, int
                if (mCompreRxHandle){
                    rc = ioctl( mCompreRxHandle->handle->fd,SNDRV_COMPRESS_SET_START_DELAY, &start_delay);
                    if (rc < 0)
-                      ALOGD("setAvsyncWindow(mCompreRxHandle): ioctl set start delay failed rc =%d\n",rc);
+                      ALOGV("setAvsyncWindow(mCompreRxHandle): ioctl set start delay failed rc =%d\n",rc);
                }
                if (mSecCompreRxHandle){
                    rc = ioctl( mSecCompreRxHandle->handle->fd,SNDRV_COMPRESS_SET_START_DELAY, &start_delay);
                    if (rc < 0)
-                      ALOGD("setAvsyncWindow(mSecCompreRxHandle): ioctl set start delay failed rc =%d\n",rc);
+                      ALOGV("setAvsyncWindow(mSecCompreRxHandle): ioctl set start delay failed rc =%d\n",rc);
                }
             }
             if (mCompreRxHandle){
                 rc = ioctl(mCompreRxHandle->handle->fd, SNDRV_COMPRESS_SET_RUN_MODE, &mRunMode);
                 if (rc < 0)
-                    ALOGD("setAvsyncWindow(mCompreRxHandle): ioctl set start run mode failed rc =%d\n",rc);
+                    ALOGV("setAvsyncWindow(mCompreRxHandle): ioctl set start run mode failed rc =%d\n",rc);
             }
             if (mSecCompreRxHandle){
                 rc = ioctl(mSecCompreRxHandle->handle->fd, SNDRV_COMPRESS_SET_RUN_MODE, &mRunMode);
                 if (rc < 0)
-                    ALOGD("setAvsyncWindow(mSecCompreRxHandle): ioctl set start run mode failed rc =%d\n",rc);
+                    ALOGV("setAvsyncWindow(mSecCompreRxHandle): ioctl set start run mode failed rc =%d\n",rc);
             }
 
             if (mFrameCount > 0){
@@ -570,26 +570,26 @@ status_t AudioBroadcastStreamALSA::setAvsyncWindow(int windowId, int ws_msw, int
             }
         }
         else if(windowId == QCOM_BROADCAST_AVSYNC_STAT_WINDOW) {
-            ALOGD("setAvsyncWindow: Inside StatWindow");
+            ALOGV("setAvsyncWindow: Inside StatWindow");
             cmdId = SNDRV_COMPRESS_SET_AVSYNC_STAT_WINDOW;
         }
-        ALOGD("setAvsyncWindow: calling ioctl avsync cmd=%d\n",cmdId);
+        ALOGV("setAvsyncWindow: calling ioctl avsync cmd=%d\n",cmdId);
 
         if (mCompreRxHandle){
             rc = ioctl(mCompreRxHandle->handle->fd, cmdId, &window);
             if (rc < 0)
-                ALOGD("setAvsyncWindow(mCompreRxHandle): ioctl setWindow failed rc = %d\n", rc);
+                ALOGV("setAvsyncWindow(mCompreRxHandle): ioctl setWindow failed rc = %d\n", rc);
         }
         if (mSecCompreRxHandle){
             rc = ioctl(mSecCompreRxHandle->handle->fd, cmdId, &window);
             if (rc < 0)
-                ALOGD("setAvsyncWindow(mSecCompreRxHandle): ioctl setWindow failed rc = %d\n", rc);
+                ALOGV("setAvsyncWindow(mSecCompreRxHandle): ioctl setWindow failed rc = %d\n", rc);
         }
     }
     else
         ALOGE("Handle Invalid hence not issuing any ioctls or Time Stamp mode not set");
 
-    ALOGD("setAvsyncWindow: Leave");
+    ALOGV("setAvsyncWindow: Leave");
     return rc;
 
 }
@@ -600,30 +600,30 @@ status_t AudioBroadcastStreamALSA::getAvsyncSessionTime(int *session_msw, int *s
     alsa_handle_t *rxHandle = NULL;
     int rc = NO_ERROR;
 
-    ALOGD("getAvsyncSessionTime: Enter");
+    ALOGV("getAvsyncSessionTime: Enter");
     if(!session_msw || !session_lsw || !absolute_msw || !absolute_lsw) {
-        ALOGD("getAvsyncSessionTime: Leave : Bad Parameter");
+        ALOGV("getAvsyncSessionTime: Leave : Bad Parameter");
         return BAD_VALUE;
     }
     if(mPcmRxHandle) {
-        ALOGD("getAvsyncSessionTime: Inside PCM");
+        ALOGV("getAvsyncSessionTime: Inside PCM");
         rxHandle = mPcmRxHandle;
     }
     else if(mCompreRxHandle) {
-        ALOGD("getAvsyncSessionTime: Inside ComprHandle");
+        ALOGV("getAvsyncSessionTime: Inside ComprHandle");
         rxHandle = mCompreRxHandle;
     }
     else if(mSecCompreRxHandle) {
-        ALOGD("getAvsyncSessionTime: Inside SecComprHandle");
+        ALOGV("getAvsyncSessionTime: Inside SecComprHandle");
         rxHandle = mSecCompreRxHandle;
     }
 
 
     if(rxHandle != NULL && mTimeStampModeSet){
-        ALOGD("getAvsyncSessionTime: calling ioctl avsync cmd=%d\n", SNDRV_COMPRESS_GET_AVSYNC_SESSION_TIME);
+        ALOGV("getAvsyncSessionTime: calling ioctl avsync cmd=%d\n", SNDRV_COMPRESS_GET_AVSYNC_SESSION_TIME);
         rc = ioctl(rxHandle->handle->fd, SNDRV_COMPRESS_GET_AVSYNC_SESSION_TIME, &st);
         if (rc < 0) {
-           ALOGD("setAvsyncWindow: ioctl setWindow failed rc = %d\n", rc);
+           ALOGV("setAvsyncWindow: ioctl setWindow failed rc = %d\n", rc);
            return rc;
         }
         *session_msw = st.timeStamp_msw;
@@ -636,7 +636,7 @@ status_t AudioBroadcastStreamALSA::getAvsyncSessionTime(int *session_msw, int *s
     else
         ALOGE("Handle Invalid hence not issuing any ioctls or timeStampMode not set");
 
-    ALOGD("getAvsyncSessionTime: Leave");
+    ALOGV("getAvsyncSessionTime: Leave");
     return NO_ERROR;
 
 }
@@ -649,31 +649,31 @@ status_t AudioBroadcastStreamALSA::getAvsyncInstStatistics(audio_avsync_statisti
     uint64_t print_duration_region_B, print_average_region_B;
     uint64_t print_duration_region_C, print_average_region_C;
 
-    ALOGD("getAvsyncInstStatistics: Enter");
+    ALOGV("getAvsyncInstStatistics: Enter");
     if(!st) {
-        ALOGD("getAvsyncInstStatistics: Leave : Bad Parameter");
+        ALOGV("getAvsyncInstStatistics: Leave : Bad Parameter");
         return BAD_VALUE;
     }
     if(mPcmRxHandle) {
-        ALOGD("getAvsyncInstStatistics: Inside PCM");
+        ALOGV("getAvsyncInstStatistics: Inside PCM");
         rxHandle = mPcmRxHandle;
     }
     else if(mCompreRxHandle) {
-        ALOGD("getAvsyncInstStatistics: Inside ComprHandle");
+        ALOGV("getAvsyncInstStatistics: Inside ComprHandle");
         rxHandle = mCompreRxHandle;
     }
     else if(mSecCompreRxHandle) {
-        ALOGD("getAvsyncInstStatistics: Inside SecComprHandle");
+        ALOGV("getAvsyncInstStatistics: Inside SecComprHandle");
         rxHandle = mSecCompreRxHandle;
     }
 
 
 
     if(rxHandle != NULL && mTimeStampModeSet){
-	ALOGD("getAvsyncInstStatistics: calling ioctl avsync cmd=%d\n", SNDRV_COMPRESS_GET_AVSYNC_INST_STATISTICS);
+	ALOGV("getAvsyncInstStatistics: calling ioctl avsync cmd=%d\n", SNDRV_COMPRESS_GET_AVSYNC_INST_STATISTICS);
 	rc = ioctl(rxHandle->handle->fd, SNDRV_COMPRESS_GET_AVSYNC_INST_STATISTICS, &statistics);
 	if (rc < 0) {
-             ALOGD("setAvsyncWindow: ioctl setWindow failed rc = %d\n", rc);
+             ALOGV("setAvsyncWindow: ioctl setWindow failed rc = %d\n", rc);
 	     return rc;
          }
          st->absolute_time_msw = statistics.absolute_time_msw;
@@ -699,19 +699,19 @@ status_t AudioBroadcastStreamALSA::getAvsyncInstStatistics(audio_avsync_statisti
          print_duration_region_C = ((uint64_t) statistics.duration_region_C_msw << 32) | (uint64_t)statistics.duration_region_C_lsw;
          print_average_region_C = ((uint64_t) statistics.average_region_C_msw << 32) | (uint64_t)statistics.average_region_C_lsw;
 
-         ALOGD("getAvsyncInstStatistics: returning statistics:");
-         ALOGD("Absolute_time %lld", print_absolute_time);
+         ALOGV("getAvsyncInstStatistics: returning statistics:");
+         ALOGV("Absolute_time %lld", print_absolute_time);
 
-         ALOGD("duration_region_A %lld average_region_A %lld ",print_duration_region_A, print_average_region_A);
+         ALOGV("duration_region_A %lld average_region_A %lld ",print_duration_region_A, print_average_region_A);
 
-         ALOGD("duration_region_B %lld average_region_B %lld ",print_duration_region_B, print_average_region_B);
+         ALOGV("duration_region_B %lld average_region_B %lld ",print_duration_region_B, print_average_region_B);
 
          ALOGD("duration_region_C %lld average_region_C %lld ",print_duration_region_C, print_average_region_C);
     }
     else
         ALOGE("Handle Invalid hence not issuing any ioctls or timeStampMode not set");
 
-    ALOGD("getAvsyncInstStatistics: Leave");
+    ALOGV("getAvsyncInstStatistics: Leave");
     return NO_ERROR;
 
 }
@@ -725,25 +725,25 @@ status_t AudioBroadcastStreamALSA::getAvsyncCumuStatistics(audio_avsync_statisti
     uint64_t print_duration_region_B, print_average_region_B;
     uint64_t print_duration_region_C, print_average_region_C;
 
-    ALOGD("getAvsyncCumuStatistics: Enter");
+    ALOGV("getAvsyncCumuStatistics: Enter");
     if(!st) {
-        ALOGD("getAvsyncCumuStatistics: Leave : Bad Parameter");
+        ALOGV("getAvsyncCumuStatistics: Leave : Bad Parameter");
         return BAD_VALUE;
     }
     if(mPcmRxHandle) {
-        ALOGD("getAvsyncCumuStatistics: Inside PCM");
+        ALOGV("getAvsyncCumuStatistics: Inside PCM");
         rxHandle = mPcmRxHandle;
     }
     else if(mCompreRxHandle) {
-        ALOGD("getAvsyncCumuStatistics: Inside ComprHandle");
+        ALOGV("getAvsyncCumuStatistics: Inside ComprHandle");
         rxHandle = mCompreRxHandle;
     }
 
     if( rxHandle != NULL){
-         ALOGD("getAvsyncCumuStatistics: calling ioctl avsync cmd=%d\n", SNDRV_COMPRESS_GET_AVSYNC_CUMU_STATISTICS);
+         ALOGV("getAvsyncCumuStatistics: calling ioctl avsync cmd=%d\n", SNDRV_COMPRESS_GET_AVSYNC_CUMU_STATISTICS);
          rc = ioctl(rxHandle->handle->fd, SNDRV_COMPRESS_GET_AVSYNC_CUMU_STATISTICS, &statistics);
          if (rc < 0) {
-             ALOGD("setAvsyncWindow: ioctl setWindow failed rc = %d\n", rc);
+             ALOGV("setAvsyncWindow: ioctl setWindow failed rc = %d\n", rc);
              return rc;
          }
          st->absolute_time_msw = statistics.absolute_time_msw;
@@ -769,19 +769,19 @@ status_t AudioBroadcastStreamALSA::getAvsyncCumuStatistics(audio_avsync_statisti
          print_duration_region_C = ((uint64_t) statistics.duration_region_C_msw << 32) | (uint64_t)statistics.duration_region_C_lsw;
          print_average_region_C = ((uint64_t) statistics.average_region_C_msw << 32) | (uint64_t)statistics.average_region_C_lsw;
 
-         ALOGD("getAvsyncCumuStatistics: returning statistics:");
-         ALOGD("Absolute_time %lld", print_absolute_time);
+         ALOGV("getAvsyncCumuStatistics: returning statistics:");
+         ALOGV("Absolute_time %lld", print_absolute_time);
 
-         ALOGD("duration_region_A %lld average_region_A %lld ",print_duration_region_A, print_average_region_A);
+         ALOGV("duration_region_A %lld average_region_A %lld ",print_duration_region_A, print_average_region_A);
 
-         ALOGD("duration_region_B %lld average_region_B %lld ",print_duration_region_B, print_average_region_B);
+         ALOGV("duration_region_B %lld average_region_B %lld ",print_duration_region_B, print_average_region_B);
 
          ALOGD("duration_region_C %lld average_region_C %lld ",print_duration_region_C, print_average_region_C);
     }
     else
          ALOGE("Handle Invalid hence not issuing any ioctls");
 
-    ALOGD("getAvsyncCumuStatistics: Leave");
+    ALOGV("getAvsyncCumuStatistics: Leave");
     return NO_ERROR;
 
 }
@@ -2567,9 +2567,9 @@ void  AudioBroadcastStreamALSA::playbackThreadEntry()
         allocatePlaybackPollFd();
 
     while(!mKillPlaybackThread && ((err_poll = poll(mPlaybackPfd, NUM_PLAYBACK_FDS, 3000)) >=0)) {
-        ALOGD("pfd[0].revents = %d", mPlaybackPfd[0].revents);
-        ALOGD("pfd[1].revents = %d", mPlaybackPfd[1].revents);
-        ALOGD("pfd[2].revents = %d", mPlaybackPfd[2].revents);
+        ALOGV("pfd[0].revents = %d", mPlaybackPfd[0].revents);
+        ALOGV("pfd[1].revents = %d", mPlaybackPfd[1].revents);
+        ALOGV("pfd[2].revents = %d", mPlaybackPfd[2].revents);
         if (err_poll == EINTR)
             ALOGE("Timer is intrrupted");
 
@@ -2966,17 +2966,17 @@ int32_t AudioBroadcastStreamALSA::writeToCompressedDriver(char *buffer, int byte
     mWriteCvMutex.lock();
     mInputMemMutex.lock();
     if(mCompreRxHandle) {
-        ALOGD("write Empty Queue[0] size() = %d, Filled Queue[0] size() = %d ",
+        ALOGV("write Empty Queue[0] size() = %d, Filled Queue[0] size() = %d ",
               mInputMemEmptyQueue[0].size(), mInputMemFilledQueue[0].size());
     }
     if(mSecCompreRxHandle){
-        ALOGD("write Empty Queue[1] size() = %d, Filled Queue[1] size() = %d ",
+        ALOGV("write Empty Queue[1] size() = %d, Filled Queue[1] size() = %d ",
               mInputMemEmptyQueue[1].size(), mInputMemFilledQueue[1].size());
     }
 
     if ((mCompreRxHandle!=NULL && mInputMemEmptyQueue[0].empty()) ||
             (mSecCompreRxHandle!=NULL && mInputMemEmptyQueue[1].empty())) {
-        ALOGD("Write: waiting on mWriteCv");
+        ALOGV("Write: waiting on mWriteCv");
         if(mCompreRxHandle) {
             ALOGD("hw_ptr[0] = %lld status.hw_ptr = %ld appl_ptr = %ld", hw_ptr[0], mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,
                       mCompreRxHandle->handle->sync_ptr->c.control.appl_ptr);
@@ -2997,7 +2997,7 @@ int32_t AudioBroadcastStreamALSA::writeToCompressedDriver(char *buffer, int byte
             mInputMemMutex.unlock();
             return 0;
         }
-        ALOGD("Write: received a signal to wake up");
+        ALOGV("Write: received a signal to wake up");
     }
 
     mWriteCvMutex.unlock();
@@ -3078,10 +3078,10 @@ int32_t AudioBroadcastStreamALSA::writeToCompressedDriver(char *buffer, int byte
     mWriteCvMutex.lock();
     mInputMemMutex.lock();
     if( compreRxHandle == mCompreRxHandle) {
-        ALOGD("write Empty Queue[0] size() = %d, Filled Queue[0] size() = %d ",
+        ALOGV("write Empty Queue[0] size() = %d, Filled Queue[0] size() = %d ",
               mInputMemEmptyQueue[0].size(), mInputMemFilledQueue[0].size());
     } else if(compreRxHandle == mSecCompreRxHandle){
-        ALOGD("write Empty Queue[1] size() = %d, Filled Queue[1] size() = %d ",
+        ALOGV("write Empty Queue[1] size() = %d, Filled Queue[1] size() = %d ",
               mInputMemEmptyQueue[1].size(), mInputMemFilledQueue[1].size());
     }
 
@@ -3089,11 +3089,11 @@ int32_t AudioBroadcastStreamALSA::writeToCompressedDriver(char *buffer, int byte
             (mSecCompreRxHandle!=NULL && mInputMemEmptyQueue[1].empty())) {
         ALOGD("Write: waiting on mWriteCv");
         if(mCompreRxHandle) {
-            ALOGD("hw_ptr[0] = %lld status.hw_ptr = %ld appl_ptr = %ld", hw_ptr[0], mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,
+            ALOGV("hw_ptr[0] = %lld status.hw_ptr = %ld appl_ptr = %ld", hw_ptr[0], mCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,
                       mCompreRxHandle->handle->sync_ptr->c.control.appl_ptr);
         }
         if(mSecCompreRxHandle) {
-            ALOGD("hw_ptr[1] = %lld status.hw_ptr = %ld appl_ptr = %ld", hw_ptr[1], mSecCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,
+            ALOGV("hw_ptr[1] = %lld status.hw_ptr = %ld appl_ptr = %ld", hw_ptr[1], mSecCompreRxHandle->handle->sync_ptr->s.status.hw_ptr,
                       mSecCompreRxHandle->handle->sync_ptr->c.control.appl_ptr);
         }
         mLock.unlock();
@@ -3108,7 +3108,7 @@ int32_t AudioBroadcastStreamALSA::writeToCompressedDriver(char *buffer, int byte
             mInputMemMutex.unlock();
             return 0;
         }
-        ALOGD("Write: received a signal to wake up");
+        ALOGV("Write: received a signal to wake up");
     }
 
     mWriteCvMutex.unlock();
@@ -4022,7 +4022,7 @@ bool AudioBroadcastStreamALSA::decode(char *buffer, size_t bytes)
                                                         bufPtr);
                 mBitstreamSM->setOutputBufferWritePtr(PCM_2CH_OUT,copyOutputBytesSize);
             }
-            ALOGD("bytesConsumedInDecode %d copyOutputBytesSize %d", bytesConsumedInDecode, copyOutputBytesSize);
+            ALOGV("bytesConsumedInDecode %d copyOutputBytesSize %d", bytesConsumedInDecode, copyOutputBytesSize);
         }
         if (((mCompreRxHandle) && (mCompreRxHandle->format == AUDIO_FORMAT_AC3)) ||
            ((mSecCompreRxHandle) && (mSecCompreRxHandle->format == AUDIO_FORMAT_AC3))){
@@ -4260,7 +4260,7 @@ uint32_t AudioBroadcastStreamALSA::render(bool continueDecode)
                                 requiredSize) == true)) {
             if(mTimeStampModeSet) {
                 update_time_stamp_pre_write_to_driver(PCM_OUT);
-                ALOGD("ts- %lld", mOutputMetadataPcm.timestamp);
+                ALOGV("ts- %lld", mOutputMetadataPcm.timestamp);
                 memcpy(mCompreWriteTempBuffer, &mOutputMetadataPcm,
                            mOutputMetadataLength);
                 memcpy(mCompreWriteTempBuffer+mOutputMetadataLength,
@@ -4279,7 +4279,7 @@ uint32_t AudioBroadcastStreamALSA::render(bool continueDecode)
             }
             ALOGV("bufferLength %d timeStamp %lld",mOutputMetadataPcm.bufferLength,mOutputMetadataPcm.timestamp);
             n = writeToCompressedDriver(mCompreWriteTempBuffer, period_size, mCompreRxHandle);
-            ALOGD("pcm_write returned with %d", n);
+            ALOGV("pcm_write returned with %d", n);
             if (n < 0) {
                 // Recovery is part of pcm_write. TODO split is later.
                 ALOGE("pcm_write returned n < 0");
@@ -4320,20 +4320,20 @@ uint32_t AudioBroadcastStreamALSA::render(bool continueDecode)
                            mBitstreamSM->getOutputBufferPtr(PCM_MCH_OUT),
                            requiredSize);
             }
-            ALOGD("bufferLength %d timeStamp %lld",mOutputMetadataPcm.bufferLength,mOutputMetadataPcm.timestamp);
+            ALOGV("bufferLength %d timeStamp %lld",mOutputMetadataPcm.bufferLength,mOutputMetadataPcm.timestamp);
             n = writeToCompressedDriver(mCompreWriteTempBuffer, period_size, mCompreRxHandle);
 #ifdef DEBUG
             mFpDumpPCMOutput = fopen("/data/pcm_output.raw","a");
 
             if(mFpDumpPCMOutput != NULL) {
 
-                    ALOGD("Dump output to file bytes %d",requiredSize);
+                    ALOGV("Dump output to file bytes %d",requiredSize);
                         fwrite(mBitstreamSM->getOutputBufferPtr(PCM_MCH_OUT), 1,
                                    requiredSize, mFpDumpPCMOutput);
                         fclose(mFpDumpPCMOutput);
             }
 #endif
-            ALOGD("pcm_write returned with %d", n);
+            ALOGV("pcm_write returned with %d", n);
             if (n < 0) {
                 // Recovery is part of pcm_write. TODO split is later.
                 ALOGE("pcm_write returned n < 0");
@@ -4363,7 +4363,7 @@ uint32_t AudioBroadcastStreamALSA::render(bool continueDecode)
                                 1) == true)) {
             if(mTimeStampModeSet) {
                 update_time_stamp_pre_write_to_driver(COMPRESSED_OUT);
-                ALOGD("ts- %lld", mOutputMetadataCompre.timestamp);
+                ALOGV("ts- %lld", mOutputMetadataCompre.timestamp);
                 memcpy(mCompreWriteTempBuffer, &mOutputMetadataCompre,
                            mOutputMetadataLength);
                 memcpy(mCompreWriteTempBuffer+mOutputMetadataLength,
@@ -4387,7 +4387,7 @@ uint32_t AudioBroadcastStreamALSA::render(bool continueDecode)
             else
                 n = writeToCompressedDriver(mCompreWriteTempBuffer, period_size);
 
-            ALOGD("%d pcm_write returned with %d", __LINE__,n);
+            ALOGV("%d pcm_write returned with %d", __LINE__,n);
             if (n < 0) {
                 // Recovery is part of pcm_write. TODO split is later.
                 ALOGE("pcm_write returned n < 0");
@@ -4498,7 +4498,7 @@ void AudioBroadcastStreamALSA::update_time_stamp_pre_write_to_driver(
         if(!mMS11Decoder->getTranscoderDelayAndStreamInfo(&delayInfo,&streamInfo)){
           transcoder_delay = ((uint64_t)(delayInfo.staticInput2Output + delayInfo.dynamicInput2Output)* 1000000)/streamInfo.samplingRate;
           inputFrameDuration = ((uint32_t)(streamInfo.frameLength * 1000000)/streamInfo.samplingRate);
-          ALOGD("static %d dynamic %d", delayInfo.staticInput2Output,delayInfo.dynamicInput2Output);
+          ALOGV("static %d dynamic %d", delayInfo.staticInput2Output,delayInfo.dynamicInput2Output);
           outputFrameDuration = MS11_OUTPUT_FRAME_DURATION;
         }
     }
@@ -4509,7 +4509,7 @@ void AudioBroadcastStreamALSA::update_time_stamp_pre_write_to_driver(
             mOutputMetadataPcm.timestamp = mLastDecodedFrameTimeStamp + inputFrameDuration +
                                            mCompleteBufferTimePcm - (outputFrameDuration + transcoder_delay);
 
-            ALOGD("mLastDecodedFrameTimeStamp %lld transcoder_delay %lld mCompleteBufferTimePcm %d inputFrame %d",
+            ALOGV("mLastDecodedFrameTimeStamp %lld transcoder_delay %lld mCompleteBufferTimePcm %d inputFrame %d",
                    mLastDecodedFrameTimeStamp, transcoder_delay, mCompleteBufferTimePcm, inputFrameDuration);
             if(mRoutePCMMChToDSP && mUseMS11Decoder)
                mOutputMetadataPcm.bufferLength = MS11_MCH_OUTPUT_BYTES;
@@ -4527,7 +4527,7 @@ void AudioBroadcastStreamALSA::update_time_stamp_pre_write_to_driver(
             mOutputMetadataCompre.metadataLength = sizeof(mOutputMetadataCompre);
             mOutputMetadataCompre.timestamp = mLastDecodedFrameTimeStamp + inputFrameDuration +
                                                mCompleteBufferTimePcm - (outputFrameDuration + transcoder_delay);
-            ALOGD("mLastDecodedFrameTimeStamp %lld transcoder_delay %lld mCompleteBufferTimePcm %d inputFrame %d",
+            ALOGV("mLastDecodedFrameTimeStamp %lld transcoder_delay %lld mCompleteBufferTimePcm %d inputFrame %d",
                    mLastDecodedFrameTimeStamp, transcoder_delay, mCompleteBufferTimePcm, inputFrameDuration);
 
             mOutputMetadataCompre.bufferLength =
@@ -4630,11 +4630,11 @@ void AudioBroadcastStreamALSA::update_input_meta_data_list_post_write(
         if(mPartialBufferTimeCompre == 0) {
             for(inputMetadataList::iterator it = mInputMetadataListCompre.begin();
                     it != mInputMetadataListCompre.end();){
-                ALOGD("compr: it->consumedLength - %d", it->consumedLength);
-                ALOGD("compr: it->bufferLength - %d", it->bufferLength);
-                ALOGD("compr: it->timestamp - %lld", it->timestamp);
+                ALOGV("compr: it->consumedLength - %d", it->consumedLength);
+                ALOGV("compr: it->bufferLength - %d", it->bufferLength);
+                ALOGV("compr: it->timestamp - %lld", it->timestamp);
                 if(it->bufferLength == it->consumedLength) {
-                    ALOGD("erasing buffer %d from compressed List", it->bufNo);
+                    ALOGV("erasing buffer %d from compressed List", it->bufNo);
                     it = mInputMetadataListCompre.erase(it);
                 } else {
                     ALOGV("Breaking from the loop");
@@ -4653,7 +4653,7 @@ Description: Ignoring pcm on hdmi or spdif if the required playback on the
 void AudioBroadcastStreamALSA::updateDevicesInSessionList(int devices, int state)
 {
     int device = 0;
-    ALOGD("updateDevicesInSessionList: devices %d state %d", devices, state);
+    ALOGV("updateDevicesInSessionList: devices %d state %d", devices, state);
     if(devices & AudioSystem::DEVICE_OUT_SPDIF)
         device |= AudioSystem::DEVICE_OUT_SPDIF;
     if(devices & AudioSystem::DEVICE_OUT_AUX_DIGITAL)
@@ -4664,7 +4664,7 @@ void AudioBroadcastStreamALSA::updateDevicesInSessionList(int devices, int state
         mParent->updateDevicesOfOtherSessions(device, state);
         mConfiguringSessions = false;
     }
-    ALOGD("updateDevicesInSessionList: X");
+    ALOGV("updateDevicesInSessionList: X");
 }
 
 }       // namespace android_audio_legacy
