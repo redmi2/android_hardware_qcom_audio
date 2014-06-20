@@ -78,5 +78,8 @@ protected:
         // returns the category the device belongs to with regard to volume curve management
         static device_category getDeviceCategory(audio_devices_t device);
 
+        // returns true if give output is direct output
+        bool isDirectOutput(audio_io_handle_t output);
+
 };
 };
