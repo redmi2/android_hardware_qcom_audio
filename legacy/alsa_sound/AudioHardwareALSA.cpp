@@ -47,6 +47,12 @@
 #endif
 #include "AudioUtil.h"
 
+#ifdef QCOM_HFP_ENABLED
+#define AUDIO_PARAMETER_HFP_ENABLE      "hfp_enable"
+#define AUDIO_PARAMETER_HFP_SET_SAMPLING_RATE "hfp_set_sampling_rate"
+#define AUDIO_PARAMETER_KEY_HFP_VOLUME "hfp_volume"
+#endif
+
 //#define OUTPUT_BUFFER_LOG
 #ifdef OUTPUT_BUFFER_LOG
     FILE *outputBufferFile1;
@@ -113,6 +119,9 @@ AudioHardwareALSA::AudioHardwareALSA() :
     mVoice2CallState = CALL_INACTIVE;
     mVSID = 0;
     mIsFmActive = 0;
+#ifdef QCOM_HFP_ENABLED
+    mIsHFPActive = 0;
+#endif
     mDevSettingsFlag = 0;
     mCSMicMute = false;
     mVoice2MicMute = false;
@@ -528,6 +537,65 @@ bool AudioHardwareALSA::isAnyCallActive() {
     return ret;
 }
 
+#ifdef QCOM_HFP_ENABLED
+status_t  AudioHardwareALSA::enableHFP(uint32_t device, int mode)
+{
+    ALOGD("%s Enter", __func__);
+    status_t status;
+    alsa_handle_t alsa_handle;
+    char *use_case;
+    unsigned long bufferSize = DEFAULT_BUFFER_SIZE;
+
+    snd_use_case_get(mUcMgr, "_verb", (const char **)&use_case);
+    if ((use_case == NULL) || (!strcmp(use_case, SND_USE_CASE_VERB_INACTIVE))) {
+        strlcpy(alsa_handle.useCase, SND_USE_CASE_VERB_HFP, sizeof(alsa_handle.useCase));
+    } else {
+        strlcpy(alsa_handle.useCase, SND_USE_CASE_MOD_HFP, sizeof(alsa_handle.useCase));
+    }
+    free(use_case);
+    for (size_t b = 1; (bufferSize & ~b) != 0; b <<= 1)
+        bufferSize &= ~b;
+
+    alsa_handle.bufferSize = bufferSize;
+    alsa_handle.module = mALSADevice;
+    alsa_handle.devices = device;
+    alsa_handle.handle = 0;
+    alsa_handle.format = SNDRV_PCM_FORMAT_S16_LE;
+    alsa_handle.channels = 1;
+    // Use samplingRate that was set already.
+    alsa_handle.sampleRate = 8000;
+    alsa_handle.rxHandle = 0;
+    alsa_handle.latency = PLAYBACK_LATENCY;
+    mIsHFPActive = 1;
+    alsa_handle.ucMgr = mUcMgr;
+    mDeviceList.push_back(alsa_handle);
+    ALSAHandleList::iterator it = mDeviceList.end();
+    it--;
+    setInChannels(device);
+
+    ALOGD("%s: route", __func__);
+
+    mALSADevice->route(&(*it), (uint32_t)device, mode);
+    if (!strcmp(it->useCase, SND_USE_CASE_VERB_HFP)) {
+        snd_use_case_set(mUcMgr, "_verb", SND_USE_CASE_VERB_HFP);
+    } else {
+        snd_use_case_set(mUcMgr, "_enamod", SND_USE_CASE_MOD_HFP);
+    }
+
+    status = mALSADevice->startHFP(&(*it));
+
+    if (status == NO_ERROR) {
+        ALOGD("AudioHardwareAlsa: HFP succesfully started");
+    }
+    else {
+        ALOGE("AudioHardwareAlsa: HFP setup was unsuccesful");
+        mDeviceList.erase(it);
+        return NO_INIT;
+    }
+
+    return NO_ERROR;
+}
+#endif
 
 status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
 {
@@ -674,6 +742,43 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         }
         param.remove(key);
     }
+
+#ifdef QCOM_HFP_ENABLED
+    // This parameter needs to send device
+    key = String8(AUDIO_PARAMETER_HFP_ENABLE);
+    if (param.get(key, value) == NO_ERROR) {
+        if(value == "true") {
+            ALSAHandleList::iterator it = mDeviceList.end();
+            it--;
+            enableHFP((*it).devices, mode());
+        }
+        else {
+            mALSADevice->stopHFP();
+        }
+        param.remove(key);
+    }
+
+    key = String8(AUDIO_PARAMETER_HFP_SET_SAMPLING_RATE);
+    int samplingRate;
+    if (param.getInt(key, samplingRate) == NO_ERROR) {
+        ALOGV("%s, HFP samplingRate = [%d]", __func__, samplingRate);
+        if (8000 == samplingRate || 16000 == samplingRate) {
+            // update the rate
+            ALSAHandleList::iterator it = mDeviceList.end();
+            it--;
+            (*it).sampleRate = samplingRate;
+        } else
+            ALOGE("Unsupported sampling rate");
+        param.remove(key);
+    }
+
+    key = String8(AUDIO_PARAMETER_KEY_HFP_VOLUME);
+    int volume;
+    if (param.getInt(key, volume) == NO_ERROR) {
+        mALSADevice->setHFPVolume(volume);
+        param.remove(key);
+    }
+#endif
 
     key = String8(BT_SAMPLERATE_KEY);
     if (param.getInt(key, btRate) == NO_ERROR) {

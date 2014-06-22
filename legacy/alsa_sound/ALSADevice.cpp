@@ -55,6 +55,8 @@ static int (*acdb_loader_get_ecrx_device)(int acdb_id);
 #define AFE_PROXY_PERIOD_SIZE 3072
 #define KILL_A2DP_THREAD 1
 #define SIGNAL_A2DP_THREAD 2
+#define AFE_LOOPBACK_MAX_VOLUME 0x2000
+#define HFP_MAX_VOLUME_FROM_APP 15
 
 // Setting number of periods to 4. If the system is loaded
 // and record obtain buffer is seen increase
@@ -69,6 +71,10 @@ namespace sys_close {
 
 namespace android_audio_legacy
 {
+
+#ifdef QCOM_HFP_ENABLED
+struct hfp_module ALSADevice::hfpmod = { NULL, NULL, NULL, NULL, 0, 0 };
+#endif
 
 ALSADevice::ALSADevice() {
 #ifdef USES_FLUENCE_INCALL
@@ -1275,6 +1281,234 @@ status_t ALSADevice::setFmVolume(int value)
 
     return err;
 }
+
+#ifdef QCOM_HFP_ENABLED
+
+status_t ALSADevice::setHFPVolume(int value)
+{
+    int32_t vol, ret = 0;
+
+    ALOGV("%s -> entry: volume to be set is %d", __func__, value);
+    if (value < 0) {
+        ALOGW("%s: (%f) Under 0, assuming 0\n", __func__, value);
+        value = 0;
+    }
+    if (value > HFP_MAX_VOLUME_FROM_APP) {
+        value = HFP_MAX_VOLUME_FROM_APP;
+        ALOGW("%s: Volume brought with in range (%f)\n", __func__, value);
+    }
+    vol  = (value * AFE_LOOPBACK_MAX_VOLUME)/ HFP_MAX_VOLUME_FROM_APP;
+    hfpmod.hfp_volume = value;
+
+    if (!hfpmod.is_hfp_running) {
+        ALOGV("%s: HFP not active, ignoring set_hfp_volume call", __func__);
+        return -EIO;
+    }
+
+    ALOGD("%s: Setting HFP volume to %d \n", __func__, vol);
+    if(setMixerControl("Internal HFP RX Volume", vol, 0)) {
+        ALOGE("%s: Couldn't set HFP Volume: [%d]", __func__, vol);
+        return -EINVAL;
+    }
+
+    return ret;
+}
+
+status_t ALSADevice::startHFP(alsa_handle_t *alsa_handle)
+{
+    ALOGD("%s Enter", __func__);
+    status_t ret = 0;
+    unsigned flags = 0;
+    int err = NO_ERROR;
+
+    // Open devices
+    /****************************************/
+    // pcm_dev_tx handle.
+    flags = PCM_IN | PCM_STEREO;
+    alsa_handle->handle = pcm_open(flags, (char*)"hw:0,11");
+    if (!alsa_handle->handle) {
+        ALOGE("%s alsa_handle is NULL - pcm_dev_tx", __func__);
+        goto Error;
+    }
+    alsa_handle->handle->flags = flags;
+    err = setHardwareParams(alsa_handle);
+    if(err != NO_ERROR) {
+        ALOGE("startHFP: setHardwareParams failed for pcm_dev_tx");
+        goto Error;
+    }
+    err = setSoftwareParams(alsa_handle);
+    if(err != NO_ERROR) {
+        ALOGE("startHFP: setSoftwareParams failed for pcm_dev_tx");
+        goto Error;
+    }
+    err = pcm_prepare(alsa_handle->handle);
+    if(err != NO_ERROR) {
+        ALOGE("startHFP: pcm_prepare failed for pcm_dev_tx");
+        goto Error;
+    }
+    if (ioctl(alsa_handle->handle->fd, SNDRV_PCM_IOCTL_START)) {
+        ALOGE("startHFP: SNDRV_PCM_IOCTL_START failed for pcm_dev_tx");
+        goto Error;
+    }
+
+    // Store the PCM playback device pointer in rxHandle
+    hfpmod.hfp_pcm_tx = alsa_handle->handle;
+    ALOGD("%s pcm_dev_tx opened", __func__);
+
+    // pcm_dev_rx handle.
+    flags = PCM_OUT | PCM_STEREO;
+    alsa_handle->handle = pcm_open(flags, (char*)"hw:0,11");
+    if (!alsa_handle->handle) {
+        ALOGE("%s alsa_handle is NULL - pcm_dev_rx", __func__);
+        goto Error;
+    }
+    if (!alsa_handle->handle || (alsa_handle->handle->fd < 0)) {
+        ALOGE("startHFP: could not open PCM device for pcm_dev_rx");
+        goto Error;
+    }
+    alsa_handle->handle->flags = flags;
+    err = setHardwareParams(alsa_handle);
+    if(err != NO_ERROR) {
+        ALOGE("startHFP: setHardwareParams failed for pcm_dev_rx");
+        goto Error;
+    }
+    err = setSoftwareParams(alsa_handle);
+    if(err != NO_ERROR) {
+        ALOGE("startHFP: setSoftwareParams failed for pcm_dev_rx");
+        goto Error;
+    }
+    err = pcm_prepare(alsa_handle->handle);
+    if(err != NO_ERROR) {
+        ALOGE("startHFP: pcm_prepare failed for pcm_dev_rx");
+        goto Error;
+    }
+    if (ioctl(alsa_handle->handle->fd, SNDRV_PCM_IOCTL_START)) {
+        ALOGE("startHFP: SNDRV_PCM_IOCTL_START failed pcm_dev_rx");
+        goto Error;
+    }
+
+    // Store in HFP module pcm rx
+    hfpmod.hfp_pcm_rx = alsa_handle->handle;
+    ALOGD("%s pcm_dev_rx opened", __func__);
+
+    // sco_dev_tx handle.
+    flags = PCM_IN | PCM_MONO;
+    alsa_handle->handle = pcm_open(flags, (char*)"hw:0,9");
+    if (!alsa_handle->handle) {
+        ALOGE("%s alsa_handle is NULL - sco_dev_tx", __func__);
+        goto Error;
+    }
+    alsa_handle->handle->flags = flags;
+    err = setHardwareParams(alsa_handle);
+    if(err != NO_ERROR) {
+        ALOGE("startHFP: setHardwareParams failed for sco_dev_tx");
+        goto Error;
+    }
+    err = setSoftwareParams(alsa_handle);
+    if(err != NO_ERROR) {
+        ALOGE("startHFP: setSoftwareParams failed for sco_dev_tx");
+        goto Error;
+    }
+    err = pcm_prepare(alsa_handle->handle);
+    if(err != NO_ERROR) {
+        ALOGE("startHFP: pcm_prepare failed for sco_dev_tx");
+        goto Error;
+    }
+    if (ioctl(alsa_handle->handle->fd, SNDRV_PCM_IOCTL_START)) {
+        ALOGE("startHFP: SNDRV_PCM_IOCTL_START failed for sco_dev_tx");
+        goto Error;
+    }
+
+    // Store the PCM playback device pointer in rxHandle
+    hfpmod.hfp_sco_tx = alsa_handle->handle;
+    ALOGD("%s sco_dev_tx opened", __func__);
+
+    flags = PCM_OUT | PCM_MONO;
+    alsa_handle->handle = pcm_open(flags, (char*)"hw:0,9");
+    if (!alsa_handle->handle) {
+        ALOGE("%s alsa_handle is NULL - sco_dev_rx", __func__);
+        goto Error;
+    }
+    if (!alsa_handle->handle || (alsa_handle->handle->fd < 0)) {
+        ALOGE("startHFP: could not open PCM device for sco_dev_rx");
+        goto Error;
+    }
+    alsa_handle->handle->flags = flags;
+    err = setHardwareParams(alsa_handle);
+    if(err != NO_ERROR) {
+        ALOGE("startHFP: setHardwareParams failed for sco_dev_rx");
+        goto Error;
+    }
+    err = setSoftwareParams(alsa_handle);
+    if(err != NO_ERROR) {
+        ALOGE("startHFP: setSoftwareParams failed for sco_dev_rx");
+        goto Error;
+    }
+    err = pcm_prepare(alsa_handle->handle);
+    if(err != NO_ERROR) {
+        ALOGE("startHFP: setSoftwareParams failed for sco_dev_rx");
+        goto Error;
+    }
+    if (ioctl(alsa_handle->handle->fd, SNDRV_PCM_IOCTL_START)) {
+        ALOGE("startHFP: SNDRV_PCM_IOCTL_START failed for sco_dev_rx");
+        goto Error;
+    }
+    // Store in HFP module pcm rx
+    hfpmod.hfp_sco_rx = alsa_handle->handle;
+
+    ALOGD("%s All devices open", __func__);
+    hfpmod.is_hfp_running = true;
+    setHFPVolume(hfpmod.hfp_volume);
+
+    ALOGD("%s: exit: status(%d)", __func__, ret);
+    return 0;
+
+Error:
+    stopHFP();
+    ALOGE("%s: Problem in HFP start: status(%d)", __func__, ret);
+    return ret;
+}
+
+status_t ALSADevice::stopHFP()
+{
+    int32_t ret = 0;
+    char *use_case = SND_USE_CASE_VERB_HFP; // todo: Assign "HFP Use case" to it
+
+    ALOGD("%s: enter", __func__);
+    hfpmod.is_hfp_running = false;
+
+    /* 1. Close the PCM devices */
+    if (hfpmod.hfp_sco_rx) {
+        pcm_close(hfpmod.hfp_sco_rx);
+        hfpmod.hfp_sco_rx = NULL;
+    }
+    if (hfpmod.hfp_sco_tx) {
+        pcm_close(hfpmod.hfp_sco_tx);
+        hfpmod.hfp_sco_tx = NULL;
+    }
+    if (hfpmod.hfp_pcm_rx) {
+        pcm_close(hfpmod.hfp_pcm_rx);
+        hfpmod.hfp_pcm_rx = NULL;
+    }
+    if (hfpmod.hfp_pcm_tx) {
+        pcm_close(hfpmod.hfp_pcm_tx);
+        hfpmod.hfp_pcm_tx = NULL;
+    }
+
+    // Remove HFP Usecase
+    for(ALSAUseCaseList::iterator it = mUseCaseList.begin(); it != mUseCaseList.end(); ++it) {
+        if ((use_case != NULL) && (strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
+            strlen(SND_USE_CASE_VERB_INACTIVE))) && (!strncmp(use_case, it->useCase, MAX_UC_LEN))) {
+            // Remove this entry and break.
+            mUseCaseList.erase(it);
+            break;
+        }
+    }
+
+    ALOGD("%s: exit: status(%d)", __func__, ret);
+    return ret;
+}
+#endif
 
 status_t ALSADevice::setLpaVolume(int value)
 {

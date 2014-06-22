@@ -223,6 +223,7 @@ static int USBRECBIT_FM = (1 << 3);
 
 static uint32_t FLUENCE_MODE_ENDFIRE   = 0;
 static uint32_t FLUENCE_MODE_BROADSIDE = 1;
+
 class ALSADevice;
 
 enum {
@@ -275,6 +276,17 @@ struct use_case_t {
 
 typedef List < use_case_t > ALSAUseCaseList;
 
+#ifdef QCOM_HFP_ENABLED
+struct hfp_module {
+    struct pcm *hfp_sco_rx;
+    struct pcm *hfp_sco_tx;
+    struct pcm *hfp_pcm_rx;
+    struct pcm *hfp_pcm_tx;
+    bool is_hfp_running;
+    int hfp_volume;
+};
+#endif
+
 class ALSADevice
 {
 
@@ -290,6 +302,11 @@ public:
     status_t startVoiceCall(alsa_handle_t *handle, uint32_t vsid = 0);
     status_t startVoipCall(alsa_handle_t *handle);
     status_t startFm(alsa_handle_t *handle);
+#ifdef QCOM_HFP_ENABLED
+    status_t startHFP(alsa_handle_t *alsa_handle);
+    status_t stopHFP();
+    status_t setHFPVolume(int volume);
+#endif
     void     setVoiceVolume(int volume);
     void     setVoipVolume(int volume);
     void     setMicMute(int state);
@@ -375,6 +392,10 @@ private:
     int mInChannels;
     bool mIsSglte;
     bool mIsFmEnabled;
+#ifdef QCOM_HFP_ENABLED
+    static hfp_module hfpmod;
+    int mIsHFPEnabled;
+#endif
 #ifdef SEPERATED_AUDIO_INPUT
     int mInput_source
 #endif
@@ -878,6 +899,9 @@ protected:
 #ifdef QCOM_FM_ENABLED
     void                handleFm(int device);
 #endif
+#ifdef QCOM_HFP_ENABLED
+status_t enableHFP(uint32_t device, int mode);
+#endif
 #ifdef QCOM_USBAUDIO_ENABLED
     void                closeUSBPlayback();
     void                closeUSBRecording();
@@ -929,6 +953,9 @@ protected:
     int mCallState;
     uint32_t mVSID;
     int mIsFmActive;
+#ifdef QCOM_HFP_ENABLED
+    int mIsHFPActive;
+#endif
     bool mBluetoothVGS;
     bool mFusion3Platform;
 #ifdef QCOM_USBAUDIO_ENABLED
