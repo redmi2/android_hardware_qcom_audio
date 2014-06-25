@@ -60,7 +60,7 @@ static int (*acdb_loader_get_ecrx_device)(int acdb_id);
 // and record obtain buffer is seen increase
 // PCM_RECORD_PERIOD_COUNT to a value between 4-16.
 #define PCM_RECORD_PERIOD_COUNT 4
-#define PROXY_CAPTURE_DEVICE_NAME (const char *)("hw:0,8")
+#define PROXY_CAPTURE_DEVICE_NAME (const char *)("hw:0,6")
 namespace sys_close {
     ssize_t lib_close(int fd) {
         return close(fd);
