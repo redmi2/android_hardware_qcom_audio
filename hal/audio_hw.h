@@ -142,6 +142,7 @@ struct stream_out {
     struct pcm *pcm;
     struct compress *compr;
     int standby;
+    bool voip_out_avail;
     int pcm_device_id;
     unsigned int sample_rate;
     audio_channel_mask_t channel_mask;
@@ -177,6 +178,7 @@ struct stream_in {
     struct pcm_config config;
     struct pcm *pcm;
     int standby;
+    bool voip_in_avail;
     int source;
     int pcm_device_id;
     int device;
