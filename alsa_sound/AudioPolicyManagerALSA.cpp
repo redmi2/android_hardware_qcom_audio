@@ -2164,6 +2164,18 @@ AudioPolicyManager::device_category AudioPolicyManager::getDeviceCategory(audio_
             return DEVICE_CATEGORY_SPEAKER;
     }
 }
+
+bool AudioPolicyManager::isDirectOutput(audio_io_handle_t output) {
+    for (size_t i = 0; i < mOutputs.size(); i++) {
+        audio_io_handle_t curOutput = mOutputs.keyAt(i);
+        AudioOutputDescriptor *desc = mOutputs.valueAt(i);
+        if ((curOutput == output) && (desc->mFlags & AUDIO_OUTPUT_FLAG_DIRECT)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 status_t AudioPolicyManager::checkAndSetVolume(int stream,
                                                    int index,
                                                    audio_io_handle_t output,
@@ -2260,7 +2272,8 @@ status_t AudioPolicyManager::checkAndSetVolume(int stream,
             }
         }
 
-        if (voiceVolume != mLastALSAvoiceVolume && output == mPrimaryOutput) {
+        if (voiceVolume != mLastALSAvoiceVolume && (output == mPrimaryOutput ||
+            isDirectOutput(output))) {
             //Set the voiceVolume only when in Call and cache the volume only
             //when the volume is applied successfully
             if (isInCall()) {
