@@ -335,6 +335,12 @@ static int voip_start_call(struct audio_device *adev,
     if (uc_info == NULL) {
         ALOGV("%s: voip usecase is added to the list", __func__);
         uc_info = (struct audio_usecase *)calloc(1, sizeof(struct audio_usecase));
+
+        if (!uc_info) {
+            ALOGE("failed to allocate voip usecase mem");
+            return -ENOMEM;
+        }
+
         uc_info->id = USECASE_COMPRESS_VOIP_CALL;
         uc_info->type = VOIP_CALL;
         if (voip_data.out_stream)
@@ -609,8 +615,13 @@ int voice_extn_compress_voip_start_output_stream(struct stream_out *out)
     voip_data.out_stream_count++;
     out->pcm = voip_data.pcm_rx;
     uc_info = get_usecase_from_list(adev, USECASE_COMPRESS_VOIP_CALL);
-    uc_info->stream.out = out;
-    uc_info->devices = out->devices;
+    if (uc_info) {
+        uc_info->stream.out = out;
+        uc_info->devices = out->devices;
+    } else {
+        ALOGE("%s: exit(%d): failed to get use case info", __func__, ret);
+        ret = -EINVAL;
+    }
 
 error:
     ALOGV("%s: exit: status(%d)", __func__, ret);
