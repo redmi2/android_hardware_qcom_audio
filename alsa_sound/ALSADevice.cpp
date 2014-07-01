@@ -829,7 +829,7 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
             if ((use_case != NULL) && (strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
                 strlen(SND_USE_CASE_VERB_INACTIVE)))) {
                 usecase_type = getUseCaseType(use_case);
-                if ((usecase_type & USECASE_TYPE_TX) && (!(usecase_type & USECASE_TYPE_RX))) {
+                if (usecase_type & USECASE_TYPE_TX) {
                     ALOGD("Deroute use case %s type is %d\n", use_case, usecase_type);
                     strlcpy(useCaseNode.useCase, use_case, MAX_STR_LEN);
                     snd_use_case_set(handle->ucMgr, "_verb", SND_USE_CASE_VERB_INACTIVE);
@@ -839,7 +839,7 @@ void ALSADevice::switchDevice(alsa_handle_t *handle, uint32_t devices, uint32_t 
             if (mods_size) {
                 for(index = 0; index < mods_size; index++) {
                     usecase_type = getUseCaseType(mods_list[index]);
-                    if ((usecase_type & USECASE_TYPE_TX) && (!(usecase_type & USECASE_TYPE_RX))) {
+                    if (usecase_type & USECASE_TYPE_TX) {
                         ALOGD("Deroute use case %s type is %d\n", mods_list[index], usecase_type);
                         strlcpy(useCaseNode.useCase, mods_list[index], MAX_STR_LEN);
                         snd_use_case_set(handle->ucMgr, "_dismod", mods_list[index]);
