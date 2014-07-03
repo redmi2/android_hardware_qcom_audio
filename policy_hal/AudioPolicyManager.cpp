@@ -911,6 +911,153 @@ bool AudioPolicyManager::isDirectOutput(audio_io_handle_t output) {
     return false;
 }
 
+uint32_t AudioPolicyManager::checkDeviceMuteStrategies(AudioOutputDescriptor *outputDesc,
+                                                       audio_devices_t prevDevice,
+                                                       uint32_t delayMs)
+{
+    // mute/unmute strategies using an incompatible device combination
+    // if muting, wait for the audio in pcm buffer to be drained before proceeding
+    // if unmuting, unmute only after the specified delay
+    if (outputDesc->isDuplicated()) {
+        return 0;
+    }
+
+    uint32_t muteWaitMs = 0;
+    audio_devices_t device = outputDesc->device();
+    bool shouldMute = outputDesc->isActive() && (AudioSystem::popCount(device) >= 2);
+    // temporary mute output if device selection changes to avoid volume bursts due to
+    // different per device volumes
+    bool tempMute = outputDesc->isActive() && (device != prevDevice);
+
+    for (size_t i = 0; i < NUM_STRATEGIES; i++) {
+        audio_devices_t curDevice = getDeviceForStrategy((routing_strategy)i, false /*fromCache*/);
+        bool mute = shouldMute && (curDevice & device) && (curDevice != device);
+        bool doMute = false;
+
+        if (mute && !outputDesc->mStrategyMutedByDevice[i]) {
+            doMute = true;
+            outputDesc->mStrategyMutedByDevice[i] = true;
+        } else if (!mute && outputDesc->mStrategyMutedByDevice[i]){
+            doMute = true;
+            outputDesc->mStrategyMutedByDevice[i] = false;
+        }
+        if (doMute || tempMute) {
+            for (size_t j = 0; j < mOutputs.size(); j++) {
+                AudioOutputDescriptor *desc = mOutputs.valueAt(j);
+                // skip output if it does not share any device with current output
+                if ((desc->supportedDevices() & outputDesc->supportedDevices())
+                        == AUDIO_DEVICE_NONE) {
+                    continue;
+                }
+                audio_io_handle_t curOutput = mOutputs.keyAt(j);
+                ALOGVV("checkDeviceMuteStrategies() %s strategy %d (curDevice %04x) on output %d",
+                       mute ? "muting" : "unmuting", i, curDevice, curOutput);
+                setStrategyMute((routing_strategy)i, mute, curOutput, mute ? 0 : delayMs);
+                if (desc->isStrategyActive((routing_strategy)i)) {
+                    // do tempMute only for current output
+                    if (tempMute && (desc == outputDesc)) {
+                        setStrategyMute((routing_strategy)i, true, curOutput);
+                        setStrategyMute((routing_strategy)i, false, curOutput,
+                                        desc->latency() * 2, device);
+                    }
+                    if ((tempMute && (desc == outputDesc)) || mute) {
+                        if (muteWaitMs < desc->latency()) {
+                            muteWaitMs = desc->latency();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // FIXME: should not need to double latency if volume could be applied immediately by the
+    // audioflinger mixer. We must account for the delay between now and the next time
+    // the audioflinger thread for this output will process a buffer (which corresponds to
+    // one buffer size, usually 1/2 or 1/4 of the latency).
+    muteWaitMs *= 2;
+
+    // Make muteWaitMs = 0 in the case of MT call where device switch delay is enough
+    // to play the remaining ringtone buffers on APQ targets where external modem is
+    // used to make voice calls.
+    if (mPhoneState == AUDIO_MODE_IN_CALL &&
+        isExternalModem() &&
+        mOldPhoneState == AUDIO_MODE_RINGTONE) {
+        muteWaitMs = 0;
+    }
+
+    // wait for the PCM output buffers to empty before proceeding with the rest of the command
+    if (muteWaitMs > delayMs) {
+        muteWaitMs -= delayMs;
+        if(outputDesc->mDevice == AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET) {
+           muteWaitMs = muteWaitMs+10;
+        }
+        usleep(muteWaitMs * 1000);
+        return muteWaitMs;
+    }
+    return 0;
+}
+
+uint32_t AudioPolicyManager::setOutputDevice(audio_io_handle_t output,
+                                             audio_devices_t device,
+                                             bool force,
+                                             int delayMs)
+{
+    ALOGV("setOutputDevice() output %d device %04x delayMs %d", output, device, delayMs);
+    AudioOutputDescriptor *outputDesc = mOutputs.valueFor(output);
+    AudioParameter param;
+    uint32_t muteWaitMs;
+
+    if (outputDesc->isDuplicated()) {
+        muteWaitMs = setOutputDevice(outputDesc->mOutput1->mId, device, force, delayMs);
+        muteWaitMs += setOutputDevice(outputDesc->mOutput2->mId, device, force, delayMs);
+        return muteWaitMs;
+    }
+    // no need to proceed if new device is not AUDIO_DEVICE_NONE and not supported by current
+    // output profile
+    if ((device != AUDIO_DEVICE_NONE) &&
+            ((device & outputDesc->mProfile->mSupportedDevices) == 0)) {
+        return 0;
+    }
+
+    // filter devices according to output selected
+    device = (audio_devices_t)(device & outputDesc->mProfile->mSupportedDevices);
+
+    audio_devices_t prevDevice = outputDesc->mDevice;
+
+    ALOGV("setOutputDevice() prevDevice %04x", prevDevice);
+
+    // Device Routing has not been triggered in the following scenario:
+    // Start playback on HDMI/USB hs, pause it, unplug and plug HDMI
+    //cable/usb hs, resume playback, music starts on speaker. To avoid
+    //this, update mDevice even if device is 0 which triggers routing when
+    // HDMI cable/usb hs is reconnected
+    if (device != AUDIO_DEVICE_NONE ||
+        prevDevice == AUDIO_DEVICE_OUT_AUX_DIGITAL ||
+        prevDevice == AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET) {
+        outputDesc->mDevice = device;
+    }
+    muteWaitMs = checkDeviceMuteStrategies(outputDesc, prevDevice, delayMs);
+
+    // Do not change the routing if:
+    //  - the requested device is AUDIO_DEVICE_NONE
+    //  - the requested device is the same as current device and force is not specified.
+    // Doing this check here allows the caller to call setOutputDevice() without conditions
+    if ((device == AUDIO_DEVICE_NONE || device == prevDevice) && !force) {
+        ALOGV("setOutputDevice() setting same device %04x or null device for output %d", device, output);
+        return muteWaitMs;
+    }
+
+    ALOGV("setOutputDevice() changing device");
+    // do the routing
+    param.addInt(String8(AudioParameter::keyRouting), (int)device);
+    mpClientInterface->setParameters(output, param.toString(), delayMs);
+
+    // update stream volumes according to new device
+    applyStreamVolumes(output, device, delayMs);
+
+    return muteWaitMs;
+}
+
 status_t AudioPolicyManager::checkAndSetVolume(int stream,
                                                int index,
                                                audio_io_handle_t output,
@@ -1495,13 +1642,13 @@ void AudioPolicyManager::setPhoneState(int state)
     }
 
     // store previous phone state for management of sonification strategy below
-    int oldState = mPhoneState;
+    mOldPhoneState = mPhoneState;
     mPhoneState = state;
     bool force = false;
     int voice_call_state = 0;
 
     // are we entering or starting a call
-    if (!isStateInCall(oldState) && isStateInCall(state)) {
+    if (!isStateInCall(mOldPhoneState) && isStateInCall(state)) {
         ALOGV("  Entering call in setPhoneState()");
         // force routing command to audio hardware when starting a call
         // even if no device change is needed
@@ -1510,7 +1657,7 @@ void AudioPolicyManager::setPhoneState(int state)
             mStreams[AUDIO_STREAM_DTMF].mVolumeCurve[j] =
                     sVolumeProfiles[AUDIO_STREAM_VOICE_CALL][j];
         }
-    } else if (isStateInCall(oldState) && !isStateInCall(state)) {
+    } else if (isStateInCall(mOldPhoneState) && !isStateInCall(state)) {
         ALOGV("  Exiting call in setPhoneState()");
         // force routing command to audio hardware when exiting a call
         // even if no device change is needed
@@ -1519,7 +1666,7 @@ void AudioPolicyManager::setPhoneState(int state)
             mStreams[AUDIO_STREAM_DTMF].mVolumeCurve[j] =
                     sVolumeProfiles[AUDIO_STREAM_DTMF][j];
         }
-    } else if (isStateInCall(state) && (state != oldState)) {
+    } else if (isStateInCall(state) && (state != mOldPhoneState)) {
         ALOGV("  Switching between telephony and VoIP in setPhoneState()");
         // force routing command to audio hardware when switching between telephony and VoIP
         // even if no device change is needed
@@ -1536,7 +1683,7 @@ void AudioPolicyManager::setPhoneState(int state)
 
     // force routing command to audio hardware when ending call
     // even if no device change is needed
-    if (isStateInCall(oldState) && newDevice == AUDIO_DEVICE_NONE) {
+    if (isStateInCall(mOldPhoneState) && newDevice == AUDIO_DEVICE_NONE) {
         newDevice = hwOutputDesc->device();
     }
 #ifdef VOICE_CONCURRENCY
@@ -1555,7 +1702,7 @@ void AudioPolicyManager::setPhoneState(int state)
         prop_voip_enabled = atoi(propValue) || !strncmp("true", propValue, 4);
     }
 
-    bool mode_in_call = (AudioSystem::MODE_IN_CALL != oldState) && (AudioSystem::MODE_IN_CALL == state);
+    bool mode_in_call = (AudioSystem::MODE_IN_CALL != mOldPhoneState) && (AudioSystem::MODE_IN_CALL == state);
     //query if it is a actual voice call initiated by telephony
     if (mode_in_call) {
         String8 valueStr = mpClientInterface->getParameters((audio_io_handle_t)0, String8("in_call"));
@@ -1565,7 +1712,7 @@ void AudioPolicyManager::setPhoneState(int state)
     }
 
     if (mode_in_call && voice_call_state) {
-        ALOGD("Entering to call mode oldState :: %d state::%d ",oldState, state);
+        ALOGD("Entering to call mode oldState :: %d state::%d ", mOldPhoneState, state);
         mvoice_call_state = voice_call_state;
         if (prop_playback_enabled) {
             //Call invalidate to reset all opened non ULL audio tracks
@@ -1642,9 +1789,9 @@ void AudioPolicyManager::setPhoneState(int state)
         }
    }
 
-   if ((AudioSystem::MODE_IN_CALL == oldState) && (AudioSystem::MODE_IN_CALL != state)
+   if ((AudioSystem::MODE_IN_CALL == mOldPhoneState) && (AudioSystem::MODE_IN_CALL != state)
         && prop_playback_enabled && mvoice_call_state) {
-        ALOGD("EXITING from call mode oldState :: %d state::%d \n",oldState, state);
+        ALOGD("EXITING from call mode oldState :: %d state::%d \n", mOldPhoneState, state);
         mvoice_call_state = 0;
         //restore PCM (deep-buffer) output after call termination
         for (size_t i = 0; i < mOutputs.size(); i++) {
@@ -1667,7 +1814,7 @@ void AudioPolicyManager::setPhoneState(int state)
        }
     }
 #endif
-    mPrevPhoneState = oldState;
+    mPrevPhoneState = mOldPhoneState;
 
     int delayMs = 0;
     if (isStateInCall(state)) {
@@ -1693,6 +1840,15 @@ void AudioPolicyManager::setPhoneState(int state)
             setStrategyMute(STRATEGY_SONIFICATION, false, mOutputs.keyAt(i), MUTE_TIME_MS,
                 getDeviceForStrategy(STRATEGY_SONIFICATION, true /*fromCache*/));
         }
+    }
+
+    // Reduce device switch delay during voice call start on APQ targets where external modem
+    // is used to make voice calls. This is required to reduce voice call start up latency.
+    // 125 ms is derived based on driver buffers latency(4*20 ms) + DSP latency(65ms).
+    if (mPhoneState == AUDIO_MODE_IN_CALL &&
+        isExternalModem() &&
+        mOldPhoneState == AUDIO_MODE_RINGTONE) {
+        delayMs = 125;
     }
 
     // change routing is necessary
@@ -1721,6 +1877,17 @@ bool AudioPolicyManager::isStateInCall(int state)
 {
     return ((state == AudioSystem::MODE_IN_CALL) || (state == AudioSystem::MODE_IN_COMMUNICATION) ||
        ((state == AudioSystem::MODE_RINGTONE) && (mPrevPhoneState == AudioSystem::MODE_IN_CALL)));
+}
+
+bool AudioPolicyManager::isExternalModem()
+{
+    char platform[128], baseband[128];
+    property_get("ro.board.platform", platform, "");
+    property_get("ro.baseband", baseband, "");
+    if (!strcmp("apq8084", platform) && !strncmp("mdm", baseband, 3))
+        return true;
+    else
+        return false;
 }
 
 extern "C" AudioPolicyInterface* createAudioPolicyManager(AudioPolicyClientInterface *clientInterface)
