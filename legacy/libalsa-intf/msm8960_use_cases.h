@@ -245,6 +245,7 @@ static card_mapping_t card_mapping_list[] = {
 #define SND_USE_CASE_VERB_HIFI_TUNNEL2    "HiFi Tunnel2"
 #define SND_USE_CASE_VERB_HIFI_PSEUDO_TUNNEL    "HiFi Pseudo Tunnel"
 #define SND_USE_CASE_VERB_VOICE2             "Voice2"
+#define SND_USE_CASE_VERB_HFP          "HFP"
 
 #define SND_USE_CASE_DEV_FM_TX           "FM Tx"
 #define SND_USE_CASE_DEV_ANC_HEADSET     "ANC Headset"
@@ -332,6 +333,7 @@ static card_mapping_t card_mapping_list[] = {
 #define SND_USE_CASE_MOD_PLAY_TUNNEL2     "Play Tunnel2"
 #define SND_USE_CASE_MOD_PSEUDO_TUNNEL     "Pseudo Tunnel"
 #define SND_USE_CASE_MOD_PLAY_VOICE2             "Play Voice2"
+#define SND_USE_CASE_MOD_HFP            "hfp"
 
 
 /* List utility functions for maintaining enabled devices and modifiers */
