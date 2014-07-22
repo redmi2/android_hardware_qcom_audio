@@ -155,6 +155,7 @@ static const struct string_to_enum out_channels_name_to_enum_table[] = {
 static const struct string_to_enum out_formats_name_to_enum_table[] = {
     STRING_TO_ENUM(AUDIO_FORMAT_AC3),
     STRING_TO_ENUM(AUDIO_FORMAT_EAC3),
+    STRING_TO_ENUM(AUDIO_FORMAT_E_AC3_JOC),
 };
 
 static struct audio_device *adev = NULL;
@@ -1074,7 +1075,6 @@ static int check_and_set_hdmi_channels(struct audio_device *adev,
     }
 
     /*TODO: CHECK for passthrough don't set channel map for passthrough*/
-
     platform_set_hdmi_channels(adev->platform, channels);
     adev->cur_hdmi_channels = channels;
 
@@ -1183,6 +1183,10 @@ int start_output_stream(struct stream_out *out)
     if (out->devices & AUDIO_DEVICE_OUT_AUX_DIGITAL) {
         if (is_offload_usecase(out->usecase)) {
             if (audio_extn_dolby_is_passthrough_stream(out->flags)) {
+                ret = audio_extn_dolby_set_dap_bypass(adev, true);
+                if(ret != 0) {
+                    goto error_open;
+                }
                 audio_extn_dolby_update_passt_stream_configuration(adev, out);
             }
         }
@@ -1193,9 +1197,13 @@ int start_output_stream(struct stream_out *out)
                    __func__, sink_channels);
             check_and_set_hdmi_channels(adev, sink_channels);
         } else {
-            if (is_offload_usecase(out->usecase))
-                check_and_set_hdmi_channels(adev, out->compr_config.codec->ch_in);
-            else
+            if (is_offload_usecase(out->usecase)) {
+                unsigned int ch_count =  out->compr_config.codec->ch_in;
+                if (audio_extn_dolby_is_passthrough_stream(out->flags))
+                    /* backend channel config for passthrough stream is stereo */
+                    ch_count = 2;
+                check_and_set_hdmi_channels(adev, ch_count);
+            } else
                 check_and_set_hdmi_channels(adev, out->config.channels);
         }
         audio_extn_dolby_set_hdmi_format_and_samplerate(adev, out);
@@ -1637,24 +1645,33 @@ static int out_set_volume(struct audio_stream_out *stream, float left,
         out->muted = (left == 0.0f);
         return 0;
     } else if (is_offload_usecase(out->usecase)) {
-        char mixer_ctl_name[128];
-        struct audio_device *adev = out->dev;
-        struct mixer_ctl *ctl;
-        int pcm_device_id = platform_get_pcm_device_id(out->usecase,
+        if (audio_extn_dolby_is_passthrough_stream(out->flags)) {
+            /*
+             * Set mute or umute on HDMI passthrough stream.
+             * Only take left channel into account.
+             * Mute is 0 and unmute 1
+             */
+            audio_extn_dolby_set_passt_volume(out, (left == 0.0f));
+        } else {
+            char mixer_ctl_name[128];
+            struct audio_device *adev = out->dev;
+            struct mixer_ctl *ctl;
+            int pcm_device_id = platform_get_pcm_device_id(out->usecase,
                                                        PCM_PLAYBACK);
 
-        snprintf(mixer_ctl_name, sizeof(mixer_ctl_name),
-                 "Compress Playback %d Volume", pcm_device_id);
-        ctl = mixer_get_ctl_by_name(adev->mixer, mixer_ctl_name);
-        if (!ctl) {
-            ALOGE("%s: Could not get ctl for mixer cmd - %s",
-                  __func__, mixer_ctl_name);
-            return -EINVAL;
+            snprintf(mixer_ctl_name, sizeof(mixer_ctl_name),
+                     "Compress Playback %d Volume", pcm_device_id);
+            ctl = mixer_get_ctl_by_name(adev->mixer, mixer_ctl_name);
+            if (!ctl) {
+                ALOGE("%s: Could not get ctl for mixer cmd - %s",
+                      __func__, mixer_ctl_name);
+                return -EINVAL;
+            }
+            volume[0] = (int)(left * COMPRESS_PLAYBACK_VOLUME_MAX);
+            volume[1] = (int)(right * COMPRESS_PLAYBACK_VOLUME_MAX);
+            mixer_ctl_set_array(ctl, volume, sizeof(volume)/sizeof(volume[0]));
+            return 0;
         }
-        volume[0] = (int)(left * COMPRESS_PLAYBACK_VOLUME_MAX);
-        volume[1] = (int)(right * COMPRESS_PLAYBACK_VOLUME_MAX);
-        mixer_ctl_set_array(ctl, volume, sizeof(volume)/sizeof(volume[0]));
-        return 0;
     }
 
     return -ENOSYS;
@@ -2228,10 +2245,6 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
         if ((out->devices & AUDIO_DEVICE_OUT_AUX_DIGITAL) &&
             ((audio_extn_dolby_is_passthrough_stream(out->flags)))) {
             ALOGV("read and update_pass through formats");
-            ret = audio_extn_dolby_set_dap_bypass(adev, true);
-            if(ret != 0) {
-                goto error_open;
-            }
             ret = audio_extn_dolby_update_passt_formats(adev, out);
             if(ret != 0) {
                 goto error_open;
@@ -2291,6 +2304,7 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
         out->compr_config.codec->ch_in =
                     popcount(config->channel_mask);
         out->compr_config.codec->ch_out = out->compr_config.codec->ch_in;
+        /*TODO: Do we need to change it for passthrough */
         out->compr_config.codec->format = SND_AUDIOSTREAMFORMAT_RAW;
 
         if (config->offload_info.format == AUDIO_FORMAT_PCM_16_BIT_OFFLOAD)
