@@ -46,7 +46,7 @@ static int (*acdb_loader_get_ecrx_device)(int acdb_id);
 }
 
 #define SAMPLE_RATE_8KHZ 8000
-
+#define SAMPLE_RATE_16KHZ 16000
 #define BTSCO_RATE_16KHZ 16000
 #define USECASE_TYPE_RX 1
 #define USECASE_TYPE_TX 2
@@ -1283,6 +1283,23 @@ status_t ALSADevice::setFmVolume(int value)
 }
 
 #ifdef QCOM_HFP_ENABLED
+status_t ALSADevice::setHFPRate(int value)
+{
+    int32_t ret = 0;
+    const char *rate_str = NULL;
+
+    ALOGV("%s -> entry: rate to be set is %d", __func__, value);
+    switch (value) {
+      case SAMPLE_RATE_16KHZ: rate_str = "rate_16000";  break;
+      default: rate_str = "rate_8000";  break;
+    }
+    ALOGD("HFP rate: %s", rate_str);
+    if(setMixerControl("AUX PCM SampleRate", rate_str)) {
+        ALOGE("%s: Couldn't set HFP rate: [%s]", __func__, rate_str);
+        return -EINVAL;
+    }
+    return ret;
+}
 
 status_t ALSADevice::setHFPVolume(int value)
 {
