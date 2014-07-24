@@ -306,6 +306,7 @@ public:
     status_t startHFP(alsa_handle_t *alsa_handle);
     status_t stopHFP();
     status_t setHFPVolume(int volume);
+    status_t setHFPRate(int rate);
 #endif
     void     setVoiceVolume(int volume);
     void     setVoipVolume(int volume);

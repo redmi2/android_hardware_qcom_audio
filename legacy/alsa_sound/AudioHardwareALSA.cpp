@@ -762,6 +762,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
     int samplingRate;
     if (param.getInt(key, samplingRate) == NO_ERROR) {
         ALOGV("%s, HFP samplingRate = [%d]", __func__, samplingRate);
+        mALSADevice->setHFPRate(samplingRate);
         if (8000 == samplingRate || 16000 == samplingRate) {
             // update the rate
             ALSAHandleList::iterator it = mDeviceList.end();
