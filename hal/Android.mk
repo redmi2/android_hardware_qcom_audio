@@ -106,7 +106,7 @@ ifeq ($(strip $(AUDIO_FEATURE_ENABLED_EXTN_FORMATS)),true)
 LOCAL_CFLAGS += -DFORMATS_ENABLED
 endif
 
-ifeq ($(strip, $(AUDIO_FEATURE_ENABLED_SPKR_PROTECTION)),true)
+ifeq ($(strip $(AUDIO_FEATURE_ENABLED_SPKR_PROTECTION)),true)
     LOCAL_CFLAGS += -DSPKR_PROT_ENABLED
     LOCAL_SRC_FILES += audio_extn/spkr_protection.c
 endif
