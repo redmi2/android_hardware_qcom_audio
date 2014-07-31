@@ -241,7 +241,7 @@ static int get_snd_codec_id(audio_format_t format)
     return id;
 }
 
-static int get_snd_card_state(struct audio_device *adev)
+int get_snd_card_state(struct audio_device *adev)
 {
     int snd_scard_state;
 
@@ -869,6 +869,12 @@ int start_input_stream(struct stream_in *in)
 
     adev->active_input = in;
     uc_info = (struct audio_usecase *)calloc(1, sizeof(struct audio_usecase));
+
+    if (!uc_info) {
+        ret = -ENOMEM;
+        goto error_config;
+    }
+
     uc_info->id = in->usecase;
     uc_info->type = PCM_CAPTURE;
     uc_info->stream.in = in;
@@ -909,6 +915,11 @@ error_config:
 static int send_offload_cmd_l(struct stream_out* out, int command)
 {
     struct offload_cmd *cmd = (struct offload_cmd *)calloc(1, sizeof(struct offload_cmd));
+
+    if (!cmd) {
+        ALOGE("failed to allocate mem for command 0x%x", command);
+        return -ENOMEM;
+    }
 
     ALOGVV("%s %d", __func__, command);
 
@@ -1230,6 +1241,11 @@ int start_output_stream(struct stream_out *out)
     struct audio_device *adev = out->dev;
     int snd_card_status = get_snd_card_state(adev);
 
+    if ((out->usecase < 0) || (out->usecase >= AUDIO_USECASE_MAX)) {
+        ret = -EINVAL;
+        goto error_config;
+    }
+
     ALOGD("%s: enter: stream(%p)usecase(%d: %s) devices(%#x)",
           __func__, &out->stream, out->usecase, use_case_table[out->usecase],
           out->devices);
@@ -1249,6 +1265,12 @@ int start_output_stream(struct stream_out *out)
     }
 
     uc_info = (struct audio_usecase *)calloc(1, sizeof(struct audio_usecase));
+
+    if (!uc_info) {
+        ret = -ENOMEM;
+        goto error_config;
+    }
+
     uc_info->id = out->usecase;
     uc_info->type = PCM_PLAYBACK;
     uc_info->stream.out = out;
@@ -1651,6 +1673,12 @@ static char* out_get_parameters(const struct audio_stream *stream, const char *k
     size_t i, j;
     int ret;
     bool first = true;
+
+    if (!query || !reply) {
+        ALOGE("out_get_parameters: failed to allocate mem for query or reply");
+        return NULL;
+    }
+
     ALOGV("%s: enter: keys - %s", __func__, keys);
     ret = str_parms_get_str(query, AUDIO_PARAMETER_STREAM_SUP_CHANNELS, value, sizeof(value));
     if (ret >= 0) {
@@ -1818,6 +1846,10 @@ exit:
     if (ret != 0) {
         if (out->pcm)
             ALOGE("%s: error %d - %s", __func__, ret, pcm_get_error(out->pcm));
+        if (out->usecase == USECASE_COMPRESS_VOIP_CALL) {
+            voice_extn_compress_voip_close_output_stream(&out->stream.common);
+            out->standby = true;
+        }
         out_standby(&out->stream.common);
         usleep(bytes * 1000000 / audio_stream_frame_size(&out->stream.common) /
                         out_get_sample_rate(&out->stream.common));
@@ -1830,9 +1862,9 @@ static int out_get_render_position(const struct audio_stream_out *stream,
                                    uint32_t *dsp_frames)
 {
     struct stream_out *out = (struct stream_out *)stream;
-    *dsp_frames = 0;
     if (is_offload_usecase(out->usecase) && (dsp_frames != NULL)) {
         ssize_t ret =  -EINVAL;
+        *dsp_frames = 0;
         pthread_mutex_lock(&out->lock);
         if (out->compr != NULL) {
             ret = compress_get_tstamp(out->compr, (unsigned long *)dsp_frames,
@@ -2150,6 +2182,12 @@ static char* in_get_parameters(const struct audio_stream *stream,
     char *str;
     char value[256];
     struct str_parms *reply = str_parms_create();
+
+    if (!query || !reply) {
+        ALOGE("in_get_parameters: failed to create query or reply");
+        return NULL;
+    }
+
     ALOGV("%s: enter: keys - %s", __func__, keys);
 
     voice_extn_in_get_parameters(in, query, reply);
@@ -2224,6 +2262,10 @@ exit:
     pthread_mutex_unlock(&in->lock);
 
     if (ret != 0) {
+        if (in->usecase == USECASE_COMPRESS_VOIP_CALL) {
+            voice_extn_compress_voip_close_input_stream(&in->stream.common);
+            in->standby = true;
+        }
         in_standby(&in->stream.common);
         ALOGV("%s: read failed - sleeping for buffer duration", __func__);
         usleep(bytes * 1000000 / audio_stream_frame_size(&in->stream.common) /
@@ -2383,6 +2425,11 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
 
         out->compr_config.codec = (struct snd_codec *)
                                     calloc(1, sizeof(struct snd_codec));
+
+        if (!out->compr_config.codec) {
+            ret = -ENOMEM;
+            goto error_open;
+        }
 
         out->usecase = get_offload_usecase(adev);
         if (config->offload_info.channel_mask)
@@ -2692,6 +2739,11 @@ static char* adev_get_parameters(const struct audio_hw_device *dev,
     char value[256] = {0};
     int ret = 0;
 
+    if (!query || !reply) {
+        ALOGE("adev_get_parameters: failed to create query or reply");
+        return NULL;
+    }
+
     ret = str_parms_get_str(query, AUDIO_PARAMETER_KEY_SND_CARD_STATUS, value,
                             sizeof(value));
     if (ret >=0) {
@@ -2811,6 +2863,12 @@ static int adev_open_input_stream(struct audio_hw_device *dev,
         return -EINVAL;
 
     in = (struct stream_in *)calloc(1, sizeof(struct stream_in));
+
+    if (!in) {
+        ALOGE("failed to allocate input stream");
+        return -ENOMEM;
+    }
+
     ALOGD("%s: enter: sample_rate(%d) channel_mask(%#x) devices(%#x)\
         stream_handle(%p)",__func__, config->sample_rate, config->channel_mask,
         devices, &in->stream);
@@ -2951,6 +3009,11 @@ static int adev_open(const hw_module_t *module, const char *name,
     }
 
     adev = calloc(1, sizeof(struct audio_device));
+
+    if (!adev) {
+        pthread_mutex_unlock(&adev_init_lock);
+        return -ENOMEM;
+    }
 
     pthread_mutex_init(&adev->lock, (const pthread_mutexattr_t *) NULL);
 

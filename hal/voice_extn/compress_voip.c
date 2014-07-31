@@ -335,6 +335,12 @@ static int voip_start_call(struct audio_device *adev,
     if (uc_info == NULL) {
         ALOGV("%s: voip usecase is added to the list", __func__);
         uc_info = (struct audio_usecase *)calloc(1, sizeof(struct audio_usecase));
+
+        if (!uc_info) {
+            ALOGE("failed to allocate voip usecase mem");
+            return -ENOMEM;
+        }
+
         uc_info->id = USECASE_COMPRESS_VOIP_CALL;
         uc_info->type = VOIP_CALL;
         if (voip_data.out_stream)
@@ -558,8 +564,18 @@ int voice_extn_compress_voip_start_output_stream(struct stream_out *out)
     int ret = 0;
     struct audio_device *adev = out->dev;
     struct audio_usecase *uc_info;
+    int snd_card_status = get_snd_card_state(adev);
 
     ALOGD("%s: enter", __func__);
+
+    if (SND_CARD_STATE_OFFLINE == snd_card_status) {
+        ret = -ENETRESET;
+        ALOGE("%s: sound card is not active/SSR returning error %d ", __func__, ret);
+        goto error;
+    }
+
+    if (!voip_data.out_stream_count)
+        ret = voice_extn_compress_voip_open_output_stream(out);
 
     ret = voip_start_call(adev, &out->config);
     out->pcm = voip_data.pcm_rx;
@@ -567,6 +583,7 @@ int voice_extn_compress_voip_start_output_stream(struct stream_out *out)
     uc_info->stream.out = out;
     uc_info->devices = out->devices;
 
+error:
     ALOGV("%s: exit: status(%d)", __func__, ret);
     return ret;
 }
@@ -576,12 +593,23 @@ int voice_extn_compress_voip_start_input_stream(struct stream_in *in)
     int ret = 0;
     struct audio_usecase *uc_info;
     struct audio_device *adev = in->dev;
+    int snd_card_status = get_snd_card_state(adev);
 
     ALOGD("%s: enter", __func__);
+
+    if (SND_CARD_STATE_OFFLINE == snd_card_status) {
+        ret = -ENETRESET;
+        ALOGE("%s: sound card is not active/SSR returning error %d ", __func__, ret);
+        goto error;
+    }
+
+    if (!voip_data.in_stream_count)
+        ret = voice_extn_compress_voip_open_input_stream(in);
 
     ret = voip_start_call(adev, &in->config);
     in->pcm = voip_data.pcm_tx;
 
+error:
     ALOGV("%s: exit: status(%d)", __func__, ret);
     return ret;
 }
@@ -593,10 +621,12 @@ int voice_extn_compress_voip_close_output_stream(struct audio_stream *stream)
     int ret = 0;
 
     ALOGD("%s: enter", __func__);
-
-    voip_data.out_stream_count--;
-    ret = voip_stop_call(adev);
-    voip_data.out_stream = NULL;
+    if (voip_data.out_stream_count > 0) {
+        voip_data.out_stream_count--;
+        ret = voip_stop_call(adev);
+        voip_data.out_stream = NULL;
+        out->pcm = NULL;
+    }
 
     ALOGV("%s: exit: status(%d)", __func__, ret);
     return ret;
@@ -633,12 +663,14 @@ int voice_extn_compress_voip_close_input_stream(struct audio_stream *stream)
 
     ALOGD("%s: enter", __func__);
 
-    voip_data.in_stream_count--;
-    status = voip_stop_call(adev);
+    if(voip_data.in_stream_count > 0) {
+       voip_data.in_stream_count--;
+       status = voip_stop_call(adev);
+       in->pcm = NULL;
+    }
 
     ALOGV("%s: exit: status(%d)", __func__, status);
     return status;
-
 }
 
 int voice_extn_compress_voip_open_input_stream(struct stream_in *in)
