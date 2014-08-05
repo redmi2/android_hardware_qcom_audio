@@ -287,6 +287,8 @@ int enable_snd_device(struct audio_device *adev,
         return 0;
     }
 
+    if (audio_extn_spkr_prot_is_enabled())
+         audio_extn_spkr_prot_calib_cancel(adev);
     /* start usb playback thread */
     if(SND_DEVICE_OUT_USB_HEADSET == snd_device ||
        SND_DEVICE_OUT_SPEAKER_AND_USB_HEADSET == snd_device)
@@ -525,21 +527,6 @@ static int read_hdmi_channel_masks(struct stream_out *out)
         break;
     }
     return ret;
-}
-
-static void update_devices_for_all_voice_usecases(struct audio_device *adev)
-{
-    struct listnode *node;
-    struct audio_usecase *usecase;
-
-    list_for_each(node, &adev->usecase_list) {
-        usecase = node_to_item(node, struct audio_usecase, list);
-        if (usecase->type == VOICE_CALL) {
-            ALOGV("%s: updating device for usecase:%s", __func__,
-                  use_case_table[usecase->id]);
-            select_devices(adev, usecase->id);
-        }
-    }
 }
 
 static audio_usecase_t get_voice_usecase_id_from_list(struct audio_device *adev)
@@ -1440,7 +1427,7 @@ static int out_set_parameters(struct audio_stream *stream, const char *kvpairs)
             } else if ((adev->mode == AUDIO_MODE_IN_CALL) &&
                             voice_is_in_call(adev) &&
                             (out == adev->primary_output)) {
-                update_devices_for_all_voice_usecases(adev);
+                voice_update_devices_for_all_voice_usecases(adev);
             }
         }
 
