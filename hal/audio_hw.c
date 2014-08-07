@@ -340,7 +340,7 @@ int enable_snd_device(struct audio_device *adev,
             and audio, notify listen hal before audio calibration is sent */
         audio_extn_listen_update_device_status(snd_device,
                                         LISTEN_EVENT_SND_DEVICE_BUSY);
-        if (platform_send_audio_calibration(adev->platform, snd_device) < 0) {
+        if (platform_send_audio_calibration(adev->platform, snd_device, APP_TYPE_GENERAL_PLAYBACK) < 0) {
             adev->snd_dev_ref_cnt[snd_device]--;
             audio_extn_listen_update_device_status(snd_device,
                                         LISTEN_EVENT_SND_DEVICE_FREE);
@@ -834,6 +834,7 @@ int start_input_stream(struct stream_in *in)
     list_add_tail(&adev->usecase_list, &uc_info->list);
     select_devices(adev, in->usecase);
 
+    platform_set_stream_config(adev->platform, uc_info);
     ALOGV("%s: Opening PCM device card_id(%d) device_id(%d), channels %d",
           __func__, adev->snd_card,
           in->pcm_device_id, in->config.channels);
@@ -1185,6 +1186,7 @@ int start_output_stream(struct stream_out *out)
 
     select_devices(adev, out->usecase);
 
+    platform_set_stream_config(adev->platform, uc_info);
     ALOGV("%s: Opening PCM device card_id(%d) device_id(%d)",
           __func__, 0, out->pcm_device_id);
     if (out->usecase != USECASE_AUDIO_PLAYBACK_OFFLOAD) {
