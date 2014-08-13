@@ -101,7 +101,7 @@ struct audio_block_header
 /* Audio calibration related functions */
 typedef void (*acdb_deallocate_t)();
 typedef int  (*acdb_init_t)(char *);
-typedef void (*acdb_send_audio_cal_t)(int, int);
+typedef void (*acdb_send_audio_cal_t)(int, int, int);
 typedef void (*acdb_send_voice_cal_t)(int, int);
 typedef int (*acdb_reload_vocvoltable_t)(int);
 
@@ -945,7 +945,7 @@ done:
     return ret;
 }
 
-int platform_send_audio_calibration(void *platform, snd_device_t snd_device)
+int platform_send_audio_calibration(void *platform, snd_device_t snd_device, int app_type)
 {
     struct platform_data *my_data = (struct platform_data *)platform;
     int acdb_dev_id, acdb_dev_type;
@@ -964,7 +964,7 @@ int platform_send_audio_calibration(void *platform, snd_device_t snd_device)
             acdb_dev_type = ACDB_DEV_TYPE_OUT;
         else
             acdb_dev_type = ACDB_DEV_TYPE_IN;
-        my_data->acdb_send_audio_cal(acdb_dev_id, acdb_dev_type);
+        my_data->acdb_send_audio_cal(acdb_dev_id, acdb_dev_type, app_type);
     }
     return 0;
 }
@@ -2011,3 +2011,28 @@ uint32_t platform_get_pcm_offload_buffer_size(audio_offload_info_t* info)
     return fragment_size;
 }
 
+int platform_set_stream_config(void *platform, struct audio_usecase *usecase)
+{
+    struct platform_data *my_data = (struct platform_data *)platform;
+    struct audio_device *adev = my_data->adev;
+    int app_type;
+    int ret = 0;
+    int snd_device;
+
+    if(usecase->type == PCM_PLAYBACK)
+        snd_device = platform_get_output_snd_device(adev->platform,
+                                            usecase->stream.out->devices);
+    else if(usecase->type == PCM_CAPTURE)
+        snd_device = platform_get_output_snd_device(adev->platform,
+                                            adev->primary_output->devices);
+
+    switch (usecase->id) {
+        case USECASE_AUDIO_RECORD:
+            app_type = APP_TYPE_GENERAL_RECORDING;
+            break;
+        default:
+            app_type = APP_TYPE_GENERAL_PLAYBACK;
+    }
+    platform_send_audio_calibration(platform, snd_device, app_type);
+    return ret;
+}
