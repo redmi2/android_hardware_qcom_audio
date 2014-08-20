@@ -1511,17 +1511,6 @@ status_t ALSADevice::stopHFP()
         pcm_close(hfpmod.hfp_pcm_tx);
         hfpmod.hfp_pcm_tx = NULL;
     }
-
-    // Remove HFP Usecase
-    for(ALSAUseCaseList::iterator it = mUseCaseList.begin(); it != mUseCaseList.end(); ++it) {
-        if ((use_case != NULL) && (strncmp(use_case, SND_USE_CASE_VERB_INACTIVE,
-            strlen(SND_USE_CASE_VERB_INACTIVE))) && (!strncmp(use_case, it->useCase, MAX_UC_LEN))) {
-            // Remove this entry and break.
-            mUseCaseList.erase(it);
-            break;
-        }
-    }
-
     ALOGD("%s: exit: status(%d)", __func__, ret);
     return ret;
 }
