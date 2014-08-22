@@ -754,6 +754,15 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         }
         else {
             mALSADevice->stopHFP();
+            for(ALSAHandleList::iterator it = mDeviceList.begin();
+                it != mDeviceList.end(); ++it) {
+                if((!strcmp(it->useCase, SND_USE_CASE_VERB_HFP)) ||
+                  (!strcmp(it->useCase, SND_USE_CASE_MOD_HFP))) {
+                    mALSADevice->disableDevice(&(*it));
+                    mDeviceList.erase(it);
+                    break;
+                }
+            }
         }
         param.remove(key);
     }
@@ -763,13 +772,6 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
     if (param.getInt(key, samplingRate) == NO_ERROR) {
         ALOGV("%s, HFP samplingRate = [%d]", __func__, samplingRate);
         mALSADevice->setHFPRate(samplingRate);
-        if (8000 == samplingRate || 16000 == samplingRate) {
-            // update the rate
-            ALSAHandleList::iterator it = mDeviceList.end();
-            it--;
-            (*it).sampleRate = samplingRate;
-        } else
-            ALOGE("Unsupported sampling rate");
         param.remove(key);
     }
 
