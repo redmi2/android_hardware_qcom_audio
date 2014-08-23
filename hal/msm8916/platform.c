@@ -101,7 +101,7 @@ struct audio_block_header
 /* Audio calibration related functions */
 typedef void (*acdb_deallocate_t)();
 typedef int  (*acdb_init_t)(char *);
-typedef void (*acdb_send_audio_cal_t)(int, int);
+typedef void (*acdb_send_audio_cal_t)(int, int, int);
 typedef void (*acdb_send_voice_cal_t)(int, int);
 typedef int (*acdb_reload_vocvoltable_t)(int);
 
@@ -918,7 +918,7 @@ done:
     return ret;
 }
 
-int platform_send_audio_calibration(void *platform, snd_device_t snd_device)
+int platform_send_audio_calibration(void *platform, snd_device_t snd_device, int app_type)
 {
     struct platform_data *my_data = (struct platform_data *)platform;
     int acdb_dev_id, acdb_dev_type;
@@ -937,7 +937,7 @@ int platform_send_audio_calibration(void *platform, snd_device_t snd_device)
             acdb_dev_type = ACDB_DEV_TYPE_OUT;
         else
             acdb_dev_type = ACDB_DEV_TYPE_IN;
-        my_data->acdb_send_audio_cal(acdb_dev_id, acdb_dev_type);
+        my_data->acdb_send_audio_cal(acdb_dev_id, acdb_dev_type, app_type);
     }
     return 0;
 }
@@ -1686,8 +1686,11 @@ int platform_set_parameters(void *platform, struct str_parms *parms)
     char value[256] = {0};
     int val;
     int ret = 0, err;
+    char *kv_pairs = NULL;
 
-    ALOGV("%s: enter: %s", __func__, str_parms_to_str(parms));
+    kv_pairs = str_parms_to_str(parms);
+    ALOGV("%s: enter: - %s", __func__, kv_pairs);
+    free(kv_pairs);
 
     err = str_parms_get_int(parms, AUDIO_PARAMETER_KEY_BTSCO, &val);
     if (err >= 0) {
@@ -1829,6 +1832,7 @@ void platform_get_parameters(void *platform,
     char *str = NULL;
     char value[256] = {0};
     int ret;
+    char *kv_pairs = NULL;
 
     ret = str_parms_get_str(query, AUDIO_PARAMETER_KEY_SLOWTALK,
                             value, sizeof(value));
@@ -1849,7 +1853,9 @@ void platform_get_parameters(void *platform,
         str_parms_add_str(reply, AUDIO_PARAMETER_KEY_VOLUME_BOOST, value);
     }
 
-    ALOGV("%s: exit: returns - %s", __func__, str_parms_to_str(reply));
+    kv_pairs = str_parms_to_str(reply);
+    ALOGV("%s: exit: returns - %s", __func__, kv_pairs);
+    free(kv_pairs);
 }
 
 /* Delay in Us */
@@ -1997,5 +2003,37 @@ uint32_t platform_get_pcm_offload_buffer_size(audio_offload_info_t* info)
 
     ALOGV("%s: fragment_size %d", __func__, fragment_size);
     return fragment_size;
+}
+
+int platform_set_stream_config(void *platform, struct audio_usecase *usecase)
+{
+    struct platform_data *my_data = (struct platform_data *)platform;
+    struct audio_device *adev = my_data->adev;
+    int app_type;
+    int ret = 0;
+    int snd_device;
+
+    if(usecase->type == PCM_PLAYBACK)
+        snd_device = platform_get_output_snd_device(adev->platform,
+                                            usecase->stream.out->devices);
+    else if(usecase->type == PCM_CAPTURE)
+        snd_device = platform_get_input_snd_device(adev->platform,
+                                            adev->primary_output->devices);
+
+    switch (usecase->id) {
+        case USECASE_AUDIO_PLAYBACK_DEEP_BUFFER:
+            app_type = APP_TYPE_SYSTEM_SOUNDS;
+            break;
+        case USECASE_AUDIO_PLAYBACK_LOW_LATENCY:
+            app_type = APP_TYPE_SYSTEM_SOUNDS;
+            break;
+        case USECASE_AUDIO_RECORD:
+            app_type = APP_TYPE_GENERAL_RECORDING;
+            break;
+        default:
+            app_type = APP_TYPE_GENERAL_PLAYBACK;
+    }
+    platform_send_audio_calibration(platform, snd_device, app_type);
+    return ret;
 }
 
