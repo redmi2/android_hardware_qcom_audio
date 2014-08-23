@@ -31,6 +31,13 @@ enum {
     FLUENCE_BROADSIDE = 0x2,
 };
 
+enum {
+    APP_TYPE_GENERAL_PLAYBACK = 0x00011130,
+    APP_TYPE_SYSTEM_SOUNDS = 0x00011131,
+    APP_TYPE_GENERAL_RECORDING = 0x00011132,
+    APP_TYPE_VOICE_RECOGNITION = 0x00011133
+};
+
 /*
  * Below are the devices for which is back end is same, SLIMBUS_0_RX.
  * All these devices are handled by the internal HW codec. We can
