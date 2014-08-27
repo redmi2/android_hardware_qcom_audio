@@ -579,6 +579,7 @@ int voice_extn_compress_voip_start_input_stream(struct stream_in *in)
 
     ALOGD("%s: enter", __func__);
 
+    adev->active_input = in;
     ret = voip_start_call(adev, &in->config);
     in->pcm = voip_data.pcm_tx;
 
@@ -633,6 +634,7 @@ int voice_extn_compress_voip_close_input_stream(struct audio_stream *stream)
 
     ALOGD("%s: enter", __func__);
 
+    adev->active_input = NULL;
     voip_data.in_stream_count--;
     status = voip_stop_call(adev);
 
