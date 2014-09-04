@@ -110,6 +110,7 @@ struct platform_data {
     char fluence_cap[PROPERTY_VALUE_MAX];
     int  btsco_sample_rate;
     bool slowtalk;
+    bool ec_ref_enabled;
     /* Audio calibration related functions */
     void                       *acdb_handle;
     int                        voice_feature_set;
@@ -318,12 +319,22 @@ static int acdb_device_table[SND_DEVICE_MAX] = {
 #define DEEP_BUFFER_PLATFORM_DELAY (29*1000LL)
 #define LOW_LATENCY_PLATFORM_DELAY (13*1000LL)
 
-static void set_echo_reference(struct audio_device *adev, bool enable)
+void platform_set_echo_reference(void *platform, bool enable)
 {
-    if (enable)
-        audio_route_apply_and_update_path(adev->audio_route, "echo-reference");
-    else
-        audio_route_reset_and_update_path(adev->audio_route, "echo-reference");
+    struct platform_data *my_data = (struct platform_data *)platform;
+    struct audio_device *adev = my_data->adev;
+
+    if (enable) {
+         my_data->ec_ref_enabled = enable;
+         audio_route_apply_and_update_path(adev->audio_route, "echo-reference");
+    } else {
+         if (my_data->ec_ref_enabled) {
+             audio_route_reset_and_update_path(adev->audio_route, "echo-reference");
+             my_data->ec_ref_enabled = enable;
+         } else {
+             ALOGV("EC Reference is already disabled: %d", my_data->ec_ref_enabled);
+         }
+    }
 
     ALOGV("Setting EC Reference: %d", enable);
 }
@@ -1175,14 +1186,16 @@ snd_device_t platform_get_input_snd_device(void *platform, audio_devices_t out_d
             } else if (my_data->fluence_type == FLUENCE_NONE ||
                 my_data->fluence_in_voice_call == false) {
                 snd_device = SND_DEVICE_IN_HANDSET_MIC;
-                set_echo_reference(adev, true);
+                if (audio_extn_hfp_is_active(adev))
+                    platform_set_echo_reference(adev->platform, true);
             } else {
                 snd_device = SND_DEVICE_IN_VOICE_DMIC;
                 adev->acdb_settings |= DMIC_FLAG;
             }
         } else if (out_device & AUDIO_DEVICE_OUT_WIRED_HEADSET) {
             snd_device = SND_DEVICE_IN_VOICE_HEADSET_MIC;
-            set_echo_reference(adev, true);
+            if (audio_extn_hfp_is_active(adev))
+                platform_set_echo_reference(adev->platform, true);
         } else if (out_device & AUDIO_DEVICE_OUT_ALL_SCO) {
             if (my_data->btsco_sample_rate == SAMPLE_RATE_16KHZ)
                 snd_device = SND_DEVICE_IN_BT_SCO_MIC_WB;
@@ -1201,7 +1214,8 @@ snd_device_t platform_get_input_snd_device(void *platform, audio_devices_t out_d
                 }
             } else {
                 snd_device = SND_DEVICE_IN_VOICE_SPEAKER_MIC;
-                set_echo_reference(adev, true);
+                if (audio_extn_hfp_is_active(adev))
+                    platform_set_echo_reference(adev->platform, true);
             }
         }
     } else if (source == AUDIO_SOURCE_CAMCORDER) {
@@ -1246,7 +1260,7 @@ snd_device_t platform_get_input_snd_device(void *platform, audio_devices_t out_d
                 } else if (in_device & AUDIO_DEVICE_IN_WIRED_HEADSET) {
                     snd_device = SND_DEVICE_IN_HEADSET_MIC_FLUENCE;
                 }
-                set_echo_reference(adev, true);
+                platform_set_echo_reference(adev->platform, true);
             } else if (adev->active_input->enable_aec) {
                 if (in_device & AUDIO_DEVICE_IN_BACK_MIC) {
                     if (my_data->fluence_type & FLUENCE_DUAL_MIC) {
@@ -1263,7 +1277,7 @@ snd_device_t platform_get_input_snd_device(void *platform, audio_devices_t out_d
                 } else if (in_device & AUDIO_DEVICE_IN_WIRED_HEADSET) {
                     snd_device = SND_DEVICE_IN_HEADSET_MIC_FLUENCE;
                 }
-                set_echo_reference(adev, true);
+                platform_set_echo_reference(adev->platform, true);
             } else if (adev->active_input->enable_ns) {
                 if (in_device & AUDIO_DEVICE_IN_BACK_MIC) {
                     if (my_data->fluence_type & FLUENCE_DUAL_MIC) {
@@ -1280,9 +1294,9 @@ snd_device_t platform_get_input_snd_device(void *platform, audio_devices_t out_d
                 } else if (in_device & AUDIO_DEVICE_IN_WIRED_HEADSET) {
                     snd_device = SND_DEVICE_IN_HEADSET_MIC_FLUENCE;
                 }
-                set_echo_reference(adev, false);
+                platform_set_echo_reference(adev->platform, false);
             } else
-                set_echo_reference(adev, false);
+                platform_set_echo_reference(adev->platform, false);
         }
     } else if (source == AUDIO_SOURCE_MIC) {
         if (in_device & AUDIO_DEVICE_IN_BUILTIN_MIC &&
@@ -1290,7 +1304,7 @@ snd_device_t platform_get_input_snd_device(void *platform, audio_devices_t out_d
             if(my_data->fluence_type & FLUENCE_DUAL_MIC &&
                     my_data->fluence_in_audio_rec) {
                 snd_device = SND_DEVICE_IN_HANDSET_DMIC;
-                set_echo_reference(adev, true);
+                platform_set_echo_reference(adev->platform, true);
             }
         }
     } else if (source == AUDIO_SOURCE_FM_RX ||
