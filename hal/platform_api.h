@@ -63,5 +63,6 @@ bool platform_listen_update_status(snd_device_t snd_device);
 struct audio_offload_info_t;
 uint32_t platform_get_compress_offload_buffer_size(audio_offload_info_t* info);
 uint32_t platform_get_pcm_offload_buffer_size(audio_offload_info_t* info);
+void platform_set_echo_reference(void *platform, bool enable);
 
 #endif // AUDIO_PLATFORM_API_H

@@ -2565,6 +2565,9 @@ static void adev_close_input_stream(struct audio_hw_device *dev,
     struct stream_in *in = (struct stream_in *)stream;
     ALOGV("%s", __func__);
 
+    /* Disable echo reference while closing input stream */
+    platform_set_echo_reference(adev->platform, false);
+
     if (in->usecase == USECASE_COMPRESS_VOIP_CALL) {
         ret = voice_extn_compress_voip_close_input_stream(&stream->common);
         if (ret != 0)
