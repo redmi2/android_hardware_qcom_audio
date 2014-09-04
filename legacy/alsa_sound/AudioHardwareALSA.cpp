@@ -1,7 +1,7 @@
 /* AudioHardwareALSA.cpp
  **
  ** Copyright 2008-2010 Wind River Systems
- ** Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+ ** Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
  ** Not a Contribution.
  **
  ** Licensed under the Apache License, Version 2.0 (the "License");
@@ -224,6 +224,9 @@ AudioHardwareALSA::AudioHardwareALSA() :
             } else if (strstr(soundCardInfo, "apq8064-auto-snd-card")) {
                 codec_rev = 44;
                 break;
+            } else if (strstr(soundCardInfo, "apq8064-mplatform-snd-card")) {
+                codec_rev = 45;
+                break;
             } else if(strstr(soundCardInfo, "no soundcards")) {
                 ALOGE("NO SOUND CARD DETECTED");
                 if(sleep_retry < SOUND_CARD_SLEEP_RETRY) {
@@ -268,6 +271,8 @@ AudioHardwareALSA::AudioHardwareALSA() :
        case 43: strcpy(ucm_name_str, "snd_soc_msm_Taiko_liquid");
                 break;
        case 44: strcpy(ucm_name_str, "snd_soc_msm_auto");
+                break;
+       case 45: strcpy(ucm_name_str, "snd_soc_msm_mplatform");
                 break;
        default:
            property_get("ro.board.platform", platform, "");

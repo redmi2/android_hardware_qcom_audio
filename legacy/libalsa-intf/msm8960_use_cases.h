@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -194,6 +194,7 @@ static const char *card_list[] = {
     "snd_soc_msm_Taiko_liquid",
     "snd_soc_msm_I2SFusion",
     "snd_soc_msm_auto",
+    "snd_soc_msm_mplatform",
     "us_soc_msm",
 };
 
@@ -217,6 +218,7 @@ static card_mapping_t card_mapping_list[] = {
     {"snd_soc_msm_Taiko_liquid", 0},
     {"snd_soc_msm_I2SFusion", 0},
     {"snd_soc_msm_auto", 0},
+    {"snd_soc_msm_mplatform", 0},
     {"us_soc_msm", 0},
 };
 
