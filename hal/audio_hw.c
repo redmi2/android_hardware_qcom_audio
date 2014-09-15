@@ -214,7 +214,7 @@ static int get_snd_codec_id(audio_format_t format)
     return id;
 }
 
-static int get_snd_card_state(struct audio_device *adev)
+int get_snd_card_state(struct audio_device *adev)
 {
     int snd_scard_state;
 
@@ -1631,6 +1631,7 @@ static ssize_t out_write(struct audio_stream_out *stream, const void *buffer,
     if (SND_CARD_STATE_OFFLINE == snd_scard_state) {
         if (out->pcm) {
             ALOGD(" %s: sound card is not active/SSR state", __func__);
+            out->voip_out_avail = false;
             ret= -ENETRESET;
             goto exit;
         } else if (out->usecase == USECASE_AUDIO_PLAYBACK_OFFLOAD) {
@@ -1706,6 +1707,7 @@ exit:
     if (ret != 0) {
         if (out->pcm)
             ALOGE("%s: error %d - %s", __func__, ret, pcm_get_error(out->pcm));
+        voice_extn_compress_voip_out_ssr(&out->stream.common);
         out_standby(&out->stream.common);
         usleep(bytes * 1000000 / audio_stream_frame_size(&out->stream.common) /
                         out_get_sample_rate(&out->stream.common));
@@ -2068,6 +2070,7 @@ static ssize_t in_read(struct audio_stream_in *stream, void *buffer,
     if (in->pcm) {
         if(SND_CARD_STATE_OFFLINE == snd_scard_state) {
             ALOGD(" %s: sound card is not active/SSR state", __func__);
+            in->voip_in_avail = false;
             ret= -ENETRESET;
             goto exit;
         }
@@ -2112,6 +2115,7 @@ exit:
     pthread_mutex_unlock(&in->lock);
 
     if (ret != 0) {
+        voice_extn_compress_voip_in_ssr(&in->stream.common);
         in_standby(&in->stream.common);
         ALOGV("%s: read failed - sleeping for buffer duration", __func__);
         usleep(bytes * 1000000 / audio_stream_frame_size(&in->stream.common) /
