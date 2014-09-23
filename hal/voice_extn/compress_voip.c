@@ -580,6 +580,10 @@ int voice_extn_compress_voip_start_output_stream(struct stream_out *out)
     ret = voip_start_call(adev, &out->config);
     out->pcm = voip_data.pcm_rx;
     uc_info = get_usecase_from_list(adev, USECASE_COMPRESS_VOIP_CALL);
+    if (!uc_info) {
+        ret = -ENOMEM;
+        goto error;
+    }
     uc_info->stream.out = out;
     uc_info->devices = out->devices;
 
