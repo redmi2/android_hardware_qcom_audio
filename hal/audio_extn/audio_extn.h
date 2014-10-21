@@ -211,4 +211,14 @@ bool audio_extn_hfp_is_active(struct audio_device *adev);
 audio_usecase_t audio_extn_hfp_get_usecase();
 #endif
 
+#ifndef PM_SUPPORT_ENABLED
+#define audio_extn_pm_set_parameters(params) (0)
+#define audio_extn_pm_vote(void) (0)
+#define audio_extn_pm_unvote(void) (0)
+#else
+void audio_extn_pm_set_parameters(struct str_parms *parms);
+int audio_extn_pm_vote (void);
+void audio_extn_pm_unvote(void);
+#endif
+
 #endif /* AUDIO_EXTN_H */
