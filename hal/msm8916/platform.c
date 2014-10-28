@@ -38,6 +38,7 @@
 #define MIXER_XML_PATH_QRD_SKUH "/system/etc/mixer_paths_qrd_skuh.xml"
 #define MIXER_XML_PATH_QRD_SKUI "/system/etc/mixer_paths_qrd_skui.xml"
 #define MIXER_XML_PATH_QRD_SKUHF "/system/etc/mixer_paths_qrd_skuhf.xml"
+#define MIXER_XML_PATH_QRD_SKUT1 "/system/etc/mixer_paths_qrd_skut1.xml"
 #define MIXER_XML_PATH_SKUK "/system/etc/mixer_paths_skuk.xml"
 #define MIXER_XML_PATH_AUXPCM "/system/etc/mixer_paths_auxpcm.xml"
 #define MIXER_XML_PATH_AUXPCM "/system/etc/mixer_paths_auxpcm.xml"
@@ -427,6 +428,10 @@ static void query_platform(const char *snd_card_name,
                  sizeof("msm8x16-skuhf-snd-card"))) {
         strlcpy(mixer_xml_path, MIXER_XML_PATH_QRD_SKUHF,
                 sizeof(MIXER_XML_PATH_QRD_SKUHF));
+    } else if (!strncmp(snd_card_name, "msm8x16-skut1-snd-card",
+                 sizeof("msm8x16-skut1-snd-card"))) {
+        strlcpy(mixer_xml_path, MIXER_XML_PATH_QRD_SKUT1,
+                sizeof(MIXER_XML_PATH_QRD_SKUT1));
     } else if (!strncmp(snd_card_name, "msm8939-snd-card-mtp",
                  sizeof("msm8939-snd-card-mtp"))) {
         strlcpy(mixer_xml_path, MIXER_XML_PATH_MTP,
