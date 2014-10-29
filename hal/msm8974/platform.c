@@ -1983,6 +1983,10 @@ static int update_external_device_status(struct platform_data *my_data,
     struct audio_usecase *usecase;
     struct listnode *node;
 
+    if (!my_data || !event_name) {
+        return -EINVAL;
+    }
+
     ALOGD("Recieved  external event switch %s", event_name);
 
     if (!strcmp(event_name, EVENT_EXTERNAL_SPK_1))
