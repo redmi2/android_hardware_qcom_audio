@@ -100,7 +100,7 @@ struct audio_block_header
 
 /* Audio calibration related functions */
 typedef void (*acdb_deallocate_t)();
-typedef int  (*acdb_init_t)(char *);
+typedef int  (*acdb_init_t)(char *, char *);
 typedef void (*acdb_send_audio_cal_t)(int, int, int);
 typedef void (*acdb_send_voice_cal_t)(int, int);
 typedef int (*acdb_reload_vocvoltable_t)(int);
@@ -745,12 +745,15 @@ void *platform_init(struct audio_device *adev)
 
         my_data->acdb_init = (acdb_init_t)dlsym(my_data->acdb_handle,
                                                     "acdb_loader_init_v2");
-        if (my_data->acdb_init == NULL)
+        if (my_data->acdb_init == NULL) {
             ALOGE("%s: dlsym error %s for acdb_loader_init_v2", __func__, dlerror());
+	    goto acdb_init_fail;
+	}
         else
-            my_data->acdb_init(snd_card_name);
+            my_data->acdb_init(snd_card_name, NULL);
     }
 
+acdb_init_fail:
     /* Initialize ACDB ID's */
     platform_info_init(PLATFORM_INFO_XML_PATH);
 
