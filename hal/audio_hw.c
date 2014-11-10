@@ -47,6 +47,7 @@
 #include <audio_effects/effect_aec.h>
 #include <audio_effects/effect_ns.h>
 #include "audio_hw.h"
+#include "audio_hal_plugin.h"
 #include "platform_api.h"
 #include <platform.h>
 #include "audio_extn.h"
@@ -1235,6 +1236,8 @@ static int stop_output_stream(struct stream_out *out)
             adev->offload_effects_stop_output(out->handle, out->pcm_device_id);
     }
 
+    platform_hal_plugin_enable(adev->platform, out, false);
+
     /* 1. Get and set stream specific mixer controls */
     disable_audio_route(adev, uc_info);
 
@@ -1316,6 +1319,8 @@ int start_output_stream(struct stream_out *out)
     list_add_tail(&adev->usecase_list, &uc_info->list);
 
     select_devices(adev, out->usecase);
+
+    platform_hal_plugin_enable(adev->platform, out, true);
 
     ALOGV("%s: Opening PCM device card_id(%d) device_id(%d)",
           __func__, 0, out->pcm_device_id);
