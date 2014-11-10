@@ -121,4 +121,5 @@ int platform_set_device_params(struct stream_out *out, int param, int value);
 int platform_set_audio_device_interface(const char * device_name, const char *intf_name,
                                         const char * codec_type);
 void platform_set_gsm_mode(void *platform, bool enable);
+int platform_hal_plugin_enable(void *platform, struct stream_out *out, bool enable);
 #endif // AUDIO_PLATFORM_API_H
