@@ -8,32 +8,12 @@ LOCAL_ARM_MODE := arm
 
 AUDIO_PLATFORM := $(TARGET_BOARD_PLATFORM)
 
-ifneq ($(filter msm8974 msm8226 msm8610 apq8084 msm8994,$(TARGET_BOARD_PLATFORM)),)
-  # B-family platform uses msm8974 code base
-  AUDIO_PLATFORM = msm8974
+ifneq ($(filter msm8960 apq8064,$(TARGET_BOARD_PLATFORM)),)
+  # A-family platform uses msm8960 code base
+  AUDIO_PLATFORM = msm8960
   MULTIPLE_HW_VARIANTS_ENABLED := true
-ifneq ($(filter msm8610,$(TARGET_BOARD_PLATFORM)),)
-  LOCAL_CFLAGS := -DPLATFORM_MSM8610
-endif
-ifneq ($(filter msm8226,$(TARGET_BOARD_PLATFORM)),)
-  LOCAL_CFLAGS := -DPLATFORM_MSM8x26
-endif
-ifneq ($(filter apq8084,$(TARGET_BOARD_PLATFORM)),)
-  LOCAL_CFLAGS := -DPLATFORM_APQ8084
-endif
-ifneq ($(filter msm8994,$(TARGET_BOARD_PLATFORM)),)
-  LOCAL_CFLAGS := -DPLATFORM_MSM8994
-endif
 endif
 
-ifneq ($(filter msm8916 ferrum,$(TARGET_BOARD_PLATFORM)),)
-  AUDIO_PLATFORM = msm8916
-  MULTIPLE_HW_VARIANTS_ENABLED := true
-  LOCAL_CFLAGS := -DPLATFORM_MSM8916
-ifneq ($(filter ferrum,$(TARGET_BOARD_PLATFORM)),)
-  LOCAL_CFLAGS := -DPLATFORM_MSM8909
-endif
-endif
 
 LOCAL_SRC_FILES := \
 	audio_hw.c \
@@ -106,32 +86,27 @@ ifeq ($(strip $(AUDIO_FEATURE_ENABLED_EXTN_FORMATS)),true)
 LOCAL_CFLAGS += -DFORMATS_ENABLED
 endif
 
-ifeq ($(strip $(AUDIO_FEATURE_ENABLED_SPKR_PROTECTION)),true)
-    LOCAL_CFLAGS += -DSPKR_PROT_ENABLED
-    LOCAL_SRC_FILES += audio_extn/spkr_protection.c
-endif
-
 ifdef MULTIPLE_HW_VARIANTS_ENABLED
   LOCAL_CFLAGS += -DHW_VARIANTS_ENABLED
   LOCAL_SRC_FILES += $(AUDIO_PLATFORM)/hw_info.c
 endif
 
-ifeq ($(strip $(AUDIO_FEATURE_ENABLED_COMPRESS_CAPTURE)),true)
-    LOCAL_CFLAGS += -DCOMPRESS_CAPTURE_ENABLED
-    LOCAL_SRC_FILES += audio_extn/compress_capture.c
-endif
+#ifeq ($(strip $(AUDIO_FEATURE_ENABLED_COMPRESS_CAPTURE)),true)
+#    LOCAL_CFLAGS += -DCOMPRESS_CAPTURE_ENABLED
+#    LOCAL_SRC_FILES += audio_extn/compress_capture.c
+#endif
 
-ifeq ($(strip $(DOLBY_DDP)),true)
-    LOCAL_CFLAGS += -DDS1_DOLBY_DDP_ENABLED
-    LOCAL_SRC_FILES += audio_extn/dolby.c
-endif
+#ifeq ($(strip $(DOLBY_DDP)),true)
+#    LOCAL_CFLAGS += -DDS1_DOLBY_DDP_ENABLED
+#    LOCAL_SRC_FILES += audio_extn/dolby.c
+#endif
 
-ifeq ($(strip $(DOLBY_DAP)),true)
-    LOCAL_CFLAGS += -DDS1_DOLBY_DAP_ENABLED
-ifneq ($(strip $(DOLBY_DDP)),true)
-    LOCAL_SRC_FILES += audio_extn/dolby.c
-endif
-endif
+#ifeq ($(strip $(DOLBY_DAP)),true)
+#    LOCAL_CFLAGS += -DDS1_DOLBY_DAP_ENABLED
+#ifneq ($(strip $(DOLBY_DDP)),true)
+#    LOCAL_SRC_FILES += audio_extn/dolby.c
+#endif
+#endif
 
 ifeq ($(strip $(AUDIO_FEATURE_ENABLED_MULTIPLE_TUNNEL)), true)
     LOCAL_CFLAGS += -DMULTIPLE_OFFLOAD_ENABLED
@@ -144,8 +119,8 @@ LOCAL_SHARED_LIBRARIES := \
 	libtinycompress \
 	libaudioroute \
 	libdl \
-	libexpat \
-        libmdmdetect
+	libexpat
+        #libmdmdetect
 
 LOCAL_C_INCLUDES += \
 	external/tinyalsa/include \
@@ -170,7 +145,7 @@ endif
 
 LOCAL_MODULE := audio.primary.$(TARGET_BOARD_PLATFORM)
 
-LOCAL_MODULE_RELATIVE_PATH := hw
+LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw
 
 LOCAL_MODULE_TAGS := optional
 

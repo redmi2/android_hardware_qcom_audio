@@ -17,7 +17,7 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "msm8974_platform"
+#define LOG_TAG "msm8960_platform"
 /*#define LOG_NDEBUG 0*/
 #define LOG_NDDEBUG 0
 
@@ -33,7 +33,6 @@
 #include "audio_extn.h"
 #include "voice_extn.h"
 #include "sound/compress_params.h"
-#include "mdm_detect.h"
 
 #define MIXER_XML_PATH "/system/etc/mixer_paths.xml"
 #define MIXER_XML_PATH_AUXPCM "/system/etc/mixer_paths_auxpcm.xml"
@@ -141,8 +140,6 @@ struct platform_data {
     acdb_deallocate_t          acdb_deallocate;
     acdb_send_audio_cal_t      acdb_send_audio_cal;
     acdb_send_voice_cal_t      acdb_send_voice_cal;
-    acdb_reload_vocvoltable_t  acdb_reload_vocvoltable;
-    acdb_get_default_app_type_t acdb_get_default_app_type;
 
     void *hw_info;
     struct csd_data *csd;
@@ -654,22 +651,7 @@ void close_csd_client(struct csd_data *csd)
 
 static void platform_csd_init(struct platform_data *plat_data)
 {
-    struct dev_info mdm_detect_info;
-    int ret = 0;
-
-    /* Call ESOC API to get the number of modems.
-     * If the number of modems is not zero, load CSD Client specific
-     * symbols. Voice call is handled by MDM and apps processor talks to
-     * MDM through CSD Client
-     */
-    ret = get_system_info(&mdm_detect_info);
-    if (ret > 0) {
-        ALOGE("%s: Failed to get system info, ret %d", __func__, ret);
-    }
-    ALOGD("%s: num_modems %d\n", __func__, mdm_detect_info.num_modems);
-
-    if (mdm_detect_info.num_modems > 0)
-        plat_data->csd = open_csd_client(plat_data->is_i2s_ext_modem);
+    return;
 }
 
 static bool platform_is_i2s_ext_modem(const char *snd_card_name,
@@ -869,7 +851,7 @@ void *platform_init(struct audio_device *adev)
                   __func__, LIB_ACDB_LOADER);
 
         my_data->acdb_send_audio_cal = (acdb_send_audio_cal_t)dlsym(my_data->acdb_handle,
-                                                    "acdb_loader_send_audio_cal_v2");
+                                                    "acdb_loader_send_audio_cal");
         if (!my_data->acdb_send_audio_cal)
             ALOGE("%s: Could not find the symbol acdb_send_audio_cal from %s",
                   __func__, LIB_ACDB_LOADER);
@@ -880,23 +862,10 @@ void *platform_init(struct audio_device *adev)
             ALOGE("%s: Could not find the symbol acdb_loader_send_voice_cal from %s",
                   __func__, LIB_ACDB_LOADER);
 
-        my_data->acdb_reload_vocvoltable = (acdb_reload_vocvoltable_t)dlsym(my_data->acdb_handle,
-                                                    "acdb_loader_reload_vocvoltable");
-        if (!my_data->acdb_reload_vocvoltable)
-            ALOGE("%s: Could not find the symbol acdb_loader_reload_vocvoltable from %s",
-                  __func__, LIB_ACDB_LOADER);
-
-        my_data->acdb_get_default_app_type = (acdb_get_default_app_type_t)dlsym(
-                                                    my_data->acdb_handle,
-                                                    "acdb_loader_get_default_app_type");
-        if (!my_data->acdb_get_default_app_type)
-            ALOGE("%s: Could not find the symbol acdb_get_default_app_type from %s",
-                  __func__, LIB_ACDB_LOADER);
-
         my_data->acdb_init = (acdb_init_t)dlsym(my_data->acdb_handle,
-                                                    "acdb_loader_init_v2");
+                                                    "acdb_loader_init_ACDB");
         if (my_data->acdb_init == NULL) {
-            ALOGE("%s: dlsym error %s for acdb_loader_init_v2", __func__, dlerror());
+            ALOGE("%s: dlsym error %s for acdb_loader_init", __func__, dlerror());
             goto acdb_init_fail;
         }
 
@@ -914,16 +883,15 @@ void *platform_init(struct audio_device *adev)
 acdb_init_fail:
 
     set_platform_defaults(my_data);
-
+#ifdef CSD_NEEDED
     /* Initialize ACDB ID's */
     if (my_data->is_i2s_ext_modem)
         platform_info_init(PLATFORM_INFO_XML_PATH_I2S);
     else
         platform_info_init(PLATFORM_INFO_XML_PATH);
-
     /* load csd client */
     platform_csd_init(my_data);
-
+#endif
     /* init usb */
     audio_extn_usb_init(adev);
     /* update sound cards appropriately */
@@ -1127,12 +1095,7 @@ done:
 
 int platform_get_default_app_type(void *platform)
 {
-    struct platform_data *my_data = (struct platform_data *)platform;
-
-    if (my_data->acdb_get_default_app_type)
-        return my_data->acdb_get_default_app_type();
-    else
-        return DEFAULT_APP_TYPE;
+    return DEFAULT_APP_TYPE;
 }
 
 int platform_get_snd_device_acdb_id(snd_device_t snd_device)
@@ -1984,7 +1947,7 @@ static int update_external_device_status(struct platform_data *my_data,
     struct listnode *node;
 
     if (!my_data || !event_name) {
-        return -EINVAL;
+       return -EINVAL;
     }
 
     ALOGD("Recieved  external event switch %s", event_name);
@@ -2042,18 +2005,6 @@ int platform_set_parameters(void *platform, struct str_parms *parms)
                             value, sizeof(value));
     if (err >= 0) {
         str_parms_del(parms, AUDIO_PARAMETER_KEY_VOLUME_BOOST);
-
-        if (my_data->acdb_reload_vocvoltable == NULL) {
-            ALOGE("%s: acdb_reload_vocvoltable is NULL", __func__);
-        } else if (!strcmp(value, "on")) {
-            if (!my_data->acdb_reload_vocvoltable(VOICE_FEATURE_SET_VOLUME_BOOST)) {
-                my_data->voice_feature_set = 1;
-            }
-        } else {
-            if (!my_data->acdb_reload_vocvoltable(VOICE_FEATURE_SET_DEFAULT)) {
-                my_data->voice_feature_set = 0;
-            }
-        }
     }
 
     err = str_parms_get_str(parms, AUDIO_PARAMETER_KEY_EXT_AUDIO_DEVICE,
@@ -2164,20 +2115,6 @@ int platform_stop_incall_music_usecase(void *platform)
     return ret;
 }
 
-int platform_update_lch(void *platform, struct voice_session *session,
-                        enum voice_lch_mode lch_mode)
-{
-    int ret = 0;
-    struct platform_data *my_data = (struct platform_data *)platform;
-
-    if ((my_data->csd != NULL) && (my_data->csd->set_lch != NULL))
-        ret = my_data->csd->set_lch(session->vsid, lch_mode);
-    else
-        ret = pcm_ioctl(session->pcm_tx, SNDRV_VOICE_IOCTL_LCH, &lch_mode);
-
-    return ret;
-}
-
 void platform_get_parameters(void *platform,
                             struct str_parms *query,
                             struct str_parms *reply)
@@ -2263,15 +2200,6 @@ uint32_t platform_get_compress_offload_buffer_size(audio_offload_info_t* info)
             atoi(value)) {
         fragment_size =  atoi(value) * 1024;
     }
-
-    // For FLAC use max size since it is loss less, and has sampling rates
-    // upto 192kHZ
-    if (info != NULL && !info->has_video &&
-        info->format == AUDIO_FORMAT_FLAC) {
-       fragment_size = MAX_COMPRESS_OFFLOAD_FRAGMENT_SIZE;
-       ALOGV("FLAC fragment size %d", fragment_size);
-    }
-
     if (info != NULL && info->has_video && info->is_streaming) {
         fragment_size = COMPRESS_OFFLOAD_FRAGMENT_SIZE_FOR_AV_STREAMING;
         ALOGV("%s: offload fragment size reduced for AV streaming to %d",

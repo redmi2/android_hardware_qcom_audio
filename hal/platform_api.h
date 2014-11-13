@@ -19,7 +19,6 @@
 
 #ifndef AUDIO_PLATFORM_API_H
 #define AUDIO_PLATFORM_API_H
-#include <sound/voice_params.h>
 
 #define CODEC_BACKEND_DEFAULT_BIT_WIDTH 16
 #define CODEC_BACKEND_DEFAULT_SAMPLE_RATE 48000

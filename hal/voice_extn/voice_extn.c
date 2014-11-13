@@ -183,16 +183,6 @@ static int update_calls(struct audio_device *adev)
                 session->state.current = session->state.new;
                 break;
 
-            case CALL_LOCAL_HOLD:
-                ALOGD("%s: LOCAL_HOLD -> ACTIVE vsid:%x", __func__, session->vsid);
-                lch_mode = VOICE_LCH_STOP;
-                ret = platform_update_lch(adev->platform, session, lch_mode);
-                if (ret < 0)
-                    ALOGE("%s: lch mode update failed, ret = %d", __func__, ret);
-                else
-                    session->state.current = session->state.new;
-                break;
-
             default:
                 ALOGV("%s: CALL_ACTIVE cannot be handled in state=%d vsid:%x",
                       __func__, session->state.current, session->vsid);
@@ -450,7 +440,6 @@ int voice_extn_set_parameters(struct audio_device *adev,
         err = str_parms_get_int(parms, AUDIO_PARAMETER_KEY_CALL_STATE, &value);
         if (err >= 0) {
             call_state = value;
-            str_parms_del(parms, AUDIO_PARAMETER_KEY_CALL_STATE);
         } else {
             ALOGE("%s: call_state key not found", __func__);
             ret = -EINVAL;

@@ -27,7 +27,7 @@ OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.*/
 
 #define LOG_TAG "audio_hw_hfp"
-/*#define LOG_NDEBUG 0*/
+/*#define LOG_NDEBUG 0 */
 #define LOG_NDDEBUG 0
 
 #include <errno.h>
@@ -44,12 +44,7 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.*/
 #define AUDIO_PARAMETER_HFP_ENABLE      "hfp_enable"
 #define AUDIO_PARAMETER_HFP_SET_SAMPLING_RATE "hfp_set_sampling_rate"
 #define AUDIO_PARAMETER_KEY_HFP_VOLUME "hfp_volume"
-
-#ifdef PLATFORM_MSM8994
-#define HFP_RX_VOLUME     "SEC AUXPCM LOOPBACK Volume"
-#else
 #define HFP_RX_VOLUME     "Internal HFP RX Volume"
-#endif
 
 static int32_t start_hfp(struct audio_device *adev,
                                struct str_parms *parms);
@@ -153,20 +148,22 @@ static int32_t start_hfp(struct audio_device *adev,
 
     pcm_dev_rx_id = platform_get_pcm_device_id(uc_info->id, PCM_PLAYBACK);
     pcm_dev_tx_id = platform_get_pcm_device_id(uc_info->id, PCM_CAPTURE);
-    pcm_dev_asm_rx_id = HFP_ASM_RX_TX;
-    pcm_dev_asm_tx_id = HFP_ASM_RX_TX;
+    pcm_dev_asm_rx_id = HFP_SCO_RX;
+    pcm_dev_asm_tx_id = HFP_PCM_RX;
     if (pcm_dev_rx_id < 0 || pcm_dev_tx_id < 0 ||
         pcm_dev_asm_rx_id < 0 || pcm_dev_asm_tx_id < 0 ) {
-        ALOGE("%s: Invalid PCM devices (rx: %d tx: %d asm: rx tx %d) for the usecase(%d)",
-              __func__, pcm_dev_rx_id, pcm_dev_tx_id, pcm_dev_asm_rx_id, uc_info->id);
+        ALOGE("%s: Invalid PCM devices (rx: %d tx: %d asm: rx %d tx %d) for the usecase(%d)",
+              __func__, pcm_dev_rx_id, pcm_dev_tx_id, pcm_dev_asm_rx_id, pcm_dev_asm_tx_id,
+              uc_info->id);
         ret = -EIO;
         goto exit;
     }
 
-    ALOGV("%s: HFP PCM devices (hfp rx tx: %d pcm rx tx: %d) for the usecase(%d)",
-              __func__, pcm_dev_rx_id, pcm_dev_tx_id, uc_info->id);
+    ALOGD("%s: HFP PCM devices (rx: %d tx: %d asm: rx %d tx %d) for the usecase(%d)",
+          __func__, pcm_dev_rx_id, pcm_dev_tx_id, pcm_dev_asm_rx_id, pcm_dev_asm_tx_id,
+          uc_info->id);
 
-    ALOGV("%s: Opening PCM playback device card_id(%d) device_id(%d)",
+    ALOGD("%s: Opening PCM playback device card_id(%d) device_id(%d)",
           __func__, adev->snd_card, pcm_dev_rx_id);
     hfpmod.hfp_sco_rx = pcm_open(adev->snd_card,
                                   pcm_dev_asm_rx_id,

@@ -453,6 +453,9 @@ int voice_set_parameters(struct audio_device *adev, struct str_parms *parms)
      }
 
 done:
+    if (ret == -ENOSYS)
+        ret = 0;
+
     ALOGV("%s: exit with code(%d)", __func__, ret);
     free(kv_pairs);
     return ret;
