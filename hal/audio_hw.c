@@ -629,7 +629,7 @@ int select_devices(struct audio_device *adev, audio_usecase_t uc_id)
          * usecase. This is to avoid switching devices for voice call when
          * check_usecases_codec_backend() is called below.
          */
-        if (voice_is_in_call(adev)) {
+        if (voice_is_call_state_active(adev)) {
             vc_usecase = get_usecase_from_list(adev,
                                                get_voice_usecase_id_from_list(adev));
             if ((vc_usecase->devices & AUDIO_DEVICE_OUT_ALL_CODEC_BACKEND) ||
@@ -1494,17 +1494,18 @@ static int out_set_parameters(struct audio_stream *stream, const char *kvpairs)
                 select_devices(adev, out->usecase);
 
             if ((adev->mode == AUDIO_MODE_IN_CALL) &&
-                    !voice_is_in_call(adev) &&
+                    !adev->voice.in_call &&
                     (out == adev->primary_output)) {
                 ret = voice_start_call(adev);
-            } else if (voice_is_in_call(adev) &&
+            } else if ((adev->mode == AUDIO_MODE_IN_CALL) &&
+                            adev->voice.in_call &&
                             (out == adev->primary_output)) {
                 voice_update_devices_for_all_voice_usecases(adev);
             }
         }
 
         if ((adev->mode == AUDIO_MODE_NORMAL) &&
-                voice_is_in_call(adev) &&
+                adev->voice.in_call &&
                 (out == adev->primary_output)) {
             ret = voice_stop_call(adev);
         }
@@ -2102,7 +2103,7 @@ static ssize_t in_read(struct audio_stream_in *stream, void *buffer,
      * Instead of writing zeroes here, we could trust the hardware
      * to always provide zeroes when muted.
      */
-    if (ret == 0 && voice_get_mic_mute(adev) && !voice_is_in_call_rec_stream(in))
+    if (ret == 0 && voice_get_mic_mute(adev) && !adev->voice.in_call)
         memset(buffer, 0, bytes);
 
 exit:
@@ -2758,6 +2759,9 @@ static void adev_close_input_stream(struct audio_hw_device *dev,
     int ret;
     struct stream_in *in = (struct stream_in *)stream;
     ALOGD("%s: enter:stream_handle(%p)",__func__, in);
+
+    /* Disable echo reference while closing input stream */
+    platform_set_echo_reference(adev->platform, false);
 
     if (in->usecase == USECASE_COMPRESS_VOIP_CALL) {
         ret = voice_extn_compress_voip_close_input_stream(&stream->common);
