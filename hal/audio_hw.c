@@ -803,7 +803,7 @@ int start_input_stream(struct stream_in *in)
 
     if (SND_CARD_STATE_OFFLINE == snd_card_status) {
         ALOGE("%s: sound card is not active/SSR returning error", __func__);
-        ret = -ENETRESET;
+        ret = -EIO;
         goto error_config;
     }
 
@@ -1147,7 +1147,7 @@ int start_output_stream(struct stream_out *out)
 
     if (SND_CARD_STATE_OFFLINE == snd_card_status) {
         ALOGE("%s: sound card is not active/SSR returning error", __func__);
-        ret = -ENETRESET;
+        ret = -EIO;
         goto error_config;
     }
 
@@ -1632,7 +1632,7 @@ static ssize_t out_write(struct audio_stream_out *stream, const void *buffer,
         if (out->pcm) {
             ALOGD(" %s: sound card is not active/SSR state", __func__);
             out->voip_out_avail = false;
-            ret= -ENETRESET;
+            ret= -EIO;
             goto exit;
         } else if (out->usecase == USECASE_AUDIO_PLAYBACK_OFFLOAD) {
             //during SSR for compress usecase we should return error to flinger
@@ -2071,7 +2071,7 @@ static ssize_t in_read(struct audio_stream_in *stream, void *buffer,
         if(SND_CARD_STATE_OFFLINE == snd_scard_state) {
             ALOGD(" %s: sound card is not active/SSR state", __func__);
             in->voip_in_avail = false;
-            ret= -ENETRESET;
+            ret= -EIO;;
             goto exit;
         }
     }
@@ -2110,12 +2110,12 @@ exit:
        start/stop. Need to post different error to handle that. */
     if (-ENETRESET == ret) {
         set_snd_card_state(adev,SND_CARD_STATE_OFFLINE);
-        memset(buffer, 0, bytes);
     }
     pthread_mutex_unlock(&in->lock);
 
     if (ret != 0) {
         voice_extn_compress_voip_in_ssr(&in->stream.common);
+        memset(buffer, 0, bytes);
         in_standby(&in->stream.common);
         ALOGV("%s: read failed - sleeping for buffer duration", __func__);
         usleep(bytes * 1000000 / audio_stream_frame_size(&in->stream.common) /
