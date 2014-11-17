@@ -62,6 +62,12 @@ public:
                                     AudioSystem::stream_type stream,
                                     int session = 0);
 
+        // indicates to the audio policy manager that the input starts being used.
+        virtual status_t startInput(audio_io_handle_t input);
+
+        // indicates to the audio policy manager that the input stops being used.
+        virtual status_t stopInput(audio_io_handle_t input);
+
         virtual bool isOffloadSupported(const audio_offload_info_t& offloadInfo);
 
         virtual void setPhoneState(int state);
@@ -115,7 +121,11 @@ private:
         // Used for voip + voice concurrency usecase
         int mPrevPhoneState;
         static int mvoice_call_state;
-
+#ifdef RECORD_PLAY_CONCURRENCY
+        // Used for record + playback concurrency
+        bool mIsInputRequestOnProgress;
+#endif
+        static bool isVirtualInputDevice(audio_devices_t device);
 
 };
 };
