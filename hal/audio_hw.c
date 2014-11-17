@@ -1497,7 +1497,8 @@ static int out_set_parameters(struct audio_stream *stream, const char *kvpairs)
                     !voice_is_in_call(adev) &&
                     (out == adev->primary_output)) {
                 ret = voice_start_call(adev);
-            } else if (voice_is_in_call(adev) &&
+            } else if ((adev->mode == AUDIO_MODE_IN_CALL) &&
+                            voice_is_in_call(adev) &&
                             (out == adev->primary_output)) {
                 voice_update_devices_for_all_voice_usecases(adev);
             }
@@ -2758,6 +2759,9 @@ static void adev_close_input_stream(struct audio_hw_device *dev,
     int ret;
     struct stream_in *in = (struct stream_in *)stream;
     ALOGD("%s: enter:stream_handle(%p)",__func__, in);
+
+    /* Disable echo reference while closing input stream */
+    platform_set_echo_reference(adev->platform, false);
 
     if (in->usecase == USECASE_COMPRESS_VOIP_CALL) {
         ret = voice_extn_compress_voip_close_input_stream(&stream->common);
