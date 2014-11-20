@@ -1089,6 +1089,39 @@ audio_io_handle_t AudioPolicyManager::getOutput(AudioSystem::stream_type stream,
     }
 #endif
 
+#ifdef RECORD_PLAY_CONCURRENCY
+    char recConcPropValue[PROPERTY_VALUE_MAX];
+    bool prop_rec_play_enabled = false;
+    uint32_t active_input_count = 0;
+
+    if (property_get("rec.playback.conc.disabled", recConcPropValue, NULL)) {
+        prop_rec_play_enabled = atoi(recConcPropValue) || !strncmp("true", recConcPropValue, 4);
+    }
+
+    for (size_t i = 0; i < mInputs.size(); i++) {
+        AudioInputDescriptor  *desc = mInputs.valueAt(i);
+        if (desc->mRefCount > 0) {
+            active_input_count++;
+        }
+    }
+    if ((prop_rec_play_enabled) &&
+            ((true == mIsInputRequestOnProgress) || active_input_count)) {
+        if (AUDIO_MODE_IN_COMMUNICATION == mPhoneState) {
+            if (AUDIO_OUTPUT_FLAG_VOIP_RX & flags) {
+                // allow VoIP using voice path
+                // Do nothing
+            } else if((flags & AUDIO_OUTPUT_FLAG_FAST) != 0) {
+                ALOGD(" MODE_IN_COMM is setforcing deep buffer output for non ULL... flags: %x", flags);
+                // use deep buffer path for all non ULL outputs
+                flags = (AudioSystem::output_flags)AUDIO_OUTPUT_FLAG_DEEP_BUFFER;
+            }
+        } else if ((flags & AUDIO_OUTPUT_FLAG_FAST) != 0) {
+            ALOGD(" Record mode is on forcing deep buffer output for non ULL... flags: %x ", flags);
+            // use deep buffer path for all non ULL outputs
+            flags = (AudioSystem::output_flags)AUDIO_OUTPUT_FLAG_DEEP_BUFFER;
+        }
+    }
+#endif
     ALOGD(" getOutput() device %d, stream %d, samplingRate %d, format %x, channelMask %x, flags %x ",
           device, stream, samplingRate, format, channelMask, flags);
 
@@ -1342,9 +1375,30 @@ bool AudioPolicyManager::isOffloadSupported(const audio_offload_info_t& offloadI
             }
          }
     }
-
-
 #endif
+#ifdef RECORD_PLAY_CONCURRENCY
+    char recConcPropValue[PROPERTY_VALUE_MAX];
+    bool prop_rec_play_enabled = false;
+    uint32_t active_input_count = 0;
+
+    if (property_get("rec.playback.conc.disabled", recConcPropValue, NULL)) {
+        prop_rec_play_enabled = atoi(recConcPropValue) || !strncmp("true", recConcPropValue, 4);
+    }
+
+    for (size_t i = 0; i < mInputs.size(); i++) {
+        AudioInputDescriptor  *desc = mInputs.valueAt(i);
+        if (desc->mRefCount > 0) {
+            active_input_count++;
+        }
+    }
+
+    if ((prop_rec_play_enabled) &&
+         ((true == mIsInputRequestOnProgress) || (active_input_count > 0))) {
+        ALOGD("copl: blocking  compress offload for record concurrency ");
+        return false;
+    }
+#endif
+
     // Check if stream type is music, then only allow offload as of now.
     if (offloadInfo.stream_type != AUDIO_STREAM_MUSIC)
     {
@@ -1709,6 +1763,170 @@ bool AudioPolicyManager::isStateInCall(int state)
 {
     return ((state == AudioSystem::MODE_IN_CALL) || (state == AudioSystem::MODE_IN_COMMUNICATION) ||
        ((state == AudioSystem::MODE_RINGTONE) && (mPrevPhoneState == AudioSystem::MODE_IN_CALL)));
+}
+
+status_t AudioPolicyManager::startInput(audio_io_handle_t input)
+{
+    ALOGV("startInput() input %d", input);
+    ssize_t index = mInputs.indexOfKey(input);
+    if (index < 0) {
+        ALOGW("startInput() unknow input %d", input);
+        return BAD_VALUE;
+    }
+    AudioInputDescriptor *inputDesc = mInputs.valueAt(index);
+
+#ifdef AUDIO_POLICY_TEST
+    if (mTestInput == 0)
+#endif //AUDIO_POLICY_TEST
+    {
+        // refuse 2 active AudioRecord clients at the same time except if the active input
+        // uses AUDIO_SOURCE_HOTWORD in which case it is closed.
+        audio_io_handle_t activeInput = getActiveInput();
+        if (!isVirtualInputDevice(inputDesc->mDevice) && activeInput != 0) {
+            AudioInputDescriptor *activeDesc = mInputs.valueFor(activeInput);
+            if (activeDesc->mInputSource == AUDIO_SOURCE_HOTWORD) {
+                ALOGW("startInput() preempting already started low-priority input %d", activeInput);
+                stopInput(activeInput);
+                releaseInput(activeInput);
+            } else {
+                ALOGW("startInput() input %d failed: other input already started..", input);
+                return INVALID_OPERATION;
+            }
+        }
+    }
+
+    audio_devices_t newDevice = getDeviceForInputSource(inputDesc->mInputSource);
+    if ((newDevice != AUDIO_DEVICE_NONE) && (newDevice != inputDesc->mDevice)) {
+        inputDesc->mDevice = newDevice;
+    }
+
+    // automatically enable the remote submix output when input is started
+    if (audio_is_remote_submix_device(inputDesc->mDevice)) {
+        setDeviceConnectionState(AUDIO_DEVICE_OUT_REMOTE_SUBMIX,
+                AudioSystem::DEVICE_STATE_AVAILABLE, AUDIO_REMOTE_SUBMIX_DEVICE_ADDRESS);
+    }
+#ifdef RECORD_PLAY_CONCURRENCY
+    mIsInputRequestOnProgress = true;
+
+    char getPropValue[PROPERTY_VALUE_MAX];
+    bool prop_rec_play_enabled = false;
+    uint32_t active_input_count = 0;
+
+    if (property_get("rec.playback.conc.disabled", getPropValue, NULL)) {
+        prop_rec_play_enabled = atoi(getPropValue) || !strncmp("true", getPropValue, 4);
+    }
+
+    for (size_t i = 0; i < mInputs.size(); i++) {
+        AudioInputDescriptor  *desc = mInputs.valueAt(i);
+        if (desc->mRefCount > 0) {
+            active_input_count++;
+        }
+    }
+
+    if (prop_rec_play_enabled && !active_input_count){
+        // call invalidate for music, so that compress will fallback to deepbuffer (if applicable)
+        ALOGD("Invalidate on releaseInput for MUSIC stream");
+        //FIXME see fixme on name change
+        mpClientInterface->setStreamOutput((AudioSystem::stream_type)AUDIO_STREAM_MUSIC, 0);
+        // close compress tracks
+        for (size_t i = 0; i < mOutputs.size(); i++) {
+            AudioOutputDescriptor *outputDesc = mOutputs.valueAt(i);
+            if ((outputDesc == NULL) || (outputDesc->mProfile == NULL)) {
+               ALOGD("ouput desc / profile is NULL");
+               continue;
+            }
+            if (outputDesc->mProfile->mFlags
+                            & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
+                // close compress  sessions
+                ALOGE("calling closeOutput on record conc for COMPRESS output");
+                closeOutput(mOutputs.keyAt(i));
+            }
+        }
+    }
+#endif
+    AudioParameter param = AudioParameter();
+    param.addInt(String8(AudioParameter::keyRouting), (int)inputDesc->mDevice);
+
+    int aliasSource = (inputDesc->mInputSource == AUDIO_SOURCE_HOTWORD) ?
+                                        AUDIO_SOURCE_VOICE_RECOGNITION : inputDesc->mInputSource;
+
+    param.addInt(String8(AudioParameter::keyInputSource), aliasSource);
+    ALOGV("AudioPolicyManager::startInput() input source = %d", inputDesc->mInputSource);
+
+    mpClientInterface->setParameters(input, param.toString());
+
+    inputDesc->mRefCount = 1;
+#ifdef RECORD_PLAY_CONCURRENCY
+    mIsInputRequestOnProgress = false;
+#endif
+    return NO_ERROR;
+}
+
+status_t AudioPolicyManager::stopInput(audio_io_handle_t input)
+{
+    ALOGV("stopInput() input %d", input);
+    ssize_t index = mInputs.indexOfKey(input);
+    if (index < 0) {
+        ALOGW("stopInput() unknow input %d", input);
+        return BAD_VALUE;
+    }
+    AudioInputDescriptor *inputDesc = mInputs.valueAt(index);
+
+    if (inputDesc->mRefCount == 0) {
+        ALOGW("stopInput() input %d already stopped", input);
+        return INVALID_OPERATION;
+    } else {
+        // automatically disable the remote submix output when input is stopped
+        if (audio_is_remote_submix_device(inputDesc->mDevice)) {
+            setDeviceConnectionState(AUDIO_DEVICE_OUT_REMOTE_SUBMIX,
+                    AudioSystem::DEVICE_STATE_UNAVAILABLE, AUDIO_REMOTE_SUBMIX_DEVICE_ADDRESS);
+        }
+
+        AudioParameter param = AudioParameter();
+        param.addInt(String8(AudioParameter::keyRouting), 0);
+        mpClientInterface->setParameters(input, param.toString());
+        inputDesc->mRefCount = 0;
+    }
+
+#ifdef RECORD_PLAY_CONCURRENCY
+    char propValue[PROPERTY_VALUE_MAX];
+    bool prop_rec_play_enabled = false;
+    uint32_t active_input_count = 0;
+
+    if (property_get("rec.playback.conc.disabled", propValue, NULL)) {
+        prop_rec_play_enabled = atoi(propValue) || !strncmp("true", propValue, 4);
+    }
+
+    for (size_t i = 0; i < mInputs.size(); i++) {
+        AudioInputDescriptor  *desc = mInputs.valueAt(i);
+        if (desc->mRefCount > 0) {
+            active_input_count++;
+        }
+    }
+    if (prop_rec_play_enabled && !active_input_count) {
+        //call invalidate for music stream, so that deep buffer can fallback to compress(if applicable)
+        mpClientInterface->setStreamOutput((AudioSystem::stream_type)AUDIO_STREAM_MUSIC, 0);
+    }
+#endif
+    return NO_ERROR;
+}
+
+// A device mask for all audio input devices that are considered "virtual" when evaluating
+// active inputs in getActiveInput()
+#ifdef AUDIO_EXTN_FM_ENABLED
+#define APM_AUDIO_IN_DEVICE_VIRTUAL_ALL  (AUDIO_DEVICE_IN_REMOTE_SUBMIX | AUDIO_DEVICE_IN_FM_RX_A2DP)
+#else
+#define APM_AUDIO_IN_DEVICE_VIRTUAL_ALL  AUDIO_DEVICE_IN_REMOTE_SUBMIX
+#endif
+
+bool AudioPolicyManager::isVirtualInputDevice(audio_devices_t device)
+{
+    if ((device & AUDIO_DEVICE_BIT_IN) != 0) {
+        device &= ~AUDIO_DEVICE_BIT_IN;
+        if ((popcount(device) == 1) && ((device & ~APM_AUDIO_IN_DEVICE_VIRTUAL_ALL) == 0))
+            return true;
+    }
+    return false;
 }
 
 extern "C" AudioPolicyInterface* createAudioPolicyManager(AudioPolicyClientInterface *clientInterface)
