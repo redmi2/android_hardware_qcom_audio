@@ -272,5 +272,17 @@ void audio_extn_utils_update_stream_app_type_cfg(void *platform,
 int audio_extn_utils_send_app_type_cfg(struct audio_usecase *usecase);
 void audio_extn_utils_send_audio_calibration(struct audio_device *adev,
                                              struct audio_usecase *usecase);
-
+#ifndef EXT_HW_PLUGIN_ENABLED
+#define audio_extn_ext_hw_plugin_init(adev)                (0)
+#define audio_extn_ext_hw_plugin_deinit(plugin)              (0)
+#define audio_extn_ext_hw_plugin_enable(plugin, out, enable) (0)
+#define audio_extn_ext_hw_plugin_set_parameters(plugin, parms) (0)
+#else
+void* audio_extn_ext_hw_plugin_init(struct audio_device *adev);
+int audio_extn_ext_hw_plugin_deinit(void *plugin);
+int audio_extn_ext_hw_plugin_enable(void *plugin, struct stream_out *out,
+                               bool enable);
+int audio_extn_ext_hw_plugin_set_parameters(void *plugin,
+                                           struct str_parms *parms);
+#endif
 #endif /* AUDIO_EXTN_H */

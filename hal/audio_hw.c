@@ -1236,7 +1236,7 @@ static int stop_output_stream(struct stream_out *out)
             adev->offload_effects_stop_output(out->handle, out->pcm_device_id);
     }
 
-    platform_hal_plugin_enable(adev->platform, out, false);
+    audio_extn_ext_hw_plugin_enable(adev->ext_hw_plugin, out, false);
 
     /* 1. Get and set stream specific mixer controls */
     disable_audio_route(adev, uc_info);
@@ -1320,7 +1320,7 @@ int start_output_stream(struct stream_out *out)
 
     select_devices(adev, out->usecase);
 
-    platform_hal_plugin_enable(adev->platform, out, true);
+    audio_extn_ext_hw_plugin_enable(adev->ext_hw_plugin, out, true);
 
     ALOGV("%s: Opening PCM device card_id(%d) device_id(%d)",
           __func__, 0, out->pcm_device_id);
@@ -2994,6 +2994,9 @@ static int adev_close(hw_device_t *device)
         audio_route_free(adev->audio_route);
         free(adev->snd_dev_ref_cnt);
         platform_deinit(adev->platform);
+        if(adev->ext_hw_plugin)
+            audio_extn_ext_hw_plugin_deinit(adev->ext_hw_plugin);
+
         free(device);
         adev = NULL;
     }
@@ -3079,6 +3082,8 @@ static int adev_open(const hw_module_t *module, const char *name,
         pthread_mutex_unlock(&adev_init_lock);
         return -EINVAL;
     }
+
+    adev->ext_hw_plugin = audio_extn_ext_hw_plugin_init(adev);
 
     adev->snd_card_status.state = SND_CARD_STATE_ONLINE;
 

@@ -33,7 +33,6 @@
 #include "audio_extn.h"
 #include "voice_extn.h"
 #include "sound/compress_params.h"
-#include "audio_hal_plugin.h"
 
 #define MIXER_XML_PATH "/system/etc/mixer_paths.xml"
 #define MIXER_XML_PATH_AUXPCM "/system/etc/mixer_paths_auxpcm.xml"
@@ -42,7 +41,6 @@
 #define PLATFORM_INFO_XML_PATH      "/system/etc/audio_platform_info.xml"
 #define PLATFORM_INFO_XML_PATH_I2S  "/system/etc/audio_platform_info_i2s.xml"
 
-#define LIB_PLUGIN_DRIVER "/system/lib/libaudiohalplugin.so"
 #define LIB_ACDB_LOADER "libacdbloader.so"
 #define AUDIO_DATA_BLOCK_MIXER_CTL "HDMI EDID"
 #define CVD_VERSION_MIXER_CTL "CVD Version"
@@ -120,11 +118,6 @@ typedef void (*acdb_send_voice_cal_t)(int, int);
 typedef int (*acdb_reload_vocvoltable_t)(int);
 typedef int  (*acdb_get_default_app_type_t)(void);
 
-/* Audio hal plugin interface related functions */
-typedef int32_t (*audio_hal_plugin_init_t)(void);
-typedef int32_t (*audio_hal_plugin_deinit_t)(void);
-typedef int32_t (*audio_hal_plugin_send_msg_t)(audio_hal_plugin_msg_type_t, void *, uint32_t);
-
 
 struct platform_data {
     struct audio_device *adev;
@@ -148,11 +141,7 @@ struct platform_data {
     acdb_deallocate_t          acdb_deallocate;
     acdb_send_audio_cal_t      acdb_send_audio_cal;
     acdb_send_voice_cal_t      acdb_send_voice_cal;
-    /* Audio hal plugin interface related functions */
-    void                           *plugin_handle;
-    audio_hal_plugin_init_t        audio_hal_plugin_init;
-    audio_hal_plugin_deinit_t      audio_hal_plugin_deinit;
-    audio_hal_plugin_send_msg_t    audio_hal_plugin_send_msg;
+
     void *hw_info;
     struct csd_data *csd;
 };
@@ -852,47 +841,6 @@ void *platform_init(struct audio_device *adev)
 
     my_data->voice_feature_set = VOICE_FEATURE_SET_DEFAULT;
 
-    my_data->plugin_handle = dlopen(LIB_PLUGIN_DRIVER, RTLD_NOW);
-    if (my_data->plugin_handle == NULL) {
-        ALOGE("%s: DLOPEN failed for %s", __func__, LIB_PLUGIN_DRIVER);
-    } else {
-        ALOGV("%s: DLOPEN successful for %s", __func__, LIB_PLUGIN_DRIVER);
-        my_data->audio_hal_plugin_init = (audio_hal_plugin_init_t)dlsym(my_data->plugin_handle,
-                                         "audio_hal_plugin_init");
-        if (!my_data->audio_hal_plugin_init) {
-            ALOGE("%s: Could not find the symbol audio_hal_plugin_init from %s",
-                  __func__, LIB_PLUGIN_DRIVER);
-            goto plugin_init_fail;
-        }
-
-        my_data->audio_hal_plugin_deinit = (audio_hal_plugin_deinit_t)dlsym(my_data->plugin_handle,
-                                         "audio_hal_plugin_deinit");
-        if (!my_data->audio_hal_plugin_deinit) {
-            ALOGE("%s: Could not find the symbol audio_hal_plugin_deinit from %s",
-                  __func__, LIB_PLUGIN_DRIVER);
-            goto plugin_init_fail;
-        }
-
-        my_data->audio_hal_plugin_send_msg = (audio_hal_plugin_send_msg_t)dlsym(my_data->plugin_handle,
-                                         "audio_hal_plugin_send_msg");
-        if (!my_data->audio_hal_plugin_send_msg) {
-            ALOGE("%s: Could not find the symbol audio_hal_plugin_send_msg from %s",
-                  __func__, LIB_PLUGIN_DRIVER);
-            goto plugin_init_fail;
-        }
-
-        if(my_data->audio_hal_plugin_init)
-        {
-            int rc = my_data->audio_hal_plugin_init();
-            if(rc)
-            {
-                ALOGE("%s: audio_hal_plugin_init failed with rc = %d",
-                   __func__, rc);
-            }
-        }
-    }
-
-plugin_init_fail:
 
     my_data->acdb_handle = dlopen(LIB_ACDB_LOADER, RTLD_NOW);
     if (my_data->acdb_handle == NULL) {
@@ -968,16 +916,6 @@ void platform_deinit(void *platform)
     hw_info_deinit(my_data->hw_info);
     close_csd_client(my_data->csd);
 
-    if(my_data->audio_hal_plugin_deinit) {
-        int rc = my_data->audio_hal_plugin_deinit();
-        if(rc) {
-            ALOGE("%s: audio_hal_plugin_deinit failed with rc = %d",
-                  __func__, rc);
-        }
-
-        dlclose(my_data->plugin_handle);
-    }
-
     int32_t dev;
     for (dev = 0; dev < SND_DEVICE_MAX; dev++) {
         if (backend_table[dev]) {
@@ -991,42 +929,6 @@ void platform_deinit(void *platform)
     audio_extn_usb_deinit();
 }
 
-int platform_hal_plugin_enable(void *platform, struct stream_out *out, bool enable)
-{
-    int rc = 0;
-    struct platform_data *my_data = (struct platform_data *)platform;
-
-    if(my_data->audio_hal_plugin_send_msg) {
-        if(enable == true) {
-            audio_hal_plugin_msg_type_t msg = AUDIO_HAL_PLUGIN_MSG_CODEC_ENABLE;
-            audio_hal_plugin_codec_enable_t codec_enable;
-
-            //TODO: populate the codec enable structure when CDC driver is ready
-            ALOGD("%s: sending codec enable msg to HAL plugin driver", __func__);
-
-            rc = my_data->audio_hal_plugin_send_msg(msg, (void*)&codec_enable, sizeof(codec_enable));
-            if(rc) {
-                ALOGE("%s: AUDIO_HAL_PLUGIN_MSG_CODEC_ENABLE failed with rc = %d",
-                     __func__, rc);
-            }
-        } else {
-            audio_hal_plugin_msg_type_t msg = AUDIO_HAL_PLUGIN_MSG_CODEC_DISABLE;
-            audio_hal_plugin_codec_disable_t codec_disable;
-
-            //TODO: populate the codec enable structure when CDC driver is ready
-            ALOGD("%s: sending codec disable msg to HAL plugin driver", __func__);
-            rc = my_data->audio_hal_plugin_send_msg(msg, (void*)&codec_disable, sizeof(codec_disable));
-            if(rc) {
-                ALOGE("%s: AUDIO_HAL_PLUGIN_MSG_CODEC_DISABLE failed with rc = %d",
-                     __func__, rc);
-            }
-        }
-    }
-
-    ALOGD("%s: finished sending msg to audio HAL plugin driver", __func__);
-
-    return rc;
-}
 
 const char *platform_get_snd_device_name(snd_device_t snd_device)
 {
