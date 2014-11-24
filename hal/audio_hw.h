@@ -355,6 +355,7 @@ struct audio_device {
     void (*offload_effects_get_parameters)(struct str_parms *,
                                            struct str_parms *);
     void (*offload_effects_set_parameters)(struct str_parms *);
+    void *ext_hw_plugin;
 };
 
 int select_devices(struct audio_device *adev,

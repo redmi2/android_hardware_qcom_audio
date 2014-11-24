@@ -511,4 +511,17 @@ void audio_extn_perf_lock_release(void);
 #else
 void audio_utils_set_hdmi_channel_status(struct stream_out *out, char * buffer, size_t bytes);
 #endif
+#ifndef EXT_HW_PLUGIN_ENABLED
+#define audio_extn_ext_hw_plugin_init(adev)                (0)
+#define audio_extn_ext_hw_plugin_deinit(plugin)              (0)
+#define audio_extn_ext_hw_plugin_enable(plugin, out, enable) (0)
+#define audio_extn_ext_hw_plugin_set_parameters(plugin, parms) (0)
+#else
+void* audio_extn_ext_hw_plugin_init(struct audio_device *adev);
+int audio_extn_ext_hw_plugin_deinit(void *plugin);
+int audio_extn_ext_hw_plugin_enable(void *plugin, struct stream_out *out,
+                               bool enable);
+int audio_extn_ext_hw_plugin_set_parameters(void *plugin,
+                                           struct str_parms *parms);
+#endif
 #endif /* AUDIO_EXTN_H */

@@ -29,7 +29,6 @@
 #include <platform_api.h>
 #include "platform.h"
 #include "audio_extn.h"
-
 #define LIB_ACDB_LOADER "libacdbloader.so"
 #define LIB_CSD_CLIENT "libcsd-client.so"
 
@@ -348,11 +347,6 @@ void platform_deinit(void *platform)
     struct platform_data *my_data = (struct platform_data *)platform;
 
     free(platform);
-}
-
-int platform_hal_plugin_enable(void *platform, struct stream_out *out, bool enable)
-{
-    return 0;
 }
 
 const char *platform_get_snd_device_name(snd_device_t snd_device)

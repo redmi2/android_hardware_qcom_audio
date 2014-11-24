@@ -575,6 +575,7 @@ void audio_extn_set_parameters(struct audio_device *adev,
    audio_extn_source_track_set_parameters(adev, parms);
    if (adev->offload_effects_set_parameters != NULL)
        adev->offload_effects_set_parameters(parms);
+   audio_extn_ext_hw_plugin_set_parameters(adev->ext_hw_plugin, parms);
 }
 
 void audio_extn_get_parameters(const struct audio_device *adev,

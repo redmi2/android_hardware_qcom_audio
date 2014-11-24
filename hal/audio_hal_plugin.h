@@ -43,6 +43,10 @@ extern "C" {
 #define AUDIO_HAL_PLUGIN_ENODEV (-5) /**< No device */
 #define AUDIO_HAL_PLUGIN_EALREADY (-6) /**< Already done */
 
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_MSG_TYPE  "audio_hal_plugin_msg_type"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_UC        "audio_hal_plugin_usecase"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_CMASK     "audio_hal_plugin_channel_mask"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_GAIN      "audio_hal_plugin_gain"
 /**
  * Type of audio hal plug-in messages
  */
@@ -89,6 +93,7 @@ typedef struct audio_hal_plugin_codec_set_pp_vol
 {
     snd_device_t snd_dev; /**< The requested the endpoint device */
     audio_usecase_t usecase; /**< Requested audio use case */
+    audio_channel_mask_t ch_mask; /**< Requested audio channel mask */
     uint32_t gain; /**< The requested volume setting. Scale from 0 to 100 */
 }audio_hal_plugin_codec_set_pp_vol_t;
 
@@ -99,6 +104,7 @@ typedef struct audio_hal_plugin_codec_set_pp_mute
 {
     snd_device_t snd_dev; /**< The requested endpoint device */
     audio_usecase_t usecase; /**< Requested audio use case */
+    audio_channel_mask_t ch_mask; /**< Requested audio channel mask */
     bool flag; /**< Enable/Disable mute flag. 1: mute, 0: unmute */
 }audio_hal_plugin_codec_set_pp_mute_t;
 
