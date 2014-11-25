@@ -101,7 +101,7 @@ struct audio_block_header
 /* Audio calibration related functions */
 typedef void (*acdb_deallocate_t)();
 typedef int  (*acdb_init_t)(char *, char *);
-typedef void (*acdb_send_audio_cal_t)(int, int, int);
+typedef void (*acdb_send_audio_cal_t)(int, int, int, int);
 typedef void (*acdb_send_voice_cal_t)(int, int);
 typedef int (*acdb_reload_vocvoltable_t)(int);
 
@@ -732,7 +732,7 @@ void *platform_init(struct audio_device *adev)
                   __func__, LIB_ACDB_LOADER);
 
         my_data->acdb_send_audio_cal = (acdb_send_audio_cal_t)dlsym(my_data->acdb_handle,
-                                                    "acdb_loader_send_audio_cal");
+                                                    "acdb_loader_send_audio_cal_v2");
         if (!my_data->acdb_send_audio_cal)
             ALOGE("%s: Could not find the symbol acdb_send_audio_cal from %s",
                   __func__, LIB_ACDB_LOADER);
@@ -968,7 +968,7 @@ int platform_send_audio_calibration(void *platform, snd_device_t snd_device, int
             acdb_dev_type = ACDB_DEV_TYPE_OUT;
         else
             acdb_dev_type = ACDB_DEV_TYPE_IN;
-        my_data->acdb_send_audio_cal(acdb_dev_id, acdb_dev_type, app_type);
+        my_data->acdb_send_audio_cal(acdb_dev_id, acdb_dev_type, app_type, 48000);
     }
     return 0;
 }
@@ -2061,25 +2061,18 @@ int platform_set_stream_config(void *platform, struct audio_usecase *usecase)
     int ret = 0;
     int snd_device;
 
-    if(usecase->type == PCM_PLAYBACK)
+    if (usecase->type == PCM_PLAYBACK){
         snd_device = platform_get_output_snd_device(adev->platform,
                                             usecase->stream.out->devices);
-    else if(usecase->type == PCM_CAPTURE)
+        if(usecase->id == USECASE_AUDIO_PLAYBACK_OFFLOAD)
+            app_type = APP_TYPE_GENERAL_PLAYBACK;
+        else
+            app_type = APP_TYPE_SYSTEM_SOUNDS;
+    }
+    else if ((usecase->type == PCM_HFP_CALL) || (usecase->type == PCM_CAPTURE)) {
         snd_device = platform_get_input_snd_device(adev->platform,
                                             adev->primary_output->devices);
-
-    switch (usecase->id) {
-        case USECASE_AUDIO_PLAYBACK_DEEP_BUFFER:
-            app_type = APP_TYPE_SYSTEM_SOUNDS;
-            break;
-        case USECASE_AUDIO_PLAYBACK_LOW_LATENCY:
-            app_type = APP_TYPE_SYSTEM_SOUNDS;
-            break;
-        case USECASE_AUDIO_RECORD:
-            app_type = APP_TYPE_GENERAL_RECORDING;
-            break;
-        default:
-            app_type = APP_TYPE_GENERAL_PLAYBACK;
+        app_type = APP_TYPE_GENERAL_RECORDING;
     }
     platform_send_audio_calibration(platform, snd_device, app_type);
     return ret;
