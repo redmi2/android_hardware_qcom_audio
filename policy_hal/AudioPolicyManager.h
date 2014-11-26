@@ -123,7 +123,7 @@ private:
         static int mvoice_call_state;
 #ifdef RECORD_PLAY_CONCURRENCY
         // Used for record + playback concurrency
-        bool mIsInputRequestOnProgress;
+        static bool mIsInputRequestOnProgress;
 #endif
         static bool isVirtualInputDevice(audio_devices_t device);
 

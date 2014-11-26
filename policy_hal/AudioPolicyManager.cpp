@@ -46,7 +46,9 @@ namespace android_audio_legacy {
 // ----------------------------------------------------------------------------
 const char* AudioPolicyManager::HDMI_SPKR_STR = "hdmi_spkr";
 int AudioPolicyManager::mvoice_call_state = 0;
-
+#ifdef RECORD_PLAY_CONCURRENCY
+bool AudioPolicyManager::mIsInputRequestOnProgress = false;
+#endif
 status_t AudioPolicyManager::setDeviceConnectionState(audio_devices_t device,
                                                       AudioSystem::device_connection_state state,
                                                       const char *device_address)
@@ -1110,12 +1112,12 @@ audio_io_handle_t AudioPolicyManager::getOutput(AudioSystem::stream_type stream,
             if (AUDIO_OUTPUT_FLAG_VOIP_RX & flags) {
                 // allow VoIP using voice path
                 // Do nothing
-            } else if((flags & AUDIO_OUTPUT_FLAG_FAST) != 0) {
+            } else if((flags & AUDIO_OUTPUT_FLAG_FAST) == 0) {
                 ALOGD(" MODE_IN_COMM is setforcing deep buffer output for non ULL... flags: %x", flags);
                 // use deep buffer path for all non ULL outputs
                 flags = (AudioSystem::output_flags)AUDIO_OUTPUT_FLAG_DEEP_BUFFER;
             }
-        } else if ((flags & AUDIO_OUTPUT_FLAG_FAST) != 0) {
+        } else if ((flags & AUDIO_OUTPUT_FLAG_FAST) == 0) {
             ALOGD(" Record mode is on forcing deep buffer output for non ULL... flags: %x ", flags);
             // use deep buffer path for all non ULL outputs
             flags = (AudioSystem::output_flags)AUDIO_OUTPUT_FLAG_DEEP_BUFFER;
