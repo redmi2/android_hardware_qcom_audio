@@ -768,6 +768,7 @@ void *platform_init(struct audio_device *adev)
         else
             my_data->acdb_init(snd_card_name, NULL);
     }
+    audio_extn_pm_vote();
 
 acdb_init_fail:
     /* Initialize ACDB ID's */
@@ -2088,3 +2089,8 @@ int platform_set_stream_config(void *platform, struct audio_usecase *usecase)
     return ret;
 }
 
+int platform_get_subsys_image_name(char *buf)
+{
+    strlcpy(buf, PLATFORM_IMAGE_NAME, sizeof(PLATFORM_IMAGE_NAME));
+    return 0;
+}
