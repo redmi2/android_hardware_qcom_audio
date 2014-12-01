@@ -329,6 +329,10 @@ int enable_snd_device(struct audio_device *adev,
 
     if (snd_device == SND_DEVICE_OUT_SPEAKER &&
         audio_extn_spkr_prot_is_enabled()) {
+        if (audio_extn_spkr_prot_get_acdb_id(snd_device) < 0) {
+            adev->snd_dev_ref_cnt[snd_device]--;
+            return -EINVAL;
+        }
        if (audio_extn_spkr_prot_start_processing(snd_device)) {
           ALOGE("%s: spkr_start_processing failed", __func__);
           return -EINVAL;
@@ -340,7 +344,7 @@ int enable_snd_device(struct audio_device *adev,
             and audio, notify listen hal before audio calibration is sent */
         audio_extn_listen_update_device_status(snd_device,
                                         LISTEN_EVENT_SND_DEVICE_BUSY);
-        if (platform_send_audio_calibration(adev->platform, snd_device, APP_TYPE_GENERAL_PLAYBACK) < 0) {
+        if (platform_get_snd_device_acdb_id(snd_device) < 0) {
             adev->snd_dev_ref_cnt[snd_device]--;
             audio_extn_listen_update_device_status(snd_device,
                                         LISTEN_EVENT_SND_DEVICE_FREE);
