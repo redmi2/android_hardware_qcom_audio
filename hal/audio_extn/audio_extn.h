@@ -280,8 +280,8 @@ void audio_extn_utils_send_audio_calibration(struct audio_device *adev,
 #else
 void* audio_extn_ext_hw_plugin_init(struct audio_device *adev);
 int audio_extn_ext_hw_plugin_deinit(void *plugin);
-int audio_extn_ext_hw_plugin_enable(void *plugin, struct stream_out *out,
-                               bool enable);
+int audio_extn_ext_hw_plugin_usecase_start(void *plugin, struct audio_usecase *usecase);
+int audio_extn_ext_hw_plugin_usecase_stop(void *plugin, struct audio_usecase *usecase);
 int audio_extn_ext_hw_plugin_set_parameters(void *plugin,
                                            struct str_parms *parms);
 #endif

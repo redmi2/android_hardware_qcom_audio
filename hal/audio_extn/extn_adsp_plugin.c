@@ -38,7 +38,6 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.*/
 #include "platform_api.h"
 #include "audio_hal_plugin.h"
 
-
 #ifdef EXT_HW_PLUGIN_ENABLED
 
 typedef int32_t (*audio_hal_plugin_init_t)(void);
@@ -64,7 +63,7 @@ void* audio_extn_ext_hw_plugin_init(struct audio_device *adev)
 
     my_plugin = calloc(1, sizeof(struct ext_hw_plugin_data));
 
-    if(my_plugin == NULL)
+    if (my_plugin == NULL)
         return NULL;
 
     my_plugin->adev = adev;
@@ -100,16 +99,17 @@ void* audio_extn_ext_hw_plugin_init(struct audio_device *adev)
         }
 
         ret = my_plugin->audio_hal_plugin_init();
-        if(ret) {
+        if (ret) {
             ALOGE("%s: audio_hal_plugin_init failed with ret = %d",
                __func__, ret);
-	    goto plugin_init_fail;
+            goto plugin_init_fail;
         }
     }
     return my_plugin;
 
 plugin_init_fail:
     dlclose(my_plugin->plugin_handle);
+    free(my_plugin);
     return NULL;
 }
 
@@ -122,9 +122,9 @@ int audio_extn_ext_hw_plugin_deinit(void *plugin)
         return -EINVAL;
     }
 
-    if(my_plugin->audio_hal_plugin_deinit) {
+    if (my_plugin->audio_hal_plugin_deinit) {
         int ret = my_plugin->audio_hal_plugin_deinit();
-        if(ret) {
+        if (ret) {
             ALOGE("%s: audio_hal_plugin_deinit failed with ret = %d",
                   __func__, ret);
         }
@@ -135,49 +135,123 @@ int audio_extn_ext_hw_plugin_deinit(void *plugin)
     return ret;
 }
 
-int audio_extn_ext_hw_plugin_enable(void *plugin, struct stream_out *out, bool enable)
+int audio_extn_ext_hw_plugin_usecase_start(void *plugin, struct audio_usecase *usecase)
 {
     int ret = 0;
     struct ext_hw_plugin_data *my_plugin = (struct ext_hw_plugin_data *)plugin;
 
-    if (my_plugin == NULL) {
+    if ((my_plugin == NULL) || (usecase == NULL)) {
         return -EINVAL;
     }
 
-    if(my_plugin->audio_hal_plugin_send_msg) {
-        if(enable == true) {
-            audio_hal_plugin_msg_type_t msg = AUDIO_HAL_PLUGIN_MSG_CODEC_ENABLE;
-            audio_hal_plugin_codec_enable_t codec_enable;
+    if (my_plugin->audio_hal_plugin_send_msg) {
+        audio_hal_plugin_msg_type_t msg = AUDIO_HAL_PLUGIN_MSG_CODEC_ENABLE;
+        audio_hal_plugin_codec_enable_t codec_enable;
 
-            /* TODO: populate the codec enable structure when CDC driver is ready */
-            ALOGD("%s: sending codec enable msg to HAL plugin driver", __func__);
+        codec_enable.usecase = usecase->id;
+        if ((usecase->type == PCM_PLAYBACK) || (usecase->type == VOICE_CALL) ||
+            (usecase->type == VOIP_CALL) || (usecase->type == PCM_HFP_CALL)) {
+            codec_enable.snd_dev = usecase->out_snd_device;
+            /* TODO - below should be related with out_snd_dev */
+            codec_enable.sample_rate = 48000;
+            codec_enable.bit_width = 16;
+            codec_enable.num_chs = 2;
+
+            ALOGD("%s: enable audio hal plugin output, %d, %d, %d, %d, %d",
+                __func__, (int)codec_enable.usecase,
+                (int)codec_enable.snd_dev,
+                (int)codec_enable.sample_rate,
+                (int)codec_enable.bit_width,
+                (int)codec_enable.num_chs);
 
             ret = my_plugin->audio_hal_plugin_send_msg(msg,
                 (void*)&codec_enable, sizeof(codec_enable));
-            if(ret) {
-                ALOGE("%s: AUDIO_HAL_PLUGIN_MSG_CODEC_ENABLE failed with ret = %d",
-                     __func__, ret);
+            if (ret) {
+                ALOGE("%s: enable audio hal plugin output failed ret = %d",
+                    __func__, ret);
+                return ret;
             }
-        } else {
-            audio_hal_plugin_msg_type_t msg = AUDIO_HAL_PLUGIN_MSG_CODEC_DISABLE;
-            audio_hal_plugin_codec_disable_t codec_disable;
+        }
+        if ((usecase->type == PCM_CAPTURE) || (usecase->type == VOICE_CALL) ||
+            (usecase->type == VOIP_CALL) || (usecase->type == PCM_HFP_CALL)) {
+            codec_enable.snd_dev = usecase->in_snd_device;
+            /* TODO - below should be related with in_snd_dev */
+            codec_enable.sample_rate = 48000;
+            codec_enable.bit_width = 16;
+            codec_enable.num_chs = 2;
 
-            /* TODO: populate the codec enable structure when CDC driver is ready */
-            ALOGD("%s: sending codec disable msg to HAL plugin driver", __func__);
-            ret= my_plugin->audio_hal_plugin_send_msg(msg,
-                (void*)&codec_disable, sizeof(codec_disable));
-            if(ret) {
-                ALOGE("%s: AUDIO_HAL_PLUGIN_MSG_CODEC_DISABLE failed with ret = %d",
-                     __func__, ret);
+            ALOGD("%s: enable audio hal plugin input, %d, %d, %d, %d, %d",
+                __func__, (int)codec_enable.usecase,
+                (int)codec_enable.snd_dev,
+                (int)codec_enable.sample_rate,
+                (int)codec_enable.bit_width,
+                (int)codec_enable.num_chs);
+
+            ret = my_plugin->audio_hal_plugin_send_msg(msg,
+                (void*)&codec_enable, sizeof(codec_enable));
+            if (ret) {
+                ALOGE("%s: enable audio hal plugin input failed ret = %d",
+                    __func__, ret);
+                return ret;
             }
         }
     }
 
-    ALOGD("%s: finished sending msg to audio HAL plugin driver", __func__);
+    ALOGD("%s: finished ext_hw_plugin usecase start", __func__);
 
     return ret;
 }
 
+int audio_extn_ext_hw_plugin_usecase_stop(void *plugin, struct audio_usecase *usecase)
+{
+    int ret = 0;
+    struct ext_hw_plugin_data *my_plugin = (struct ext_hw_plugin_data *)plugin;
+
+    if ((my_plugin == NULL) || (usecase == NULL)) {
+        return -EINVAL;
+    }
+
+    if (my_plugin->audio_hal_plugin_send_msg) {
+        audio_hal_plugin_msg_type_t msg = AUDIO_HAL_PLUGIN_MSG_CODEC_DISABLE;
+        audio_hal_plugin_codec_disable_t codec_disable;
+
+        codec_disable.usecase = usecase->id;
+        if ((usecase->type == PCM_PLAYBACK) || (usecase->type == VOICE_CALL) ||
+            (usecase->type == VOIP_CALL) || (usecase->type == PCM_HFP_CALL)) {
+            codec_disable.snd_dev = usecase->out_snd_device;
+
+            ALOGD("%s: disable audio hal plugin output, %d, %d",
+                __func__, (int)codec_disable.usecase,
+                (int)codec_disable.snd_dev);
+
+            ret= my_plugin->audio_hal_plugin_send_msg(msg,
+                (void*)&codec_disable, sizeof(codec_disable));
+            if (ret) {
+                ALOGE("%s: disable audio hal plugin output failed ret = %d",
+                    __func__, ret);
+            }
+        }
+        if ((usecase->type == PCM_CAPTURE) || (usecase->type == VOICE_CALL) ||
+        (usecase->type == VOIP_CALL) || (usecase->type == PCM_HFP_CALL)) {
+            codec_disable.snd_dev = usecase->in_snd_device;
+
+            ALOGD("%s: disable audio hal plugin input, %d, %d",
+                __func__, (int)codec_disable.usecase,
+                (int)codec_disable.snd_dev);
+
+            ret= my_plugin->audio_hal_plugin_send_msg(msg,
+                (void*)&codec_disable, sizeof(codec_disable));
+            if (ret) {
+                ALOGE("%s: disable audio hal plugin input failed ret = %d",
+                    __func__, ret);
+            }
+        }
+    }
+
+    ALOGD("%s: finished ext_hw_plugin usecase stop", __func__);
+
+    return ret;
+}
 
 int audio_extn_ext_hw_plugin_set_parameters(void *plugin, struct str_parms *parms)
 {
@@ -191,17 +265,17 @@ int audio_extn_ext_hw_plugin_set_parameters(void *plugin, struct str_parms *parm
     }
 
     err = str_parms_get_int(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_MSG_TYPE, &val);
-    if(err >= 0) {
+    if (err >= 0) {
         ALOGD("%s: received plugin msg type (%d)", __func__, val);
         str_parms_del(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_MSG_TYPE);
-        if(my_plugin->audio_hal_plugin_send_msg) {
+        if (my_plugin->audio_hal_plugin_send_msg) {
             switch(val) {
             case AUDIO_HAL_PLUGIN_MSG_CODEC_SET_PP_VOLUME:
             {
                 audio_hal_plugin_codec_set_pp_vol_t pp_vol;
                 err = str_parms_get_int(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_UC,
                     &pp_vol.usecase);
-                if(err >= 0) {
+                if (err >= 0) {
                     str_parms_del(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_UC);
                 } else {
                     /* TODO: properly handle no uc param from client case */
@@ -209,7 +283,7 @@ int audio_extn_ext_hw_plugin_set_parameters(void *plugin, struct str_parms *parm
                 }
                 err = str_parms_get_int(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_CMASK,
                    (int*)&pp_vol.ch_mask);
-                if((err >= 0)) {
+                if ((err >= 0)) {
                     str_parms_del(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_CMASK);
                 } else {
                     /* TODO: properly handle no cmask param from client case */
@@ -217,14 +291,14 @@ int audio_extn_ext_hw_plugin_set_parameters(void *plugin, struct str_parms *parm
                 }
                 err = str_parms_get_int(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_GAIN,
                     (int*)&pp_vol.gain);
-                if((err >= 0)) {
+                if ((err >= 0)) {
                     str_parms_del(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_GAIN);
                 } else {
                     /* TODO: properly handle no gain param from client case */
                     return -EINVAL;
                 }
-                if((pp_vol.usecase>= 0)&&(pp_vol.usecase < AUDIO_USECASE_MAX)
-                    &&(pp_vol.ch_mask)) {
+                if ((pp_vol.usecase>= 0) && (pp_vol.usecase < AUDIO_USECASE_MAX)
+                    && (pp_vol.ch_mask)) {
                     struct audio_usecase *uc_info;
                     audio_hal_plugin_msg_type_t msg =
                         AUDIO_HAL_PLUGIN_MSG_CODEC_SET_PP_VOLUME;
@@ -236,7 +310,7 @@ int audio_extn_ext_hw_plugin_set_parameters(void *plugin, struct str_parms *parm
                         return -EINVAL;
                     }
                     /* TODO: confirm this handles all usecase */
-                    if(uc_info->out_snd_device) {
+                    if (uc_info->out_snd_device) {
                         pp_vol.snd_dev = uc_info->out_snd_device;
                     } else if(uc_info->in_snd_device) {
                         pp_vol.snd_dev = uc_info->in_snd_device;
