@@ -671,7 +671,8 @@ static void* spkr_calibration_thread(void *context)
                 break;
         }
     }
-    if (handle.thermal_client_handle)
+    if (handle.thermal_client_handle &&
+        handle.thermal_client_unregister_callback)
         handle.thermal_client_unregister_callback(handle.thermal_client_handle);
     handle.thermal_client_handle = 0;
     if (handle.thermal_handle)
