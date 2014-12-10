@@ -43,10 +43,16 @@ extern "C" {
 #define AUDIO_HAL_PLUGIN_ENODEV (-5) /**< No device */
 #define AUDIO_HAL_PLUGIN_EALREADY (-6) /**< Already done */
 
-#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_MSG_TYPE  "audio_hal_plugin_msg_type"
-#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_UC        "audio_hal_plugin_usecase"
-#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_CMASK     "audio_hal_plugin_channel_mask"
-#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_GAIN      "audio_hal_plugin_gain"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_MSG_TYPE    "ext_hw_plugin_msg_type"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_UC          "ext_hw_plugin_usecase"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_CMASK       "ext_hw_plugin_channel_mask"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_GAIN        "ext_hw_plugin_gain"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_MUTE_FLAG   "ext_hw_plugin_mute_flag"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_FADE        "ext_hw_plugin_fade"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_BALANCE     "ext_hw_plugin_balance"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_BMT_FTYPE   "ext_hw_plugin_bmt_filter_type"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_BMT_FLAG    "ext_hw_plugin_bmt_flag"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_BMT_VAL     "ext_hw_plugin_bmt_value"
 /**
  * Type of audio hal plug-in messages
  */
@@ -75,7 +81,7 @@ typedef struct audio_hal_plugin_codec_enable
     uint32_t sample_rate;  /**< Requested sample rate for the endpoint device */
     uint32_t bit_width;  /**< Requested bit width per sample for the endpoint device */
     uint32_t num_chs;  /**< Requested number of channels for the endpoint device */
-}audio_hal_plugin_codec_enable_t;
+} audio_hal_plugin_codec_enable_t;
 
 /**
  * Payload of AUDIO_HAL_PLUGIN_MSG_CODEC_DISABLE message
@@ -84,7 +90,7 @@ typedef struct audio_hal_plugin_codec_disable
 {
     snd_device_t snd_dev; /**< Requested the endpoint device to be disabled */
     audio_usecase_t usecase; /**< Requested audio use case */
-}audio_hal_plugin_codec_disable_t;
+} audio_hal_plugin_codec_disable_t;
 
 /**
  * Payload of AUDIO_HAL_PLUGIN_MSG_CODEC_SET_PP_VOLUME message
@@ -95,7 +101,7 @@ typedef struct audio_hal_plugin_codec_set_pp_vol
     audio_usecase_t usecase; /**< Requested audio use case */
     audio_channel_mask_t ch_mask; /**< Requested audio channel mask */
     uint32_t gain; /**< The requested volume setting. Scale from 0 to 100 */
-}audio_hal_plugin_codec_set_pp_vol_t;
+} audio_hal_plugin_codec_set_pp_vol_t;
 
 /**
  * Payload of AUDIO_HAL_PLUGIN_MSG_CODEC_SET_PP_MUTE message
@@ -106,7 +112,7 @@ typedef struct audio_hal_plugin_codec_set_pp_mute
     audio_usecase_t usecase; /**< Requested audio use case */
     audio_channel_mask_t ch_mask; /**< Requested audio channel mask */
     bool flag; /**< Enable/Disable mute flag. 1: mute, 0: unmute */
-}audio_hal_plugin_codec_set_pp_mute_t;
+} audio_hal_plugin_codec_set_pp_mute_t;
 
 /**
  * Payload of AUDIO_HAL_PLUGIN_MSG_CODEC_SET_PP_FADE message
@@ -118,7 +124,7 @@ typedef struct audio_hal_plugin_codec_set_pp_fade
     uint32_t fade; /**< The requested fade configuration. Scale range is 0 to 100
                                  0 - Refers to maximum at the rear and minimum at the front
                                  100 - Refers to minimum at the rear and maximum at the front */
-}audio_hal_plugin_codec_set_pp_fade_t;
+} audio_hal_plugin_codec_set_pp_fade_t;
 
 /**
  * Payload of AUDIO_HAL_PLUGIN_MSG_CODEC_SET_PP_BALANCE message
@@ -130,19 +136,53 @@ typedef struct audio_hal_plugin_codec_set_pp_balance
     uint32_t balance; /**< The requested balance configuration. Scale range is 0 to 100
                                       0 - Refers to maximum at the left side and minimum at the right side
                                      100 - Refers to minimum at the left side and maximum at the right side */
-}audio_hal_plugin_codec_set_pp_balance_t;
+} audio_hal_plugin_codec_set_pp_balance_t;
 
 /**
- * Payload of AUDIO_HAL_PLUGIN_MSG_CODEC_SET_PP_BMT message -TBD
+ * Payload of AUDIO_HAL_PLUGIN_MSG_CODEC_SET_PP_BMT message
  */
+typedef enum
+{
+    AUDIO_HAL_PLUGIN_CODEC_PP_FILTER_TYPE_INVALID = 0,
+    AUDIO_HAL_PLUGIN_CODEC_PP_FILTER_TYPE_BASS,
+    AUDIO_HAL_PLUGIN_CODEC_PP_FILTER_TYPE_MID,
+    AUDIO_HAL_PLUGIN_CODEC_PP_FILTER_TYPE_TREBLE,
+    AUDIO_HAL_PLUGIN_CODEC_PP_FILTER_TYPE_MAX
+} audio_hal_plugin_codec_pp_filter_type_t;
+
+typedef struct audio_hal_plugin_codec_set_pp_bmt
+{
+    snd_device_t snd_dev; /**< The requested endpoint device */
+    audio_usecase_t usecase; /**< Requested audio use case */
+    audio_hal_plugin_codec_pp_filter_type_t filter_type; /**< Requested filter type */
+    bool enable_flag; /**< Enable flag. 0 - Disable, 1 - Enable */
+    uint32_t value; /**< Requested value to be set */
+} audio_hal_plugin_codec_set_pp_bmt_t;
 
 /**
- * Payload of AUDIO_HAL_PLUGIN_MSG_CODEC_SET_PP_EQ message -TBD
+ * Payload of AUDIO_HAL_PLUGIN_MSG_CODEC_SET_PP_EQ message
  */
+typedef struct audio_hal_plugin_codec_pp_eq_subband
+{
+    uint32_t band_idx; /**< Band index. Supported value: 0 to (num_bands - 1) */
+    uint32_t center_freq; /**< Filter band center frequency in millihertz */
+    uint32_t band_level; /**< Filter band gain in millibels */
+} audio_hal_plugin_codec_pp_eq_subband_t;
 
-/**
- * Payload of AUDIO_HAL_PLUGIN_MSG_CODEC_TUNNEL_CMD message -TBD
- */
+typedef struct audio_hal_plugin_codec_set_pp_eq
+{
+    snd_device_t snd_dev; /**< The requested endpoint device */
+    audio_usecase_t usecase; /**< Requested audio use case */
+    bool enable_flag; /**< Enable flag. 0 - Disable, 1 - Enable */
+    int32_t preset_id; /**< Specify to use either pre-defined preset EQ or
+                                        user-customized equalizers:
+                                        -1      - custom equalizer speficied through 'bands' struct
+                                        0 to N - pre-defined preset EQ index: ROCK/JAZZ/POP, etc */
+    uint32_t pregain; /**< Gain before any equalization processing */
+    uint32_t num_bands; /**< Number of EQ subbands when a cutom preset_id is
+                                          selected */
+    audio_hal_plugin_codec_pp_eq_subband_t *bands; /**< Equalizer sub-band struct list */
+} audio_hal_plugin_codec_set_pp_eq_t;
 
 /**
  * Initialize the audio hal plug-in module and underlying hw driver
