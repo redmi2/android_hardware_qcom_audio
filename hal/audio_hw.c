@@ -262,6 +262,7 @@ int enable_audio_route(struct audio_device *adev,
     audio_extn_dolby_set_endpoint(adev);
 #endif
     audio_extn_listen_update_stream_status(usecase, LISTEN_EVENT_STREAM_BUSY);
+    platform_set_stream_config(adev->platform, usecase);
     strcpy(mixer_path, use_case_table[usecase->id]);
     platform_add_backend_name(mixer_path, snd_device);
     ALOGV("%s: apply mixer and update path: %s", __func__, mixer_path);
