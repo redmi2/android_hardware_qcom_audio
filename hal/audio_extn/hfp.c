@@ -39,6 +39,7 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.*/
 #include "platform_api.h"
 #include <stdlib.h>
 #include <cutils/str_parms.h>
+#include "audio_extn.h"
 
 #ifdef HFP_ENABLED
 #define AUDIO_PARAMETER_HFP_ENABLE      "hfp_enable"
@@ -201,6 +202,13 @@ static int32_t start_hfp(struct audio_device *adev,
         ret = -EIO;
         goto exit;
     }
+
+    if ((uc_info->out_snd_device != SND_DEVICE_NONE) ||
+        (uc_info->in_snd_device != SND_DEVICE_NONE)) {
+        if (audio_extn_ext_hw_plugin_usecase_start(adev->ext_hw_plugin, uc_info))
+            ALOGE("%s: failed to start ext hw plugin", __func__);
+    }
+
     if (pcm_start(hfpmod.hfp_sco_rx) < 0) {
         ALOGE("%s: pcm start for hfp sco rx failed", __func__);
         ret = -EINVAL;
@@ -265,6 +273,12 @@ static int32_t stop_hfp(struct audio_device *adev)
         ALOGE("%s: Could not find the usecase (%d) in the list",
               __func__, hfpmod.ucid);
         return -EINVAL;
+    }
+
+    if ((uc_info->out_snd_device != SND_DEVICE_NONE) ||
+        (uc_info->in_snd_device != SND_DEVICE_NONE)) {
+        if (audio_extn_ext_hw_plugin_usecase_stop(adev->ext_hw_plugin, uc_info))
+            ALOGE("%s: failed to stop ext hw plugin", __func__);
     }
 
     /* 2. Get and set stream specific mixer controls */
