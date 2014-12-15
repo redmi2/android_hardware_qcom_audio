@@ -2189,7 +2189,10 @@ int platform_set_stream_config(void *platform, struct audio_usecase *usecase)
         snd_device = platform_get_input_snd_device(adev->platform,
                                             adev->primary_output->devices);
         app_type = APP_TYPE_GENERAL_RECORDING;
+    } else {
+        return 0;
     }
+
     platform_send_audio_calibration(platform, snd_device, app_type);
     return ret;
 }
