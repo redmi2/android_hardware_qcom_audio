@@ -639,7 +639,8 @@ int select_devices(struct audio_device *adev, audio_usecase_t uc_id)
                                             usecase->stream.out->devices);
                 if (usecase->stream.out == adev->primary_output &&
                         adev->active_input &&
-                        adev->active_input->source == AUDIO_SOURCE_VOICE_COMMUNICATION) {
+                        adev->active_input->source == AUDIO_SOURCE_VOICE_COMMUNICATION &&
+                        out_snd_device != usecase->out_snd_device) {
                     select_devices(adev, adev->active_input->usecase);
                 }
             }
@@ -649,6 +650,7 @@ int select_devices(struct audio_device *adev, audio_usecase_t uc_id)
             if (in_snd_device == SND_DEVICE_NONE) {
                 if (adev->active_input->source == AUDIO_SOURCE_VOICE_COMMUNICATION &&
                         adev->primary_output && !adev->primary_output->standby) {
+                    platform_set_echo_reference(adev->platform, false);
                     in_snd_device = platform_get_input_snd_device(adev->platform,
                                         adev->primary_output->devices);
                 } else {
@@ -2564,6 +2566,9 @@ static void adev_close_input_stream(struct audio_hw_device *dev,
     int ret;
     struct stream_in *in = (struct stream_in *)stream;
     ALOGV("%s", __func__);
+
+    /* Disable echo reference while closing input stream */
+    platform_set_echo_reference(adev->platform, false);
 
     if (in->usecase == USECASE_COMPRESS_VOIP_CALL) {
         ret = voice_extn_compress_voip_close_input_stream(&stream->common);
