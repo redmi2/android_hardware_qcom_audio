@@ -213,8 +213,19 @@ status_t AudioPolicyManager::setDeviceConnectionState(audio_devices_t device,
                    device == AUDIO_DEVICE_OUT_BLUETOOTH_SCO_HEADSET ||
                    device == AUDIO_DEVICE_OUT_BLUETOOTH_SCO_CARKIT) {
             device = AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET;
-        } else if(device == AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET){
-            device = AUDIO_DEVICE_IN_ANLG_DOCK_HEADSET;
+        } else if(device == AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET) {
+            int isCapSupp = 0;
+            String8 valueStr = mpClientInterface->getParameters((audio_io_handle_t)0,
+                               String8(AUDIO_PARAMETER_KEY_USB_CAPTURE_SUPP));
+            AudioParameter result = AudioParameter(valueStr);
+            if (result.getInt(String8(AUDIO_PARAMETER_KEY_USB_CAPTURE_SUPP),
+                              isCapSupp) == NO_ERROR) {
+                if (isCapSupp) {
+                    device = AUDIO_DEVICE_IN_ANLG_DOCK_HEADSET;
+                } else {
+                    ALOGV("USB headset does not support capture, use builtin mic");
+                }
+            }
         } else {
             return NO_ERROR;
         }

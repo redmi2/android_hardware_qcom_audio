@@ -32,6 +32,7 @@
 
 #include <system/audio.h>
 #include <tinyalsa/asoundlib.h>
+#include <hardware/audio.h>
 
 #ifdef USB_HEADSET_ENABLED
 #define USB_LOW_LATENCY_OUTPUT_PERIOD_SIZE   512
@@ -722,4 +723,27 @@ bool audio_extn_usb_is_proxy_inuse()
     else
         return false;
 }
+
+bool audio_extn_get_usb_parameters(struct str_parms *query,
+                                   struct str_parms *reply)
+{
+    int ret, val;
+    char value[32]={0};
+    int channels, sample_rate;
+
+    ret = str_parms_get_str(query, AUDIO_PARAMETER_KEY_USB_CAPTURE_SUPP,
+                            value, sizeof(value));
+    if (ret >= 0) {
+        if (!(usb_get_capability((char *)"Capture:", &channels, &sample_rate))) {
+            val = 1;
+        } else {
+            ALOGV("%s: usb does not support capture", __func__);
+            val = 0;
+        }
+        str_parms_add_int(reply, AUDIO_PARAMETER_KEY_USB_CAPTURE_SUPP, val);
+    }
+
+    return 0;
+}
+
 #endif /*USB_HEADSET_ENABLED end*/
