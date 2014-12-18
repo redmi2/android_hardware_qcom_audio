@@ -2178,16 +2178,14 @@ int platform_set_stream_config(void *platform, struct audio_usecase *usecase)
     int snd_device;
 
     if (usecase->type == PCM_PLAYBACK){
-        snd_device = platform_get_output_snd_device(adev->platform,
-                                            usecase->stream.out->devices);
+        snd_device = usecase->out_snd_device;
         if(usecase->id == USECASE_AUDIO_PLAYBACK_OFFLOAD)
             app_type = APP_TYPE_GENERAL_PLAYBACK;
         else
             app_type = APP_TYPE_SYSTEM_SOUNDS;
     }
     else if ((usecase->type == PCM_HFP_CALL) || (usecase->type == PCM_CAPTURE)) {
-        snd_device = platform_get_input_snd_device(adev->platform,
-                                            adev->primary_output->devices);
+        snd_device = usecase->in_snd_device;
         app_type = APP_TYPE_GENERAL_RECORDING;
     } else {
         return 0;
