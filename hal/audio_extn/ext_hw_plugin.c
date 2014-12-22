@@ -1,5 +1,5 @@
 /* extn_adsp_plugin.c
-Copyright (c) 2014, The Linux Foundation. All rights reserved.
+Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are
@@ -26,7 +26,7 @@ WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
 OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.*/
 
-#define LOG_TAG "ext_audio_hw_plugin"
+#define LOG_TAG "audio_ext_hw_plugin"
 #define LOG_NDEBUG 0
 
 #include <errno.h>
@@ -370,10 +370,6 @@ int audio_extn_ext_hw_plugin_set_parameters(void *plugin, struct str_parms *parm
             ret = -EINVAL;
             goto done_tunnel;
         }
-#if 1
-        for(i=0; i<plsize; i++)
-            ALOGE("%s: data[%d] = %d", __func__, i, *(plptr+i));
-#endif
 
         audio_hal_plugin_msg_type_t msg =
                 AUDIO_HAL_PLUGIN_MSG_CODEC_TUNNEL_CMD;
@@ -676,15 +672,6 @@ done_tunnel:
                     ret = -EINVAL;
                     goto done_eq;
                 }
-            }
-
-            uint32_t i;
-            audio_hal_plugin_codec_pp_eq_subband_t *sbptr = pp_eq.bands;
-            for(i=0; i<pp_eq.num_bands; i++) {
-                ALOGE("%s: band%d data1 =%d", __func__, i, sbptr->band_idx);
-                ALOGE("%s: band%d data2 =%d", __func__, i, sbptr->center_freq);
-                ALOGE("%s: band%d data3 =%d", __func__, i, sbptr->band_level);
-                sbptr++;
             }
 
             audio_hal_plugin_msg_type_t msg =
