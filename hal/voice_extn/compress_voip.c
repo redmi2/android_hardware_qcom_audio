@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  * Not a contribution.
  *
  * Copyright (C) 2013 The Android Open Source Project
@@ -35,6 +35,7 @@
 #include "platform_api.h"
 #include "platform.h"
 #include "voice_extn.h"
+#include "audio_extn.h"
 
 #define COMPRESS_VOIP_IO_BUF_SIZE_NB 320
 #define COMPRESS_VOIP_IO_BUF_SIZE_WB 640
@@ -250,6 +251,12 @@ static int voip_stop_call(struct audio_device *adev)
             voip_data.pcm_tx = NULL;
         }
 
+        if ((uc_info->out_snd_device != SND_DEVICE_NONE) ||
+            (uc_info->in_snd_device != SND_DEVICE_NONE)) {
+            if (audio_extn_ext_hw_plugin_usecase_stop(adev->ext_hw_plugin, uc_info))
+                ALOGE("%s: failed to stop ext hw plugin", __func__);
+        }
+
         /* 2. Get and set stream specific mixer controls */
         disable_audio_route(adev, uc_info);
 
@@ -338,6 +345,12 @@ static int voip_start_call(struct audio_device *adev,
             }
             ret = -EIO;
             goto error_start_voip;
+        }
+
+        if ((uc_info->out_snd_device != SND_DEVICE_NONE) ||
+            (uc_info->in_snd_device != SND_DEVICE_NONE)) {
+            if (audio_extn_ext_hw_plugin_usecase_start(adev->ext_hw_plugin, uc_info))
+                ALOGE("%s: failed to start ext hw plugin", __func__);
         }
 
         pcm_start(voip_data.pcm_tx);
