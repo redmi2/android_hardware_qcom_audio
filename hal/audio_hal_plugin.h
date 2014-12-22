@@ -43,16 +43,23 @@ extern "C" {
 #define AUDIO_HAL_PLUGIN_ENODEV (-5) /**< No device */
 #define AUDIO_HAL_PLUGIN_EALREADY (-6) /**< Already done */
 
-#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_MSG_TYPE    "ext_hw_plugin_msg_type"
-#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_UC          "ext_hw_plugin_usecase"
-#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_CMASK       "ext_hw_plugin_channel_mask"
-#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_GAIN        "ext_hw_plugin_gain"
-#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_MUTE_FLAG   "ext_hw_plugin_mute_flag"
-#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_FADE        "ext_hw_plugin_fade"
-#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_BALANCE     "ext_hw_plugin_balance"
-#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_BMT_FTYPE   "ext_hw_plugin_bmt_filter_type"
-#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_BMT_FLAG    "ext_hw_plugin_bmt_flag"
-#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_BMT_VAL     "ext_hw_plugin_bmt_value"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_MSG_TYPE     "ext_hw_plugin_msg_type"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_UC           "ext_hw_plugin_usecase"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_CMASK        "ext_hw_plugin_channel_mask"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_GAIN         "ext_hw_plugin_gain"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_MUTE_FLAG    "ext_hw_plugin_mute_flag"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_FADE         "ext_hw_plugin_fade"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_BALANCE      "ext_hw_plugin_balance"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_BMT_FTYPE    "ext_hw_plugin_bmt_filter_type"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_BMT_FLAG     "ext_hw_plugin_bmt_flag"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_BMT_VAL      "ext_hw_plugin_bmt_value"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_EQ_FLAG      "ext_hw_plugin_eq_flag"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_EQ_ID        "ext_hw_plugin_eq_id"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_EQ_GAIN      "ext_hw_plugin_eq_gain"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_EQ_NUM_BANDS "ext_hw_plugin_eq_num_bands"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_EQ_BAND_DATA "ext_hw_plugin_eq_band_data"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_TUNNEL_SIZE  "ext_hw_plugin_tunnel_size"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_TUNNEL_DATA  "ext_hw_plugin_tunnel_data"
 /**
  * Type of audio hal plug-in messages
  */
