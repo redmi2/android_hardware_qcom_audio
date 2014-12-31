@@ -56,6 +56,11 @@ ifneq ($(strip $(AUDIO_FEATURE_DISABLED_HFP)),true)
     LOCAL_SRC_FILES += audio_extn/hfp.c
 endif
 
+ifneq ($(strip $(AUDIO_FEATURE_DISABLED_DEV_ARBI)),true)
+    LOCAL_CFLAGS += -DDEV_ARBI_ENABLED
+    LOCAL_SRC_FILES += audio_extn/dev_arbi.c
+endif
+
 ifneq ($(strip $(AUDIO_FEATURE_DISABLED_SSR)),true)
     LOCAL_CFLAGS += -DSSR_ENABLED
     LOCAL_SRC_FILES += audio_extn/ssr.c

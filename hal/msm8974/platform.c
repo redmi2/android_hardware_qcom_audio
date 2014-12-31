@@ -609,6 +609,10 @@ void *platform_init(struct audio_device *adev)
     /* Read one time ssr property */
     audio_extn_ssr_update_enabled();
     audio_extn_spkr_prot_init(adev);
+
+    /* init audio device arbitration */
+    audio_extn_dev_arbi_init();
+
     return my_data;
 }
 
