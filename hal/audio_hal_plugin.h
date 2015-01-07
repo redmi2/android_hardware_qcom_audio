@@ -55,7 +55,6 @@ extern "C" {
 #define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_BMT_VAL      "ext_hw_plugin_bmt_value"
 #define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_EQ_FLAG      "ext_hw_plugin_eq_flag"
 #define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_EQ_ID        "ext_hw_plugin_eq_id"
-#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_EQ_GAIN      "ext_hw_plugin_eq_gain"
 #define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_EQ_NUM_BANDS "ext_hw_plugin_eq_num_bands"
 #define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_EQ_BAND_DATA "ext_hw_plugin_eq_band_data"
 #define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_TUNNEL_SIZE  "ext_hw_plugin_tunnel_size"
@@ -185,7 +184,6 @@ typedef struct audio_hal_plugin_codec_set_pp_eq
                                         user-customized equalizers:
                                         -1      - custom equalizer speficied through 'bands' struct
                                         0 to N - pre-defined preset EQ index: ROCK/JAZZ/POP, etc */
-    uint32_t pregain; /**< Gain before any equalization processing */
     uint32_t num_bands; /**< Number of EQ subbands when a cutom preset_id is
                                           selected */
     audio_hal_plugin_codec_pp_eq_subband_t *bands; /**< Equalizer sub-band struct list */

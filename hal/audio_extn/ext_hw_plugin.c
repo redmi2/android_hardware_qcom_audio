@@ -637,15 +637,6 @@ done_tunnel:
             }
             str_parms_del(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_EQ_ID);
 
-            err = str_parms_get_int(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_EQ_GAIN,
-                    (int*)&pp_eq.pregain);
-            if (err < 0) {
-                ALOGE("%s: Invalid or missing pregain param for SET_PP_EQ", __func__);
-                ret = -EINVAL;
-                goto done;
-            }
-            str_parms_del(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_EQ_GAIN);
-
             if (pp_eq.preset_id == -1) {
                 err = str_parms_get_int(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_EQ_NUM_BANDS,
                         (int*)&pp_eq.num_bands);
@@ -679,10 +670,10 @@ done_tunnel:
             pp_eq.usecase = use_case;
             pp_eq.snd_dev= snd_dev;
 
-            ALOGD("%s: sending codec pp eq msg to HAL plugin driver,%d,%d,%d,%d,%d,%d",
+            ALOGD("%s: sending codec pp eq msg to HAL plugin driver,%d,%d,%d,%d,%d",
                     __func__, (int)pp_eq.usecase, (int)pp_eq.snd_dev,
                     (int)pp_eq.enable_flag, (int)pp_eq.preset_id,
-                    (int)pp_eq.pregain, (int)pp_eq.num_bands);
+                    (int)pp_eq.num_bands);
 
             ret = my_plugin->audio_hal_plugin_send_msg(msg, &pp_eq, sizeof(pp_eq));
             if (ret) {
