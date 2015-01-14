@@ -523,5 +523,7 @@ int audio_extn_ext_hw_plugin_usecase_start(void *plugin, struct audio_usecase *u
 int audio_extn_ext_hw_plugin_usecase_stop(void *plugin, struct audio_usecase *usecase);
 int audio_extn_ext_hw_plugin_set_parameters(void *plugin,
                                            struct str_parms *parms);
+int audio_extn_ext_hw_plugin_get_parameters(void *plugin,
+                  struct str_parms *query, struct str_parms *reply);
 #endif
 #endif /* AUDIO_EXTN_H */

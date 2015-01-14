@@ -58,20 +58,22 @@ struct ext_hw_plugin_data {
 
 void* audio_extn_ext_hw_plugin_init(struct audio_device *adev)
 {
-    int ret = 0;
+    int32_t ret = 0;
     struct ext_hw_plugin_data *my_plugin = NULL;
 
     my_plugin = calloc(1, sizeof(struct ext_hw_plugin_data));
 
-    if (my_plugin == NULL)
+    if (my_plugin == NULL) {
+        ALOGE("[%s] Memory allocation failed for plugin data",__func__);
         return NULL;
+    }
 
     my_plugin->adev = adev;
 
     my_plugin->plugin_handle = dlopen(LIB_PLUGIN_DRIVER, RTLD_NOW);
     if (my_plugin->plugin_handle == NULL) {
         ALOGE("%s: DLOPEN failed for %s", __func__, LIB_PLUGIN_DRIVER);
-        ret = -EINVAL;
+        goto plugin_init_fail;
     } else {
         ALOGV("%s: DLOPEN successful for %s", __func__, LIB_PLUGIN_DRIVER);
         my_plugin->audio_hal_plugin_init = (audio_hal_plugin_init_t)dlsym(
@@ -108,39 +110,43 @@ void* audio_extn_ext_hw_plugin_init(struct audio_device *adev)
     return my_plugin;
 
 plugin_init_fail:
-    dlclose(my_plugin->plugin_handle);
+    if(my_plugin->plugin_handle != NULL)
+        dlclose(my_plugin->plugin_handle);
     free(my_plugin);
     return NULL;
 }
 
-int audio_extn_ext_hw_plugin_deinit(void *plugin)
+int32_t audio_extn_ext_hw_plugin_deinit(void *plugin)
 {
-    int ret = 0;
+    int32_t ret = 0;
     struct ext_hw_plugin_data *my_plugin = (struct ext_hw_plugin_data *)plugin;
 
     if (my_plugin == NULL) {
+        ALOGE("[%s] NULL plugin pointer",__func__);
         return -EINVAL;
     }
 
     if (my_plugin->audio_hal_plugin_deinit) {
-        int ret = my_plugin->audio_hal_plugin_deinit();
+        ret = my_plugin->audio_hal_plugin_deinit();
         if (ret) {
             ALOGE("%s: audio_hal_plugin_deinit failed with ret = %d",
                   __func__, ret);
         }
-
-        dlclose(my_plugin->plugin_handle);
     }
+
+    if(my_plugin->plugin_handle != NULL)
+        dlclose(my_plugin->plugin_handle);
     free(my_plugin);
     return ret;
 }
 
-int audio_extn_ext_hw_plugin_usecase_start(void *plugin, struct audio_usecase *usecase)
+int32_t audio_extn_ext_hw_plugin_usecase_start(void *plugin, struct audio_usecase *usecase)
 {
-    int ret = 0;
+    int32_t ret = 0;
     struct ext_hw_plugin_data *my_plugin = (struct ext_hw_plugin_data *)plugin;
 
     if ((my_plugin == NULL) || (usecase == NULL)) {
+        ALOGE("[%s] NULL input pointer",__func__);
         return -EINVAL;
     }
 
@@ -202,12 +208,13 @@ int audio_extn_ext_hw_plugin_usecase_start(void *plugin, struct audio_usecase *u
     return ret;
 }
 
-int audio_extn_ext_hw_plugin_usecase_stop(void *plugin, struct audio_usecase *usecase)
+int32_t audio_extn_ext_hw_plugin_usecase_stop(void *plugin, struct audio_usecase *usecase)
 {
-    int ret = 0;
+    int32_t ret = 0;
     struct ext_hw_plugin_data *my_plugin = (struct ext_hw_plugin_data *)plugin;
 
     if ((my_plugin == NULL) || (usecase == NULL)) {
+        ALOGE("[%s] NULL input pointer",__func__);
         return -EINVAL;
     }
 
@@ -253,10 +260,10 @@ int audio_extn_ext_hw_plugin_usecase_stop(void *plugin, struct audio_usecase *us
     return ret;
 }
 
-static int ext_hw_plugin_string_to_dword(char *string_value, void **dword_ptr,
+static int32_t ext_hw_plugin_string_to_dword(char *string_value, void **dword_ptr,
         uint32_t dword_len)
 {
-    int ret = 0;
+    int32_t ret = 0;
     uint32_t i,tmp;
     uint8_t *dptr = NULL;
     uint8_t *tmpptr = NULL;
@@ -304,47 +311,101 @@ done_string_to_dword:
     return ret;
 }
 
-int audio_extn_ext_hw_plugin_set_parameters(void *plugin, struct str_parms *parms)
+static int32_t ext_hw_plugin_dword_to_string(uint32_t *dword_ptr, uint32_t dword_len,
+            char **string_ptr)
 {
-    char *value=NULL;
-    int val, len;
-    int ret = 0, err;
-    char *kv_pairs = str_parms_to_str(parms);
-    struct ext_hw_plugin_data *my_plugin = (struct ext_hw_plugin_data *)plugin;
+    int32_t ret = 0;
+    uint32_t i,tmp;
+    uint8_t *dptr = NULL;
+    uint8_t *tmpptr = NULL;
+    int32_t dlen;
+    char *outptr = NULL;
 
-    if (my_plugin == NULL) {
-        ret = -EINVAL;
-        goto done;
+    dptr = (uint8_t*)calloc(dword_len, sizeof(uint32_t));
+    if(dptr == NULL) {
+        ALOGE("[%s] Memory allocation failed for dword length %d",__func__,dword_len);
+        return -ENOMEM;
     }
 
+    /* convert dword to byte array */
+    for(i=0; i<dword_len; i++) {
+        tmp = *(dword_ptr + i);
+        tmpptr = dptr+4*i;
+        *tmpptr = (uint8_t) (tmp & 0xFF);
+        *(tmpptr + 1) = (uint8_t) ((tmp>>8) & 0xFF);
+        *(tmpptr + 2) = (uint8_t) ((tmp>>16) & 0xFF);
+        *(tmpptr + 3) = (uint8_t) ((tmp>>24) & 0xFF);
+    }
+
+    /* Allocate memory for encoding */
+    dlen = dword_len * 4;
+    outptr = (char*)calloc((dlen*2), sizeof(char));
+    if(outptr == NULL) {
+        ALOGE("[%s] Memory allocation failed for size %d",
+                    __func__, dlen*2);
+        ret = -ENOMEM;
+        goto done_dword_to_string;
+    }
+
+    ret = b64encode(dptr, dlen, outptr);
+    if(ret < 0) {
+        ALOGE("[%s] failed to convert data to string ret = %d", __func__, ret);
+        free(outptr);
+        ret = -EINVAL;
+        goto done_dword_to_string;
+    }
+    *string_ptr = outptr;
+
+done_dword_to_string:
+    if (dptr != NULL)
+        free(dptr);
+
+    return ret;
+}
+
+
+int32_t audio_extn_ext_hw_plugin_set_parameters(void *plugin, struct str_parms *parms)
+{
+    char *value = NULL;
+    int32_t val, len = 0;
+    int32_t ret = 0, err;
+    char *kv_pairs = NULL;
+    struct ext_hw_plugin_data *my_plugin = NULL;
+
+    if (plugin == NULL || parms == NULL) {
+        ALOGE("[%s] received null pointer",__func__);
+        return -EINVAL;
+    }
+
+    my_plugin = (struct ext_hw_plugin_data *)plugin;
     if (!my_plugin->audio_hal_plugin_send_msg) {
         ALOGE("%s: NULL audio_hal_plugin_send_msg func ptr", __func__);
-        ret = -EINVAL;
-        goto done;
+        return -EINVAL;
     }
 
     err = str_parms_get_int(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_MSG_TYPE, &val);
     if (err < 0) {
         ALOGE("%s: Invalid or missing TYPE param for plugin msg", __func__);
-        ret = -EINVAL;
-        goto done;
+        return -EINVAL;
     }
     ALOGD("%s: received plugin msg type (%d)", __func__, val);
     str_parms_del(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_MSG_TYPE);
 
-    len = strlen(kv_pairs);
-    value = (char*)calloc(len, sizeof(char));
-    if (value == NULL) {
-        ret = -ENOMEM;
-        ALOGE("[%s] failed to allocate memory",__func__);
-        goto done;
+    if(val == AUDIO_HAL_PLUGIN_MSG_CODEC_TUNNEL_CMD ||
+        val == AUDIO_HAL_PLUGIN_MSG_CODEC_SET_PP_EQ) {
+        kv_pairs = str_parms_to_str(parms);
+        len = strlen(kv_pairs);
+        value = (char*)calloc(len, sizeof(char));
+        if (value == NULL) {
+            ret = -ENOMEM;
+            ALOGE("[%s] failed to allocate memory",__func__);
+            goto done;
+        }
     }
 
     if (val == AUDIO_HAL_PLUGIN_MSG_CODEC_TUNNEL_CMD) {
         uint32_t i, plsize;
         int32_t *plptr = NULL;
-
-        ALOGE("%s: enter TUNNEL command handling", __func__);
 
         err = str_parms_get_int(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_TUNNEL_SIZE,
                 (int*)&plsize);
@@ -693,9 +754,341 @@ done_eq:
 
 done:
     ALOGV("%s: exit with code(%d)", __func__, ret);
-    free(kv_pairs);
+    if(kv_pairs != NULL)
+        free(kv_pairs);
     if(value != NULL)
         free(value);
+    return ret;
+}
+
+int audio_extn_ext_hw_plugin_get_parameters(void *plugin,
+                  struct str_parms *query, struct str_parms *reply)
+{
+    int32_t val;
+    int32_t ret = 0, err;
+    int32_t rbuf_dlen = 0;
+    uint32_t *rbuf_dptr = NULL;
+    char *rparms = NULL;
+    audio_usecase_t use_case = USECASE_INVALID;
+    snd_device_t snd_dev = 0;
+    struct ext_hw_plugin_data *my_plugin = NULL;
+
+    if(plugin == NULL || query == NULL || reply == NULL) {
+        ALOGE("[%s] received null pointer",__func__);
+        return -EINVAL;
+    }
+
+    err = str_parms_get_int(query, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_MSG_TYPE, &val);
+    if (err < 0) {
+        ALOGE("%s: Invalid or missing TYPE param for plugin msg", __func__);
+        return -EINVAL;
+    }
+    ALOGD("%s: received plugin msg type (%d)", __func__, val);
+    str_parms_del(query, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_MSG_TYPE);
+
+    my_plugin = (struct ext_hw_plugin_data *)plugin;
+    if (!my_plugin->audio_hal_plugin_send_msg) {
+        ALOGE("%s: NULL audio_hal_plugin_send_msg func ptr", __func__);
+        ret = -EINVAL;
+        goto done_get_param;
+    }
+
+    err = str_parms_get_int(query, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_UC,
+            &use_case);
+    if ((err < 0) || (use_case < 0) || (use_case >= AUDIO_USECASE_MAX)) {
+        ALOGI("%s: Invalid or missing usecase param for plugin msg", __func__);
+        use_case = USECASE_INVALID;
+    } else {
+        struct audio_usecase *uc_info;
+
+        str_parms_del(query, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_UC);
+
+        uc_info = get_usecase_from_list(my_plugin->adev, use_case);
+        if (uc_info == NULL) {
+            ALOGI("%s: Could not find the usecase (%d) in the list",
+                    __func__, use_case);
+        } else {
+            /* TODO: confirm this handles all usecase */
+            if (uc_info->out_snd_device) {
+                snd_dev = uc_info->out_snd_device;
+            } else if (uc_info->in_snd_device) {
+                snd_dev = uc_info->in_snd_device;
+            } else {
+                ALOGE("%s: No valid snd_device found for the usecase (%d)",
+                        __func__, use_case);
+                ret = -EINVAL;
+                goto done_get_param;
+            }
+        }
+    }
+
+    switch(val) {
+    case AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_VOLUME:
+    {
+        audio_hal_plugin_codec_get_pp_vol_t get_pp_vol;
+        memset(&get_pp_vol,0,sizeof(get_pp_vol));
+        err = str_parms_get_int(query, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_CMASK,
+                (int*)&get_pp_vol.ch_mask);
+        if ((err < 0)) {
+            ALOGI("%s: Invalid or missing CMASK param for GET_PP_VOLUME", __func__);
+            get_pp_vol.ch_mask = AUDIO_CHANNEL_NONE;
+        } else {
+            str_parms_del(query, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_CMASK);
+        }
+
+        audio_hal_plugin_msg_type_t msg =
+                AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_VOLUME;
+        get_pp_vol.usecase = use_case;
+        get_pp_vol.snd_dev = snd_dev;
+
+        ALOGD("%s: sending get codec pp vol msg to HAL plugin driver, %d, %d, %d",
+                __func__, (int)get_pp_vol.usecase, (int)get_pp_vol.snd_dev,
+                (int)get_pp_vol.ch_mask);
+
+        ret = my_plugin->audio_hal_plugin_send_msg(msg, &get_pp_vol, sizeof(get_pp_vol));
+        if (ret) {
+            ALOGE("%s: Failed to get plugin pp vol err: %d", __func__, ret);
+            goto done_get_param;
+        }
+
+        rbuf_dlen = sizeof(get_pp_vol.ret_gain)/sizeof(int32_t);
+        rbuf_dptr = calloc(rbuf_dlen, sizeof(uint32_t));
+        if(rbuf_dptr == NULL) {
+            ALOGE("[%s] Memory allocation failed for dword length %d",__func__,rbuf_dlen);
+            ret = -ENOMEM;
+            goto done_get_param;
+        }
+        memcpy(rbuf_dptr, &get_pp_vol.ret_gain, sizeof(get_pp_vol.ret_gain));
+        break;
+    }
+    case AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_FADE:
+    {
+        audio_hal_plugin_codec_get_pp_fade_t get_pp_fade;
+        memset(&get_pp_fade,0,sizeof(get_pp_fade));
+
+        audio_hal_plugin_msg_type_t msg =
+                AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_FADE;
+        get_pp_fade.usecase = use_case;
+        get_pp_fade.snd_dev = snd_dev;
+
+        ALOGD("%s: sending get codec pp fade msg to HAL plugin driver, %d, %d",
+                __func__, (int)get_pp_fade.usecase, (int)get_pp_fade.snd_dev);
+
+        ret = my_plugin->audio_hal_plugin_send_msg(msg, &get_pp_fade, sizeof(get_pp_fade));
+        if (ret) {
+            ALOGE("%s: Failed to get plugin pp fade err: %d", __func__, ret);
+            goto done_get_param;
+        }
+
+        rbuf_dlen = sizeof(get_pp_fade.ret_fade)/sizeof(int32_t);
+        rbuf_dptr = calloc(rbuf_dlen, sizeof(uint32_t));
+        if(rbuf_dptr == NULL) {
+            ALOGE("[%s] Memory allocation failed for dword length %d",__func__,rbuf_dlen);
+            ret = -ENOMEM;
+            goto done_get_param;
+        }
+        memcpy(rbuf_dptr, &get_pp_fade.ret_fade, sizeof(get_pp_fade.ret_fade));
+        break;
+    }
+    case AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_BALANCE:
+    {
+        audio_hal_plugin_codec_get_pp_balance_t get_pp_balance;
+        memset(&get_pp_balance,0,sizeof(get_pp_balance));
+
+        audio_hal_plugin_msg_type_t msg =
+                AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_BALANCE;
+        get_pp_balance.usecase = use_case;
+        get_pp_balance.snd_dev = snd_dev;
+
+        ALOGD("%s: sending get codec pp balance msg to HAL plugin driver, %d, %d",
+                __func__, (int)get_pp_balance.usecase, (int)get_pp_balance.snd_dev);
+
+        ret = my_plugin->audio_hal_plugin_send_msg(msg, &get_pp_balance,
+            sizeof(get_pp_balance));
+        if (ret) {
+            ALOGE("%s: Failed to get plugin pp balance err: %d", __func__, ret);
+            goto done_get_param;
+        }
+
+        rbuf_dlen = sizeof(get_pp_balance.ret_balance)/sizeof(int32_t);
+        rbuf_dptr = calloc(rbuf_dlen, sizeof(uint32_t));
+        if(rbuf_dptr == NULL) {
+            ALOGE("[%s] Memory allocation failed for dword length %d",__func__,rbuf_dlen);
+            ret = -ENOMEM;
+            goto done_get_param;
+        }
+        memcpy(rbuf_dptr, &get_pp_balance.ret_balance, sizeof(get_pp_balance.ret_balance));
+        break;
+    }
+    case AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_BMT:
+    {
+        int32_t filter_type;
+        audio_hal_plugin_codec_get_pp_bmt_t get_pp_bmt;
+        memset(&get_pp_bmt,0,sizeof(get_pp_bmt));
+        err = str_parms_get_int(query, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_BMT_FTYPE,
+                (int*)&filter_type);
+        if ((err < 0)) {
+            ALOGE("%s: Invalid or missing filter type param for GET_PP_BMT", __func__);
+            get_pp_bmt.filter_type = AUDIO_HAL_PLUGIN_CODEC_PP_FILTER_TYPE_INVALID;
+        } else {
+            str_parms_del(query, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_BMT_FTYPE);
+
+            if ((filter_type <= AUDIO_HAL_PLUGIN_CODEC_PP_FILTER_TYPE_INVALID) &&
+                    (filter_type >= AUDIO_HAL_PLUGIN_CODEC_PP_FILTER_TYPE_MAX)) {
+                ALOGE("%s: Invalid filter type value for SET_PP_BMT", __func__);
+                get_pp_bmt.filter_type = AUDIO_HAL_PLUGIN_CODEC_PP_FILTER_TYPE_INVALID;
+            } else {
+                get_pp_bmt.filter_type = filter_type;
+            }
+        }
+
+        audio_hal_plugin_msg_type_t msg =
+                AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_BMT;
+        get_pp_bmt.usecase = use_case;
+        get_pp_bmt.snd_dev = snd_dev;
+
+        ALOGD("%s: sending get codec pp bmt msg to HAL plugin driver, %d, %d, %d",
+                __func__, (int)get_pp_bmt.usecase, (int)get_pp_bmt.snd_dev,
+                (int)get_pp_bmt.filter_type);
+
+        ret = my_plugin->audio_hal_plugin_send_msg(msg, &get_pp_bmt, sizeof(get_pp_bmt));
+        if (ret) {
+            ALOGE("%s: Failed to get plugin pp bmt err: %d", __func__, ret);
+            goto done_get_param;
+        }
+
+        rbuf_dlen = sizeof(get_pp_bmt.ret_value)/sizeof(int32_t);
+        rbuf_dptr = calloc(rbuf_dlen, sizeof(uint32_t));
+        if(rbuf_dptr == NULL) {
+            ALOGE("[%s] Memory allocation failed for dword length %d",__func__,rbuf_dlen);
+            ret = -ENOMEM;
+            goto done_get_param;
+        }
+        memcpy(rbuf_dptr, &get_pp_bmt.ret_value, sizeof(get_pp_bmt.ret_value));
+        break;
+    }
+    case AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_EQ:
+    {
+        uint32_t rbuf_len = 0;
+        char *tmp_ptr = NULL;
+        audio_hal_plugin_codec_get_pp_eq_t get_pp_eq;
+        memset(&get_pp_eq,0,sizeof(get_pp_eq));
+
+        audio_hal_plugin_msg_type_t msg = AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_EQ;
+        get_pp_eq.usecase = use_case;
+        get_pp_eq.snd_dev = snd_dev;
+
+        ALOGD("%s: sending get codec pp eq msg to HAL plugin driver, %d, %d",
+                __func__, (int)get_pp_eq.usecase, (int)get_pp_eq.snd_dev);
+
+        ret = my_plugin->audio_hal_plugin_send_msg(msg, &get_pp_eq, sizeof(get_pp_eq));
+        if (ret) {
+            ALOGE("%s: Failed to get plugin pp eq err: %d", __func__, ret);
+            goto done_get_param;
+        }
+
+        rbuf_len = sizeof(get_pp_eq.ret_preset_id) + sizeof(get_pp_eq.ret_num_bands);
+        rbuf_dlen = rbuf_len / sizeof(uint32_t);
+        rbuf_dptr = calloc(rbuf_dlen, sizeof(uint32_t));
+        if(rbuf_dptr == NULL) {
+            ALOGE("[%s] Memory allocation failed for dword length %d",__func__,rbuf_dlen);
+            ret = -ENOMEM;
+            goto done_get_param;
+        }
+        tmp_ptr = (char*)rbuf_dptr;
+        memcpy(tmp_ptr, &get_pp_eq.ret_preset_id, sizeof(get_pp_eq.ret_preset_id));
+        tmp_ptr += sizeof(get_pp_eq.ret_preset_id);
+        memcpy(tmp_ptr, &get_pp_eq.ret_num_bands, sizeof(get_pp_eq.ret_num_bands));
+        break;
+    }
+    case AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_EQ_SUBBANDS:
+    {
+        uint32_t rbuf_len = 0;
+        audio_hal_plugin_codec_get_pp_eq_subbands_t get_pp_eq_subbands;
+        memset(&get_pp_eq_subbands,0,sizeof(get_pp_eq_subbands));
+        err = str_parms_get_int(query, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_EQ_NUM_BANDS,
+                (int*)&get_pp_eq_subbands.num_bands);
+        if ((err < 0)) {
+            ALOGE("%s: Invalid or missing num bands param for GET_PP_EQ_SUBBANDS",
+                    __func__);
+            ret = -EINVAL;
+            goto done_get_param;
+        } else {
+            str_parms_del(query, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_EQ_NUM_BANDS);
+
+            if(get_pp_eq_subbands.num_bands == 0) {
+                ALOGE("%s: Zero num bands param for GET_PP_EQ_SUBBANDS",
+                        __func__);
+                ret = -EINVAL;
+                goto done_get_param;
+            }
+        }
+        rbuf_len = get_pp_eq_subbands.num_bands *
+                sizeof(audio_hal_plugin_pp_eq_subband_binfo_t);
+
+        audio_hal_plugin_msg_type_t msg = AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_EQ_SUBBANDS;
+        get_pp_eq_subbands.usecase = use_case;
+        get_pp_eq_subbands.snd_dev = snd_dev;
+        get_pp_eq_subbands.ret_bands = calloc(rbuf_len, 1);
+        if(get_pp_eq_subbands.ret_bands == NULL) {
+            ret = -ENOMEM;
+            ALOGE("[%s] failed to allocate memory",__func__);
+            goto done_get_param;
+        }
+
+        ALOGD("%s: sending get codec pp eq subbands msg to plugin driver, %d, %d, %d",
+                __func__, (int)get_pp_eq_subbands.usecase,
+                (int)get_pp_eq_subbands.snd_dev, (int)get_pp_eq_subbands.num_bands);
+
+        ret = my_plugin->audio_hal_plugin_send_msg(msg, &get_pp_eq_subbands,
+                sizeof(get_pp_eq_subbands));
+        if (ret) {
+            ALOGE("%s: Failed to get plugin pp eq subbands err: %d", __func__, ret);
+            goto done_get_eq_subbands;
+        }
+
+        rbuf_dlen = rbuf_len / sizeof(uint32_t);
+        rbuf_dptr = calloc(rbuf_dlen, sizeof(uint32_t));
+        if(rbuf_dptr == NULL) {
+            ALOGE("[%s] Memory allocation failed for dword length %d",__func__,rbuf_dlen);
+            ret = -ENOMEM;
+            goto done_get_eq_subbands;
+        }
+        memcpy(rbuf_dptr, get_pp_eq_subbands.ret_bands, rbuf_len);
+
+done_get_eq_subbands:
+        if(get_pp_eq_subbands.ret_bands != NULL)
+            free(get_pp_eq_subbands.ret_bands);
+        break;
+    }
+    default:
+        ALOGE("%s: Invalid plugin message type: %d", __func__, val);
+        ret = -EINVAL;
+    }
+
+    if(ret == 0) {
+        ret = ext_hw_plugin_dword_to_string(rbuf_dptr, rbuf_dlen, &rparms);
+        if (ret < 0) {
+            ALOGE("%s: Failed to convert param info for MSG_TYPE %d", __func__, val);
+            goto done_get_param;
+        }
+        ret = 0;
+        str_parms_add_int(reply, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_GETPARAM_RESULT, ret);
+        str_parms_add_str(reply, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_GETPARAM_DATA, rparms);
+    }
+
+done_get_param:
+    if(ret) {
+        str_parms_add_int(reply, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_GETPARAM_RESULT, ret);
+        str_parms_add_str(reply, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_GETPARAM_DATA, "");
+    }
+    if(rbuf_dptr!= NULL)
+        free(rbuf_dptr);
+    if(rparms!= NULL)
+        free(rparms);
+
+done:
+    ALOGV("%s: exit with code(%d)", __func__, ret);
     return ret;
 }
 #endif /* EXT_HW_PLUGIN_ENABLED */

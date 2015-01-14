@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -59,6 +59,8 @@ extern "C" {
 #define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_EQ_BAND_DATA "ext_hw_plugin_eq_band_data"
 #define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_TUNNEL_SIZE  "ext_hw_plugin_tunnel_size"
 #define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_TUNNEL_DATA  "ext_hw_plugin_tunnel_data"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_GETPARAM_RESULT "ext_hw_plugin_getparam_result"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_GETPARAM_DATA "ext_hw_plugin_getparam_data"
 /**
  * Type of audio hal plug-in messages
  */
@@ -74,8 +76,43 @@ typedef enum
     AUDIO_HAL_PLUGIN_MSG_CODEC_SET_PP_BMT, /**< base/mid/treble control */
     AUDIO_HAL_PLUGIN_MSG_CODEC_SET_PP_EQ, /**< EQ control */
     AUDIO_HAL_PLUGIN_MSG_CODEC_TUNNEL_CMD, /**< pass through cmds */
+    AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_VOLUME, /**< get volume params */
+    AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_FADE, /**< get fade params */
+    AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_BALANCE, /**< get balance params */
+    AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_BMT, /**< get bmt params */
+    AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_EQ, /**< get EQ params */
+    AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_EQ_SUBBANDS, /**< get EQ subbands params */
     AUDIO_HAL_PLUGIN_MSG_MAX
 } audio_hal_plugin_msg_type_t;
+
+/**
+ * Type of query status mask
+ */
+#define QUERY_VALUE_VALID            (0x0)
+#define QUERY_VALUE_NOT_SUPPORTED    (0x1)
+#define QUERY_VALUE_NOT_SET          (0x2)
+
+/**
+ * Type of signed 32-bit bounded value used in get_param
+ */
+typedef struct audio_hal_plugin_bint32
+{
+    uint32_t query_status_mask; /**< status of returned actual value */
+    int32_t value; /**< actual value */
+    int32_t min; /**< minimum for value */
+    int32_t max; /**< maximum for value */
+} audio_hal_plugin_bint32_t;
+
+/**
+ * Type of unsigned 32-bit bounded value used in get_param
+ */
+typedef struct audio_hal_plugin_buint32
+{
+    uint32_t query_status_mask; /**< status of returned actual value */
+    uint32_t value; /**< actual value */
+    uint32_t min; /**< minimum for value */
+    uint32_t max; /**< maximum for value */
+} audio_hal_plugin_buint32_t;
 
 /**
  * Payload of AUDIO_HAL_PLUGIN_MSG_CODEC_ENABLE message
@@ -103,10 +140,10 @@ typedef struct audio_hal_plugin_codec_disable
  */
 typedef struct audio_hal_plugin_codec_set_pp_vol
 {
-    snd_device_t snd_dev; /**< The requested the endpoint device */
+    snd_device_t snd_dev; /**< The requested endpoint device */
     audio_usecase_t usecase; /**< Requested audio use case */
     audio_channel_mask_t ch_mask; /**< Requested audio channel mask */
-    uint32_t gain; /**< The requested volume setting. Scale from 0 to 100 */
+    uint32_t gain; /**< The requested volume setting. */
 } audio_hal_plugin_codec_set_pp_vol_t;
 
 /**
@@ -127,9 +164,7 @@ typedef struct audio_hal_plugin_codec_set_pp_fade
 {
     snd_device_t snd_dev; /**< The requested endpoint device */
     audio_usecase_t usecase; /**< Requested audio use case */
-    uint32_t fade; /**< The requested fade configuration. Scale range is 0 to 100
-                                 0 - Refers to maximum at the rear and minimum at the front
-                                 100 - Refers to minimum at the rear and maximum at the front */
+    uint32_t fade; /**< The requested fade configuration. */
 } audio_hal_plugin_codec_set_pp_fade_t;
 
 /**
@@ -139,9 +174,7 @@ typedef struct audio_hal_plugin_codec_set_pp_balance
 {
     snd_device_t snd_dev; /**< The requested endpoint device */
     audio_usecase_t usecase; /**< Requested audio use case */
-    uint32_t balance; /**< The requested balance configuration. Scale range is 0 to 100
-                                      0 - Refers to maximum at the left side and minimum at the right side
-                                     100 - Refers to minimum at the left side and maximum at the right side */
+    uint32_t balance; /**< The requested balance configuration. */
 } audio_hal_plugin_codec_set_pp_balance_t;
 
 /**
@@ -172,7 +205,7 @@ typedef struct audio_hal_plugin_codec_pp_eq_subband
 {
     uint32_t band_idx; /**< Band index. Supported value: 0 to (num_bands - 1) */
     uint32_t center_freq; /**< Filter band center frequency in millihertz */
-    uint32_t band_level; /**< Filter band gain in millibels */
+    int32_t band_level; /**< Filter band gain in millibels */
 } audio_hal_plugin_codec_pp_eq_subband_t;
 
 typedef struct audio_hal_plugin_codec_set_pp_eq
@@ -184,10 +217,87 @@ typedef struct audio_hal_plugin_codec_set_pp_eq
                                         user-customized equalizers:
                                         -1      - custom equalizer speficied through 'bands' struct
                                         0 to N - pre-defined preset EQ index: ROCK/JAZZ/POP, etc */
-    uint32_t num_bands; /**< Number of EQ subbands when a cutom preset_id is
-                                          selected */
+    uint32_t num_bands; /**< Number of EQ subbands when a custom preset_id is selected */
     audio_hal_plugin_codec_pp_eq_subband_t *bands; /**< Equalizer sub-band struct list */
 } audio_hal_plugin_codec_set_pp_eq_t;
+
+/**
+ * Payload of AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_VOLUME message
+ */
+typedef struct audio_hal_plugin_codec_get_pp_vol
+{
+    snd_device_t snd_dev; /**< Requested endpoint device */
+    audio_usecase_t usecase; /**< Requested audio use case */
+    audio_channel_mask_t ch_mask; /**< Requested audio channel mask */
+    audio_hal_plugin_buint32_t ret_gain; /**< Returned volume range and value */
+} audio_hal_plugin_codec_get_pp_vol_t;
+
+/**
+ * Payload of AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_FADE message
+ */
+typedef struct audio_hal_plugin_codec_get_pp_fade
+{
+    snd_device_t snd_dev; /**< The requested endpoint device */
+    audio_usecase_t usecase; /**< Requested audio use case */
+    audio_hal_plugin_buint32_t ret_fade; /**< Returned fade range and value. */
+} audio_hal_plugin_codec_get_pp_fade_t;
+
+/**
+ * Payload of AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_BALANCE message
+ */
+typedef struct audio_hal_plugin_codec_get_pp_balance
+{
+    snd_device_t snd_dev; /**< The requested endpoint device */
+    audio_usecase_t usecase; /**< Requested audio use case */
+    audio_hal_plugin_buint32_t ret_balance; /**< Returned balance range and value. */
+} audio_hal_plugin_codec_get_pp_balance_t;
+
+/**
+ * Payload of AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_BMT message
+ */
+typedef struct audio_hal_plugin_codec_get_pp_bmt
+{
+    snd_device_t snd_dev; /**< The requested endpoint device */
+    audio_usecase_t usecase; /**< Requested audio use case */
+    audio_hal_plugin_codec_pp_filter_type_t filter_type; /**< Requested filter type */
+    audio_hal_plugin_buint32_t ret_value; /**< Returned range and value */
+} audio_hal_plugin_codec_get_pp_bmt_t;
+
+/**
+ * Payload of AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_EQ message
+ */
+typedef struct audio_hal_plugin_codec_get_pp_eq
+{
+    snd_device_t snd_dev; /**< The requested endpoint device */
+    audio_usecase_t usecase; /**< Requested audio use case */
+    audio_hal_plugin_bint32_t ret_preset_id; /**< Returned preset id
+                                        -1      - custom equalizer speficied through 'bands' struct
+                                        0 to N - pre-defined preset EQ index: ROCK/JAZZ/POP, etc */
+    uint32_t ret_num_bands; /**< Returned number of EQ subbands supported
+                                          when a custom preset_id is selected */
+} audio_hal_plugin_codec_get_pp_eq_t;
+
+/**
+ * Eq_subband struct used in the following payload
+ */
+typedef struct audio_hal_plugin_pp_eq_subband_binfo
+{
+    audio_hal_plugin_buint32_t ret_center_freq; /**< Returned band center frequency range
+                                                                                            and value in millihertz */
+    audio_hal_plugin_bint32_t ret_band_level; /**< Returned band gain range and value in millibels */
+} audio_hal_plugin_pp_eq_subband_binfo_t;
+
+/**
+ * Payload of AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_EQ_SUBBANDS message
+ */
+typedef struct audio_hal_plugin_codec_get_pp_eq_subbands
+{
+    snd_device_t snd_dev; /**< The requested endpoint device */
+    audio_usecase_t usecase; /**< Requested audio use case */
+    uint32_t num_bands; /**< number of EQ subbands supported for custom eq
+                                          returned from get_pp_eq query */
+    audio_hal_plugin_pp_eq_subband_binfo_t *ret_bands; /**< Returned subband info list */
+} audio_hal_plugin_codec_get_pp_eq_subbands_t;
 
 /**
  * Initialize the audio hal plug-in module and underlying hw driver
