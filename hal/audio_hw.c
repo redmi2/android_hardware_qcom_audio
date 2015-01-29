@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
  * Copyright (C) 2013 The Android Open Source Project
@@ -840,6 +840,7 @@ int start_input_stream(struct stream_in *in)
     uc_info->out_snd_device = SND_DEVICE_NONE;
 
     list_add_tail(&adev->usecase_list, &uc_info->list);
+    audio_extn_perf_lock_acquire();
     select_devices(adev, in->usecase);
 
     platform_set_stream_config(adev->platform, uc_info);
@@ -855,12 +856,14 @@ int start_input_stream(struct stream_in *in)
         ret = -EIO;
         goto error_open;
     }
+    audio_extn_perf_lock_release();
 
     ALOGV("%s: exit", __func__);
     return ret;
 
 error_open:
     stop_input_stream(in);
+    audio_extn_perf_lock_release();
 
 error_config:
     adev->active_input = NULL;
@@ -2761,6 +2764,8 @@ static int adev_open_input_stream(struct audio_hw_device *dev,
                                             channel_count);
         in->config.period_size = buffer_size / frame_size;
     }
+
+    audio_extn_perf_lock_init();
 
     *stream_in = &in->stream;
     ALOGV("%s: exit", __func__);
