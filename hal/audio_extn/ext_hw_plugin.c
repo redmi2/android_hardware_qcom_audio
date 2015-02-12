@@ -51,6 +51,9 @@ struct ext_hw_plugin_data {
     audio_hal_plugin_init_t        audio_hal_plugin_init;
     audio_hal_plugin_deinit_t      audio_hal_plugin_deinit;
     audio_hal_plugin_send_msg_t    audio_hal_plugin_send_msg;
+    int32_t                        usecase_ref_count[AUDIO_HAL_PLUGIN_USECASE_MAX];
+    snd_device_t                   out_snd_dev[AUDIO_HAL_PLUGIN_USECASE_MAX];
+    snd_device_t                   in_snd_dev[AUDIO_HAL_PLUGIN_USECASE_MAX];
 };
 
 /* This can be defined in platform specific file or use compile flag */
@@ -140,6 +143,49 @@ int32_t audio_extn_ext_hw_plugin_deinit(void *plugin)
     return ret;
 }
 
+static int32_t ext_hw_plugin_check_plugin_usecase(audio_usecase_t hal_usecase,
+        audio_hal_plugin_usecase_type_t *plugin_usecase)
+{
+    int32_t ret = 0;
+
+    switch(hal_usecase) {
+    case USECASE_AUDIO_PLAYBACK_DEEP_BUFFER:
+    case USECASE_AUDIO_PLAYBACK_LOW_LATENCY:
+    case USECASE_AUDIO_PLAYBACK_MULTI_CH:
+    case USECASE_AUDIO_PLAYBACK_OFFLOAD:
+#ifdef MULTIPLE_OFFLOAD_ENABLED
+    case USECASE_AUDIO_PLAYBACK_OFFLOAD2:
+    case USECASE_AUDIO_PLAYBACK_OFFLOAD3:
+    case USECASE_AUDIO_PLAYBACK_OFFLOAD4:
+    case USECASE_AUDIO_PLAYBACK_OFFLOAD5:
+    case USECASE_AUDIO_PLAYBACK_OFFLOAD6:
+    case USECASE_AUDIO_PLAYBACK_OFFLOAD7:
+    case USECASE_AUDIO_PLAYBACK_OFFLOAD8:
+    case USECASE_AUDIO_PLAYBACK_OFFLOAD9:
+#endif
+    case USECASE_AUDIO_PLAYBACK_ULL:
+    case USECASE_AUDIO_DIRECT_PCM_OFFLOAD:
+        *plugin_usecase = AUDIO_HAL_PLUGIN_USECASE_DEFAULT_PLAYBACK;
+        break;
+    case USECASE_AUDIO_RECORD:
+    case USECASE_AUDIO_RECORD_COMPRESS:
+    case USECASE_AUDIO_RECORD_LOW_LATENCY:
+        *plugin_usecase = AUDIO_HAL_PLUGIN_USECASE_DEFAULT_CAPTURE;
+        break;
+    case USECASE_AUDIO_HFP_SCO:
+    case USECASE_AUDIO_HFP_SCO_WB:
+        *plugin_usecase = AUDIO_HAL_PLUGIN_USECASE_HFP_VOICE_CALL;
+        break;
+    case USECASE_VOICE_CALL:
+        *plugin_usecase = AUDIO_HAL_PLUGIN_USECASE_CS_VOICE_CALL;
+        break;
+    default:
+        ret = -EINVAL;
+    }
+
+    return ret;
+}
+
 int32_t audio_extn_ext_hw_plugin_usecase_start(void *plugin, struct audio_usecase *usecase)
 {
     int32_t ret = 0;
@@ -154,13 +200,25 @@ int32_t audio_extn_ext_hw_plugin_usecase_start(void *plugin, struct audio_usecas
         audio_hal_plugin_msg_type_t msg = AUDIO_HAL_PLUGIN_MSG_CODEC_ENABLE;
         audio_hal_plugin_codec_enable_t codec_enable;
 
-        codec_enable.usecase = usecase->id;
+        ret = ext_hw_plugin_check_plugin_usecase(usecase->id, &codec_enable.usecase);
+        if(ret){
+            ALOGI("%s: enable audio hal plugin skipped for audio usecase %d",
+                    __func__, usecase->id);
+            return 0;
+        }
+        if(my_plugin->usecase_ref_count[codec_enable.usecase]){
+            ALOGV("%s: plugin usecase %d already enabled",
+                    __func__, codec_enable.usecase);
+            my_plugin->usecase_ref_count[codec_enable.usecase]++;
+            return 0;
+        }
+
         if ((usecase->type == PCM_PLAYBACK) || (usecase->type == VOICE_CALL) ||
             (usecase->type == VOIP_CALL) || (usecase->type == PCM_HFP_CALL)) {
             codec_enable.snd_dev = usecase->out_snd_device;
             /* TODO - below should be related with out_snd_dev */
             codec_enable.sample_rate = 48000;
-            codec_enable.bit_width = 16;
+            codec_enable.bit_width = 24;
             codec_enable.num_chs = 2;
 
             ALOGD("%s: enable audio hal plugin output, %d, %d, %d, %d, %d",
@@ -177,6 +235,7 @@ int32_t audio_extn_ext_hw_plugin_usecase_start(void *plugin, struct audio_usecas
                     __func__, ret);
                 return ret;
             }
+            my_plugin->out_snd_dev[codec_enable.usecase] = codec_enable.snd_dev;
         }
         if ((usecase->type == PCM_CAPTURE) || (usecase->type == VOICE_CALL) ||
             (usecase->type == VOIP_CALL) || (usecase->type == PCM_HFP_CALL)) {
@@ -200,7 +259,9 @@ int32_t audio_extn_ext_hw_plugin_usecase_start(void *plugin, struct audio_usecas
                     __func__, ret);
                 return ret;
             }
+            my_plugin->in_snd_dev[codec_enable.usecase] = codec_enable.snd_dev;
         }
+        my_plugin->usecase_ref_count[codec_enable.usecase]++;
     }
 
     ALOGD("%s: finished ext_hw_plugin usecase start", __func__);
@@ -222,7 +283,23 @@ int32_t audio_extn_ext_hw_plugin_usecase_stop(void *plugin, struct audio_usecase
         audio_hal_plugin_msg_type_t msg = AUDIO_HAL_PLUGIN_MSG_CODEC_DISABLE;
         audio_hal_plugin_codec_disable_t codec_disable;
 
-        codec_disable.usecase = usecase->id;
+        ret = ext_hw_plugin_check_plugin_usecase(usecase->id, &codec_disable.usecase);
+        if(ret){
+            ALOGI("%s: disable audio hal plugin skipped for audio usecase %d",
+                    __func__, usecase->id);
+            return 0;
+        }
+        if(my_plugin->usecase_ref_count[codec_disable.usecase] > 1){
+            ALOGI("%s: plugin usecase %d still in use and can not be disabled",
+                    __func__, codec_disable.usecase);
+            my_plugin->usecase_ref_count[codec_disable.usecase]--;
+            return 0;
+        } else if(my_plugin->usecase_ref_count[codec_disable.usecase] < 1){
+            ALOGE("%s: plugin usecase %d not enabled",
+                    __func__, codec_disable.usecase);
+            return -EINVAL;
+        }
+
         if ((usecase->type == PCM_PLAYBACK) || (usecase->type == VOICE_CALL) ||
             (usecase->type == VOIP_CALL) || (usecase->type == PCM_HFP_CALL)) {
             codec_disable.snd_dev = usecase->out_snd_device;
@@ -237,6 +314,7 @@ int32_t audio_extn_ext_hw_plugin_usecase_stop(void *plugin, struct audio_usecase
                 ALOGE("%s: disable audio hal plugin output failed ret = %d",
                     __func__, ret);
             }
+            my_plugin->out_snd_dev[codec_disable.usecase] = 0;
         }
         if ((usecase->type == PCM_CAPTURE) || (usecase->type == VOICE_CALL) ||
         (usecase->type == VOIP_CALL) || (usecase->type == PCM_HFP_CALL)) {
@@ -252,7 +330,9 @@ int32_t audio_extn_ext_hw_plugin_usecase_stop(void *plugin, struct audio_usecase
                 ALOGE("%s: disable audio hal plugin input failed ret = %d",
                     __func__, ret);
             }
+            my_plugin->in_snd_dev[codec_disable.usecase] = 0;
         }
+        my_plugin->usecase_ref_count[codec_disable.usecase]--;
     }
 
     ALOGD("%s: finished ext_hw_plugin usecase stop", __func__);
@@ -447,12 +527,12 @@ done_tunnel:
         if (plptr!= NULL)
             free(plptr);
     } else {
-        audio_usecase_t use_case;
+        audio_hal_plugin_usecase_type_t use_case;
         snd_device_t snd_dev;
 
         err = str_parms_get_int(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_UC,
                 &use_case);
-        if ((err < 0) || (use_case < 0) || (use_case >= AUDIO_USECASE_MAX)) {
+        if ((err < 0) || (use_case < 0) || (use_case >= AUDIO_HAL_PLUGIN_USECASE_MAX)) {
             ALOGE("%s: Invalid or missing usecase param for plugin msg", __func__);
             ret = -EINVAL;
             /* TODO: do we need to support no use case in kvpair? */
@@ -460,20 +540,17 @@ done_tunnel:
         }
         str_parms_del(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_UC);
 
-        struct audio_usecase *uc_info;
-        uc_info = get_usecase_from_list(my_plugin->adev, use_case);
-        if (uc_info == NULL) {
-            ALOGE("%s: Could not find the usecase (%d) in the list",
-                    __func__, use_case);
+        if (my_plugin->usecase_ref_count[use_case] == 0) {
+            ALOGE("%s: plugin usecase (%d) is not enabled", __func__, use_case);
             /* TODO: do we need to cache the setting when usecase is not active? */
             ret = -EINVAL;
             goto done;
         }
         /* TODO: confirm this handles all usecase */
-        if (uc_info->out_snd_device) {
-            snd_dev = uc_info->out_snd_device;
-        } else if (uc_info->in_snd_device) {
-            snd_dev = uc_info->in_snd_device;
+        if (my_plugin->out_snd_dev[use_case]) {
+            snd_dev = my_plugin->out_snd_dev[use_case];
+        } else if (my_plugin->in_snd_dev[use_case]) {
+            snd_dev = my_plugin->in_snd_dev[use_case];
         } else {
             ALOGE("%s: No valid snd_device found for the usecase (%d)",
                     __func__, use_case);
@@ -753,7 +830,7 @@ done_eq:
     }
 
 done:
-    ALOGV("%s: exit with code(%d)", __func__, ret);
+    ALOGI("%s: exit with code(%d)", __func__, ret);
     if(kv_pairs != NULL)
         free(kv_pairs);
     if(value != NULL)
@@ -769,7 +846,7 @@ int audio_extn_ext_hw_plugin_get_parameters(void *plugin,
     int32_t rbuf_dlen = 0;
     uint32_t *rbuf_dptr = NULL;
     char *rparms = NULL;
-    audio_usecase_t use_case = USECASE_INVALID;
+    audio_hal_plugin_usecase_type_t use_case = AUDIO_HAL_PLUGIN_USECASE_INVALID;
     snd_device_t snd_dev = 0;
     struct ext_hw_plugin_data *my_plugin = NULL;
 
@@ -795,24 +872,21 @@ int audio_extn_ext_hw_plugin_get_parameters(void *plugin,
 
     err = str_parms_get_int(query, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_UC,
             &use_case);
-    if ((err < 0) || (use_case < 0) || (use_case >= AUDIO_USECASE_MAX)) {
+    if ((err < 0) || (use_case < 0) || (use_case >= AUDIO_HAL_PLUGIN_USECASE_MAX)) {
         ALOGI("%s: Invalid or missing usecase param for plugin msg", __func__);
-        use_case = USECASE_INVALID;
+        use_case = AUDIO_HAL_PLUGIN_USECASE_INVALID;
     } else {
-        struct audio_usecase *uc_info;
-
         str_parms_del(query, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_UC);
 
-        uc_info = get_usecase_from_list(my_plugin->adev, use_case);
-        if (uc_info == NULL) {
-            ALOGI("%s: Could not find the usecase (%d) in the list",
+        if (my_plugin->usecase_ref_count[use_case] == 0) {
+            ALOGI("%s: plugin usecase (%d) is not enabled",
                     __func__, use_case);
         } else {
             /* TODO: confirm this handles all usecase */
-            if (uc_info->out_snd_device) {
-                snd_dev = uc_info->out_snd_device;
-            } else if (uc_info->in_snd_device) {
-                snd_dev = uc_info->in_snd_device;
+            if (my_plugin->out_snd_dev[use_case]) {
+                snd_dev = my_plugin->out_snd_dev[use_case];
+            } else if (my_plugin->in_snd_dev[use_case]) {
+                snd_dev = my_plugin->in_snd_dev[use_case];
             } else {
                 ALOGE("%s: No valid snd_device found for the usecase (%d)",
                         __func__, use_case);
@@ -1088,7 +1162,7 @@ done_get_param:
         free(rparms);
 
 done:
-    ALOGV("%s: exit with code(%d)", __func__, ret);
+    ALOGI("%s: exit with code(%d)", __func__, ret);
     return ret;
 }
 #endif /* EXT_HW_PLUGIN_ENABLED */
