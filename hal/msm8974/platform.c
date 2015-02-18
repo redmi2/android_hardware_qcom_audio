@@ -40,6 +40,7 @@
 #define MIXER_XML_PATH "/system/etc/mixer_paths.xml"
 #define MIXER_XML_PATH_AUXPCM "/system/etc/mixer_paths_auxpcm.xml"
 #define MIXER_XML_PATH_I2S "/system/etc/mixer_paths_i2s.xml"
+#define MIXER_XML_PATH_WCD9330 "/system/etc/mixer_paths_wcd9330.xml"
 
 #define PLATFORM_INFO_XML_PATH      "/system/etc/audio_platform_info.xml"
 #define PLATFORM_INFO_XML_PATH_I2S  "/system/etc/audio_platform_info_i2s.xml"
@@ -649,7 +650,13 @@ void *platform_init(struct audio_device *adev)
         if (!my_data->hw_info) {
             ALOGE("%s: Failed to init hardware info", __func__);
         } else {
-            if (platform_is_i2s_ext_modem(snd_card_name, my_data)) {
+            if (!strncmp(snd_card_name, "msm8226-tomtom-snd-card",
+                         sizeof("msm8226-tomtom-snd-card"))) {
+                ALOGD("%s: Call MIXER_XML_PATH_WCD9330", __func__);
+
+                adev->audio_route = audio_route_init(snd_card_num,
+                                                     MIXER_XML_PATH_WCD9330);
+            } else if (platform_is_i2s_ext_modem(snd_card_name, my_data)) {
                 ALOGD("%s: Call MIXER_XML_PATH_I2S", __func__);
 
                 adev->audio_route = audio_route_init(snd_card_num,

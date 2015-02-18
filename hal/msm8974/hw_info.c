@@ -226,7 +226,8 @@ static void update_hardware_info_8610(struct hardware_info *hw_info, const char 
 
 static void update_hardware_info_8226(struct hardware_info *hw_info, const char *snd_card_name)
 {
-    if (!strcmp(snd_card_name, "msm8226-tapan-snd-card")) {
+    if ((!strcmp(snd_card_name, "msm8226-tapan-snd-card")) ||
+        (!strcmp(snd_card_name, "msm8226-tomtom-snd-card"))) {
         strlcpy(hw_info->type, "", sizeof(hw_info->type));
         strlcpy(hw_info->name, "msm8226", sizeof(hw_info->name));
         hw_info->snd_devices = NULL;
