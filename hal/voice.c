@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  * Not a contribution.
  *
  * Copyright (C) 2013 The Android Open Source Project
@@ -149,6 +149,12 @@ int voice_stop_usecase(struct audio_device *adev, audio_usecase_t usecase_id)
         session->pcm_tx = NULL;
     }
 
+    if ((uc_info->out_snd_device != SND_DEVICE_NONE) ||
+        (uc_info->in_snd_device != SND_DEVICE_NONE)) {
+        if (audio_extn_ext_hw_plugin_usecase_stop(adev->ext_hw_plugin, uc_info))
+            ALOGE("%s: failed to stop ext hw plugin", __func__);
+    }
+
     /* 2. Get and set stream specific mixer controls */
     disable_audio_route(adev, uc_info);
 
@@ -236,6 +242,12 @@ int voice_start_usecase(struct audio_device *adev, audio_usecase_t usecase_id)
         ALOGE("%s: %s", __func__, pcm_get_error(session->pcm_rx));
         ret = -EIO;
         goto error_start_voice;
+    }
+
+    if ((uc_info->out_snd_device != SND_DEVICE_NONE) ||
+        (uc_info->in_snd_device != SND_DEVICE_NONE)) {
+        if (audio_extn_ext_hw_plugin_usecase_start(adev->ext_hw_plugin, uc_info))
+            ALOGE("%s: failed to start ext hw plugin", __func__);
     }
 
     pcm_start(session->pcm_tx);
