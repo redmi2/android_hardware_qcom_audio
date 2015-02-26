@@ -41,8 +41,6 @@ struct pcm_config pcm_config_voice_call = {
     .format = PCM_FORMAT_S16_LE,
 };
 
-extern const char * const use_case_table[AUDIO_USECASE_MAX];
-
 static struct voice_session *voice_get_session_from_use_case(struct audio_device *adev,
                               audio_usecase_t usecase_id)
 {
@@ -57,7 +55,7 @@ static struct voice_session *voice_get_session_from_use_case(struct audio_device
     return session;
 }
 
-int stop_call(struct audio_device *adev, audio_usecase_t usecase_id)
+int voice_stop_usecase(struct audio_device *adev, audio_usecase_t usecase_id)
 {
     int i, ret = 0;
     struct audio_usecase *uc_info;
@@ -66,7 +64,14 @@ int stop_call(struct audio_device *adev, audio_usecase_t usecase_id)
     ALOGD("%s: enter usecase:%s", __func__, use_case_table[usecase_id]);
 
     session = (struct voice_session *)voice_get_session_from_use_case(adev, usecase_id);
+    if (!session) {
+        ALOGE("stop_call: couldn't find voice session");
+        return -EINVAL;
+    }
+
     session->state.current = CALL_INACTIVE;
+    if (adev->mode == AUDIO_MODE_NORMAL)
+        adev->voice.is_in_call = false;
 
     ret = platform_stop_voice_call(adev->platform, session->vsid);
 
@@ -88,11 +93,11 @@ int stop_call(struct audio_device *adev, audio_usecase_t usecase_id)
     }
 
     /* 2. Get and set stream specific mixer controls */
-    disable_audio_route(adev, uc_info, true);
+    disable_audio_route(adev, uc_info);
 
     /* 3. Disable the rx and tx devices */
-    disable_snd_device(adev, uc_info->out_snd_device, false);
-    disable_snd_device(adev, uc_info->in_snd_device, true);
+    disable_snd_device(adev, uc_info->out_snd_device);
+    disable_snd_device(adev, uc_info->in_snd_device);
 
     list_remove(&uc_info->list);
     free(uc_info);
@@ -101,7 +106,7 @@ int stop_call(struct audio_device *adev, audio_usecase_t usecase_id)
     return ret;
 }
 
-int start_call(struct audio_device *adev, audio_usecase_t usecase_id)
+int voice_start_usecase(struct audio_device *adev, audio_usecase_t usecase_id)
 {
     int i, ret = 0;
     struct audio_usecase *uc_info;
@@ -113,11 +118,21 @@ int start_call(struct audio_device *adev, audio_usecase_t usecase_id)
     ALOGD("%s: enter usecase:%s", __func__, use_case_table[usecase_id]);
 
     session = (struct voice_session *)voice_get_session_from_use_case(adev, usecase_id);
+    if (!session) {
+        ALOGE("start_call: couldn't find voice session");
+        return -EINVAL;
+    }
+
     uc_info = (struct audio_usecase *)calloc(1, sizeof(struct audio_usecase));
+    if (!uc_info) {
+        ALOGE("start_call: couldn't allocate mem for audio_usecase");
+        return -ENOMEM;
+    }
+
     uc_info->id = usecase_id;
     uc_info->type = VOICE_CALL;
-    uc_info->stream.out = adev->primary_output;
-    uc_info->devices = adev->primary_output->devices;
+    uc_info->stream.out = adev->current_call_output ;
+    uc_info->devices = adev->current_call_output ->devices;
     uc_info->in_snd_device = SND_DEVICE_NONE;
     uc_info->out_snd_device = SND_DEVICE_NONE;
 
@@ -178,7 +193,7 @@ int start_call(struct audio_device *adev, audio_usecase_t usecase_id)
     goto done;
 
 error_start_voice:
-    stop_call(adev, usecase_id);
+    voice_stop_usecase(adev, usecase_id);
 
 done:
     ALOGD("%s: exit: status(%d)", __func__, ret);
@@ -196,6 +211,24 @@ bool voice_is_call_state_active(struct audio_device *adev)
     }
 
     return call_state;
+}
+
+bool voice_is_in_call(struct audio_device *adev)
+{
+    return adev->voice.in_call;
+}
+
+bool voice_is_in_call_rec_stream(struct stream_in *in)
+{
+    bool in_call_rec = false;
+    int ret = 0;
+
+    ret = voice_extn_is_in_call_rec_stream(in, &in_call_rec);
+    if (ret == -ENOSYS) {
+        in_call_rec = false;
+    }
+
+    return in_call_rec;
 }
 
 uint32_t voice_get_active_session_id(struct audio_device *adev)
@@ -340,9 +373,10 @@ int voice_start_call(struct audio_device *adev)
 {
     int ret = 0;
 
+    adev->voice.in_call = true;
     ret = voice_extn_start_call(adev);
     if (ret == -ENOSYS) {
-        ret = start_call(adev, USECASE_VOICE_CALL);
+        ret = voice_start_usecase(adev, USECASE_VOICE_CALL);
     }
     adev->voice.in_call = true;
 
@@ -356,7 +390,7 @@ int voice_stop_call(struct audio_device *adev)
     adev->voice.in_call = false;
     ret = voice_extn_stop_call(adev);
     if (ret == -ENOSYS) {
-        ret = stop_call(adev, USECASE_VOICE_CALL);
+        ret = voice_stop_usecase(adev, USECASE_VOICE_CALL);
     }
 
     return ret;
@@ -380,12 +414,20 @@ int voice_set_parameters(struct audio_device *adev, struct str_parms *parms)
     ALOGV_IF(kv_pairs != NULL, "%s: enter: %s", __func__, kv_pairs);
 
     ret = voice_extn_set_parameters(adev, parms);
-    if (ret != 0)
-        goto done;
+    if (ret != 0) {
+        if (ret == -ENOSYS)
+            ret = 0;
+        else
+            goto done;
+    }
 
     ret = voice_extn_compress_voip_set_parameters(adev, parms);
-    if (ret != 0)
-        goto done;
+    if (ret != 0) {
+        if (ret == -ENOSYS)
+            ret = 0;
+        else
+            goto done;
+    }
 
     err = str_parms_get_str(parms, AUDIO_PARAMETER_KEY_TTY_MODE, value, sizeof(value));
     if (err >= 0) {
@@ -408,8 +450,7 @@ int voice_set_parameters(struct audio_device *adev, struct str_parms *parms)
             adev->voice.tty_mode = tty_mode;
             adev->acdb_settings = (adev->acdb_settings & TTY_MODE_CLEAR) | tty_mode;
             if (voice_is_call_state_active(adev))
-                //todo: what about voice2, volte and qchat usecases?
-                select_devices(adev, USECASE_VOICE_CALL);
+               voice_update_devices_for_all_voice_usecases(adev);
         }
     }
 
@@ -421,7 +462,7 @@ int voice_set_parameters(struct audio_device *adev, struct str_parms *parms)
             platform_start_incall_music_usecase(adev->platform);
         else
             platform_stop_incall_music_usecase(adev->platform);
-     }
+    }
 
 done:
     ALOGV("%s: exit with code(%d)", __func__, ret);
@@ -443,10 +484,26 @@ void voice_init(struct audio_device *adev)
         adev->voice.session[i].pcm_tx = NULL;
         adev->voice.session[i].state.current = CALL_INACTIVE;
         adev->voice.session[i].state.new = CALL_INACTIVE;
-        adev->voice.session[i].vsid = 0;
+        adev->voice.session[i].vsid = VOICE_VSID;
     }
 
     voice_extn_init(adev);
+}
+
+void voice_update_devices_for_all_voice_usecases(struct audio_device *adev)
+{
+    struct listnode *node;
+    struct audio_usecase *usecase;
+
+    list_for_each(node, &adev->usecase_list) {
+        usecase = node_to_item(node, struct audio_usecase, list);
+        if (usecase->type == VOICE_CALL) {
+            ALOGV("%s: updating device for usecase:%s", __func__,
+                  use_case_table[usecase->id]);
+            usecase->stream.out = adev->current_call_output;
+            select_devices(adev, usecase->id);
+        }
+    }
 }
 
 
