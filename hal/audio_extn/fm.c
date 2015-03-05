@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
  * Copyright (C) 2013 The Android Open Source Project
@@ -51,6 +51,8 @@ struct fm_module {
     struct pcm *fm_pcm_tx;
     bool is_fm_running;
     float fm_volume;
+    bool restart_fm;
+    int scard_state;
 };
 
 static struct fm_module fmmod = {
@@ -58,13 +60,15 @@ static struct fm_module fmmod = {
   .fm_pcm_tx = NULL,
   .fm_volume = 0,
   .is_fm_running = 0,
+  .restart_fm = 0,
+  .scard_state = SND_CARD_STATE_ONLINE,
 };
 
 static int32_t fm_set_volume(struct audio_device *adev, float value)
 {
     int32_t vol, ret = 0;
     struct mixer_ctl *ctl;
-    const char *mixer_ctl_name = "Internal FM RX Volume";
+    const char *mixer_ctl_name = FM_RX_VOLUME;
 
     ALOGV("%s: entry", __func__);
     ALOGD("%s: (%f)\n", __func__, value);
@@ -92,7 +96,6 @@ static int32_t fm_set_volume(struct audio_device *adev, float value)
         return -EINVAL;
     }
     mixer_ctl_set_value(ctl, 0, vol);
-
     ALOGV("%s: exit", __func__);
     return ret;
 }
@@ -123,11 +126,11 @@ static int32_t fm_stop(struct audio_device *adev)
     }
 
     /* 2. Get and set stream specific mixer controls */
-    disable_audio_route(adev, uc_info, true);
+    disable_audio_route(adev, uc_info);
 
     /* 3. Disable the rx and tx devices */
-    disable_snd_device(adev, uc_info->out_snd_device, false);
-    disable_snd_device(adev, uc_info->in_snd_device, true);
+    disable_snd_device(adev, uc_info->out_snd_device);
+    disable_snd_device(adev, uc_info->in_snd_device);
 
     list_remove(&uc_info->list);
     free(uc_info);
@@ -145,6 +148,10 @@ static int32_t fm_start(struct audio_device *adev)
     ALOGD("%s: enter", __func__);
 
     uc_info = (struct audio_usecase *)calloc(1, sizeof(struct audio_usecase));
+
+    if (!uc_info)
+        return -ENOMEM;
+
     uc_info->id = USECASE_AUDIO_PLAYBACK_FM;
     uc_info->type = PCM_PLAYBACK;
     uc_info->stream.out = adev->primary_output;
@@ -213,7 +220,23 @@ void audio_extn_fm_set_parameters(struct audio_device *adev,
     float vol =0.0;
 
     ALOGV("%s: enter", __func__);
+    ret = str_parms_get_str(parms, "SND_CARD_STATUS", value, sizeof(value));
+    if (ret >= 0) {
+        char *snd_card_status = value+2;
+        if (strstr(snd_card_status, "OFFLINE")) {
+            fmmod.scard_state = SND_CARD_STATE_OFFLINE;
+        }
+        else if (strstr(snd_card_status, "ONLINE")) {
+            fmmod.scard_state = SND_CARD_STATE_ONLINE;
+        }
+    }
     if(fmmod.is_fm_running) {
+        if (fmmod.scard_state == SND_CARD_STATE_OFFLINE) {
+            ALOGD("sound card is OFFLINE, stop FM");
+            fm_stop(adev);
+            fmmod.restart_fm = 1;
+        }
+
         ret = str_parms_get_str(parms, AUDIO_PARAMETER_STREAM_ROUTING,
                                 value, sizeof(value));
         if (ret >= 0) {
@@ -221,6 +244,11 @@ void audio_extn_fm_set_parameters(struct audio_device *adev,
             if(val > 0)
                 select_devices(adev, USECASE_AUDIO_PLAYBACK_FM);
         }
+    }
+    if (fmmod.restart_fm && (fmmod.scard_state == SND_CARD_STATE_ONLINE)) {
+        ALOGD("sound card is ONLINE, restart FM");
+        fmmod.restart_fm = 0;
+        fm_start(adev);
     }
 
     ret = str_parms_get_str(parms, AUDIO_PARAMETER_KEY_HANDLE_FM,
@@ -230,9 +258,10 @@ void audio_extn_fm_set_parameters(struct audio_device *adev,
         ALOGD("%s: FM usecase", __func__);
         if (val != 0) {
             if(val & AUDIO_DEVICE_OUT_FM
-               && fmmod.is_fm_running == false)
+               && fmmod.is_fm_running == false) {
+                adev->primary_output->devices = val & ~AUDIO_DEVICE_OUT_FM;
                 fm_start(adev);
-            else if (!(val & AUDIO_DEVICE_OUT_FM)
+            } else if (!(val & AUDIO_DEVICE_OUT_FM)
                      && fmmod.is_fm_running == true)
                 fm_stop(adev);
        }

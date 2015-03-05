@@ -96,6 +96,42 @@ static void usb_alloc()
     usbmod = calloc(1, sizeof(struct usb_module));
 }
 
+// Some USB audio accessories have a really low default volume set. Look for a suitable
+// volume control and set the volume to default volume level.
+static void initPlaybackVolume() {
+    ALOGD("initPlaybackVolume");
+    struct mixer *usbMixer = mixer_open(1);
+
+    if (usbMixer) {
+         struct mixer_ctl *ctl = NULL;
+         unsigned int usbPlaybackVolume;
+         unsigned int i;
+         unsigned int num_ctls = mixer_get_num_ctls(usbMixer);
+
+         // Look for the first control named ".*Playback Volume" that isn't for a microphone
+         for (i = 0; i < num_ctls; i++) {
+             ctl = mixer_get_ctl(usbMixer, i);
+             if (strstr((const char *)mixer_ctl_get_name(ctl), "Playback Volume") &&
+                 !strstr((const char *)mixer_ctl_get_name(ctl), "Mic")) {
+                   break;
+             }
+         }
+         if (ctl != NULL) {
+            ALOGD("Found a volume control for USB: %s", mixer_ctl_get_name(ctl) );
+            usbPlaybackVolume = mixer_ctl_get_value(ctl, 0);
+            ALOGD("Value got from mixer_ctl_get is:%u", usbPlaybackVolume);
+            if (mixer_ctl_set_value(ctl,0,usbPlaybackVolume) < 0) {
+               ALOGE("Failed to set volume; default volume might be used");
+            }
+         } else {
+            ALOGE("No playback volume control found; default volume will be used");
+         }
+         mixer_close(usbMixer);
+    } else {
+         ALOGE("Failed to open mixer for card 1");
+    }
+}
+
 static int usb_get_numof_rates(char *rates_str)
 {
     int i, size = 0;
@@ -104,7 +140,7 @@ static int usb_get_numof_rates(char *rates_str)
 
     if (next_sr_string == NULL) {
         ALOGE("%s: get_numof_rates: could not find rates string", __func__);
-        return (int)NULL;
+        return 0;
     }
 
     for (i = 1; next_sr_string != NULL; i++) {
@@ -123,12 +159,16 @@ static int usb_get_capability(char *type, int32_t *channels,
     char *buffer;
     int32_t err = 1;
     int32_t size = 0;
-    int32_t fd, i, channels_playback;
-    char *read_buf, *str_start, *channel_start, *rates_str, *rates_str_for_val,
-    *rates_str_start, *next_sr_str, *test, *next_sr_string, *temp_ptr;
+    int32_t fd=-1, i, channels_playback;
+    char *str_start, *channel_start, *rates_str_start, *next_sr_str,
+         *next_sr_string, *temp_ptr;
     struct stat st;
-    int *rates_supported;
+    char *read_buf = NULL;
+    char *rates_str = NULL;
+    char *rates_str_for_val = NULL;
+    int  *rates_supported = NULL;
     char path[128];
+    int ret = 0;
 
     memset(&st, 0x0, sizeof(struct stat));
     *sample_rate = 0;
@@ -139,45 +179,49 @@ static int usb_get_capability(char *type, int32_t *channels,
     if (fd <0) {
         ALOGE("%s: error failed to open config file %s error: %d\n",
               __func__, path, errno);
-        close(fd);
-        return -EINVAL;
+        ret = -EINVAL;
+        goto done;
     }
 
     if (fstat(fd, &st) < 0) {
         ALOGE("%s: error failed to stat %s error %d\n",
              __func__, path, errno);
-        close(fd);
-        return -EINVAL;
+        ret = -EINVAL;
+        goto done;
     }
 
     file_size = st.st_size;
 
     read_buf = (char *)calloc(1, USB_BUFF_SIZE + 1);
+
+    if (!read_buf) {
+        ALOGE("Failed to create read_buf");
+        ret = -ENOMEM;
+        goto done;
+    }
+
     err = read(fd, read_buf, USB_BUFF_SIZE);
     str_start = strstr(read_buf, type);
     if (str_start == NULL) {
         ALOGE("%s: error %s section not found in usb config file",
                __func__, type);
-        close(fd);
-        free(read_buf);
-        return -EINVAL;
+        ret = -EINVAL;
+        goto done;
     }
 
     channel_start = strstr(str_start, "Channels:");
     if (channel_start == NULL) {
         ALOGE("%s: error could not find Channels information", __func__);
-        close(fd);
-        free(read_buf);
-        return -EINVAL;
+        ret = -EINVAL;
+        goto done;
     }
 
     channel_start = strstr(channel_start, " ");
     if (channel_start == NULL) {
         ALOGE("%s: error channel section not found in usb config file",
                __func__);
-        close(fd);
-        free(read_buf);
-        return -EINVAL;
+        ret = -EINVAL;
+        goto done;
     }
 
     channels_playback = atoi(channel_start);
@@ -191,44 +235,38 @@ static int usb_get_capability(char *type, int32_t *channels,
     rates_str_start = strstr(str_start, "Rates:");
     if (rates_str_start == NULL) {
         ALOGE("%s: error cant find rates information", __func__);
-        close(fd);
-        free(read_buf);
-        return -EINVAL;
+        ret = -EINVAL;
+        goto done;
     }
 
     rates_str_start = strstr(rates_str_start, " ");
     if (rates_str_start == NULL) {
         ALOGE("%s: error channel section not found in usb config file",
                __func__);
-        close(fd);
-        free(read_buf);
-        return -EINVAL;
+        ret = -EINVAL;
+        goto done;
     }
 
     char *target = strchr(rates_str_start, '\n');
     if (target == NULL) {
         ALOGE("%s: error end of line not found", __func__);
-        close(fd);
-        free(read_buf);
-        return -EINVAL;
+        ret = -EINVAL;
+        goto done;
     }
 
     size = target - rates_str_start;
     if ((rates_str = (char *)malloc(size + 1)) == NULL) {
         ALOGE("%s: error unable to allocate memory to hold sample rate strings",
               __func__);
-        close(fd);
-        free(read_buf);
-        return -ENOMEM;
+        ret = -EINVAL;
+        goto done;
     }
 
     if ((rates_str_for_val = (char *)malloc(size + 1)) == NULL) {
         ALOGE("%s: error unable to allocate memory to hold sample rate string",
                __func__);
-        close(fd);
-        free(rates_str);
-        free(read_buf);
-        return -ENOMEM;
+        ret = -EINVAL;
+        goto done;
     }
 
     memcpy(rates_str, rates_str_start, size);
@@ -239,23 +277,23 @@ static int usb_get_capability(char *type, int32_t *channels,
     size = usb_get_numof_rates(rates_str);
     if (!size) {
         ALOGE("%s: error could not get rate size, returning", __func__);
-        close(fd);
-        free(rates_str_for_val);
-        free(rates_str);
-        free(read_buf);
-        return -EINVAL;
+        ret = -EINVAL;
+        goto done;
     }
 
     rates_supported = (int *)malloc(sizeof(int) * size);
+
+    if (!rates_supported) {
+        ALOGE("couldn't allocate mem for rates_supported");
+        ret = -EINVAL;
+        goto done;
+    }
+
     next_sr_string = strtok_r(rates_str_for_val, " ,", &temp_ptr);
     if (next_sr_string == NULL) {
         ALOGE("%s: error could not get first rate val", __func__);
-        close(fd);
-        free(rates_str_for_val);
-        free(rates_str);
-        free(rates_supported);
-        free(read_buf);
-        return -EINVAL;
+        ret = -EINVAL;
+        goto done;
     }
 
     rates_supported[0] = atoi(next_sr_string);
@@ -263,6 +301,10 @@ static int usb_get_capability(char *type, int32_t *channels,
            __func__, rates_supported[0]);
     for (i = 1; i<size; i++) {
         next_sr_string = strtok_r(NULL, " ,.-", &temp_ptr);
+        if (next_sr_string == NULL) {
+            rates_supported[i] = -1; // fill in an invalid sr for the rest
+            continue;
+        }
         rates_supported[i] = atoi(next_sr_string);
         ALOGD("rates_supported[%d] for playback: %d",i, rates_supported[i]);
     }
@@ -281,12 +323,13 @@ static int usb_get_capability(char *type, int32_t *channels,
     }
     ALOGD("%s: sample_rate: %d", __func__, *sample_rate);
 
-    close(fd);
-    free(rates_str_for_val);
-    free(rates_str);
-    free(rates_supported);
-    free(read_buf);
-    return 0;
+done:
+    if (fd >= 0) close(fd);
+    if (rates_str_for_val) free(rates_str_for_val);
+    if (rates_str) free(rates_str);
+    if (rates_supported) free(rates_supported);
+    if (read_buf) free(read_buf);
+    return ret;
 }
 
 static int32_t usb_playback_entry(void *adev)
@@ -340,7 +383,7 @@ static int32_t usb_playback_entry(void *adev)
     pcm_config_usbmod.channels = usbmod->channels_playback;
     pcm_config_usbmod.period_count = AFE_PROXY_PERIOD_COUNT;
     usbmod->proxy_device_id = AFE_PROXY_PLAYBACK_DEVICE;
-    ALOGV("%s: proxy device %u:period %u:channels %u:sample", __func__,
+    ALOGD("%s: proxy device %u:period %u:channels %u:sample", __func__,
           pcm_config_usbmod.period_size, pcm_config_usbmod.channels,
           pcm_config_usbmod.rate);
 
@@ -351,7 +394,6 @@ static int32_t usb_playback_entry(void *adev)
         if(usbmod->proxy_pcm_playback_handle
             && !pcm_is_ready(usbmod->proxy_pcm_playback_handle)){
                      pcm_close(usbmod->proxy_pcm_playback_handle);
-                     usbmod->proxy_pcm_playback_handle = NULL;
                      proxy_open_retry_count--;
                      usleep(USB_PROXY_OPEN_WAIT_TIME * 1000);
                      ALOGE("%s: pcm_open for proxy failed retrying = %d",
@@ -375,6 +417,8 @@ static int32_t usb_playback_entry(void *adev)
     ALOGD("%s: PROXY configured for playback", __func__);
     pthread_mutex_unlock(&usbmod->usb_playback_lock);
 
+    ALOGD("Init USB volume");
+    initPlaybackVolume();
     /* main loop to read from proxy and write to usb */
     while (usbmod->is_playback_running) {
         /* read data from proxy */
@@ -469,7 +513,6 @@ static int32_t usb_record_entry(void *adev)
         if(usbmod->proxy_pcm_record_handle
             && !pcm_is_ready(usbmod->proxy_pcm_record_handle)){
                      pcm_close(usbmod->proxy_pcm_record_handle);
-                     usbmod->proxy_pcm_record_handle = NULL;
                      proxy_open_retry_count--;
                      usleep(USB_PROXY_OPEN_WAIT_TIME * 1000);
                      ALOGE("%s: pcm_open for proxy(recording) failed retrying = %d",
@@ -542,6 +585,11 @@ void audio_extn_usb_init(void *adev)
     usbmod->proxy_card = 0;
     usbmod->proxy_device_id = AFE_PROXY_PLAYBACK_DEVICE;
     usbmod->adev = (struct audio_device*)adev;
+
+     pthread_mutex_init(&usbmod->usb_playback_lock,
+                        (const pthread_mutexattr_t *) NULL);
+     pthread_mutex_init(&usbmod->usb_record_lock,
+                        (const pthread_mutexattr_t *) NULL);
 }
 
 void audio_extn_usb_deinit()
