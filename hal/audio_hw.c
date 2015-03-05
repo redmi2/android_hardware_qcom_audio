@@ -1915,16 +1915,6 @@ static ssize_t out_write(struct audio_stream_out *stream, const void *buffer,
     int snd_scard_state = get_snd_card_state(adev);
     ssize_t ret = 0;
 
-    /* NO Output device supported other than BT for playback.
-     * Sleep for the amount of buffer duration.
-     */
-    pthread_mutex_lock(&out->lock);
-    usleep(bytes * 1000000 / audio_stream_frame_size(&out->stream.common) /
-           out_get_sample_rate(&out->stream.common));
-    pthread_mutex_unlock(&out->lock);
-
-    return bytes;
-
     pthread_mutex_lock(&out->lock);
 
     if (SND_CARD_STATE_OFFLINE == snd_scard_state) {
