@@ -298,8 +298,10 @@ int enable_snd_device(struct audio_device *adev,
 
     if (snd_device == SND_DEVICE_OUT_SPEAKER &&
         audio_extn_spkr_prot_is_enabled()) {
-       if (audio_extn_spkr_prot_start_processing(snd_device)) {
+        audio_extn_dev_arbi_acquire(snd_device);
+        if (audio_extn_spkr_prot_start_processing(snd_device)) {
           ALOGE("%s: spkr_start_processing failed", __func__);
+          audio_extn_dev_arbi_release(snd_device);
           return -EINVAL;
       }
     }  else {
@@ -312,6 +314,7 @@ int enable_snd_device(struct audio_device *adev,
         audio_extn_listen_update_status(snd_device,
                 LISTEN_EVENT_SND_DEVICE_BUSY);
 
+        audio_extn_dev_arbi_acquire(snd_device);
         audio_route_apply_and_update_path(adev->audio_route, device_name);
     }
     return 0;
@@ -354,9 +357,11 @@ int disable_snd_device(struct audio_device *adev,
         if (snd_device == SND_DEVICE_OUT_SPEAKER &&
             audio_extn_spkr_prot_is_enabled()) {
             audio_extn_spkr_prot_stop_processing();
-        } else
+        } else {
             audio_route_reset_and_update_path(adev->audio_route, device_name);
+        }
 
+        audio_extn_dev_arbi_release(snd_device);
         audio_extn_listen_update_status(snd_device,
                                         LISTEN_EVENT_SND_DEVICE_FREE);
     }

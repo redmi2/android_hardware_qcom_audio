@@ -208,4 +208,16 @@ bool audio_extn_hfp_is_active(struct audio_device *adev);
 bool audio_extn_hfp_is_active(struct audio_device *adev);
 #endif
 
+#ifndef DEV_ARBI_ENABLED
+#define audio_extn_dev_arbi_init()                  (0)
+#define audio_extn_dev_arbi_deinit()                (0)
+#define audio_extn_dev_arbi_acquire(snd_device)     (0)
+#define audio_extn_dev_arbi_release(snd_device)     (0)
+#else
+int audio_extn_dev_arbi_init();
+int audio_extn_dev_arbi_deinit();
+int audio_extn_dev_arbi_acquire(snd_device_t snd_device);
+int audio_extn_dev_arbi_release(snd_device_t snd_device);
+#endif
+
 #endif /* AUDIO_EXTN_H */
