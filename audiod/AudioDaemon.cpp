@@ -224,7 +224,6 @@ namespace android {
         unsigned int cpe_cnt = CPE_MAGIC_NUM;
         unsigned int num_snd_cards = 0;
 
-	return true;
         ALOGV("Start threadLoop()");
         while (audioInitDone == false && sleepRetry < MAX_SLEEP_RETRY) {
             if (mSndCardFd.empty() && !getStateFDs(mSndCardFd)) {
