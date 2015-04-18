@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
  * Copyright (C) 2013 The Android Open Source Project
@@ -916,14 +916,16 @@ int select_devices(struct audio_device *adev, audio_usecase_t uc_id)
 
     if (usecase->type == PCM_PLAYBACK) {
         audio_extn_utils_update_stream_app_type_cfg(adev->platform,
-                                                &adev->streams_output_cfg_list,
-                                                usecase->stream.out->devices,
-                                                usecase->stream.out->flags,
-                                                usecase->stream.out->format,
-                                                usecase->stream.out->sample_rate,
-                                                usecase->stream.out->bit_width,
-                                                &usecase->stream.out->app_type_cfg);
-        ALOGI("%s Selected apptype: %d", __func__, usecase->stream.out->app_type_cfg.app_type);
+                                        &adev->streams_output_cfg_list,
+                                        usecase->stream.out->devices,
+                                        usecase->stream.out->flags,
+                                        usecase->stream.out->format,
+                                        usecase->stream.out->sample_rate,
+                                        usecase->stream.out->bit_width,
+                                        usecase->stream.out->source_format,
+                                        &usecase->stream.out->app_type_cfg);
+        ALOGI("%s Selected apptype: %d",
+                __func__, usecase->stream.out->app_type_cfg.app_type);
     }
 
     enable_audio_route(adev, usecase);
@@ -2761,6 +2763,8 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
             goto error_open;
         }
 
+        out->source_format = config->offload_info.source_format;
+
         if ((out->devices & AUDIO_DEVICE_OUT_AUX_DIGITAL) &&
             ((audio_extn_dolby_is_passthrough_stream(out->flags)))) {
             ALOGV("read and update_pass through formats");
@@ -2919,9 +2923,10 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
     if (out->bit_width == 0)
         out->bit_width = 16;
     audio_extn_utils_update_stream_app_type_cfg(adev->platform,
-                                                &adev->streams_output_cfg_list,
-                                                devices, flags, format, out->sample_rate,
-                                                out->bit_width, &out->app_type_cfg);
+                                &adev->streams_output_cfg_list,
+                                devices, flags, format, out->sample_rate,
+                                out->bit_width, out->source_format,
+                                &out->app_type_cfg);
     if ((out->usecase == USECASE_AUDIO_PLAYBACK_PRIMARY) ||
         (flags & AUDIO_OUTPUT_FLAG_PRIMARY)) {
         /* Ensure the default output is not selected twice */
