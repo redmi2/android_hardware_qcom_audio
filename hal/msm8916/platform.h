@@ -244,6 +244,7 @@ enum {
 #define VOICE2_CALL_PCM_DEVICE 13
 #define VOLTE_CALL_PCM_DEVICE 15
 #define QCHAT_CALL_PCM_DEVICE 26
+#define QCHAT_CALL_PCM_DEVICE_OF_EXT_CODEC 28
 #define VOWLAN_CALL_PCM_DEVICE 16
 
 #define AFE_PROXY_PLAYBACK_PCM_DEVICE 7
@@ -300,4 +301,12 @@ enum {
  */
 #define DEVICE_PARAM_MUTE_ID    0
 #define DEVICE_PARAM_LATENCY_ID 1
+
+#define ENUM_TO_STRING(X) #X
+
+struct audio_device_to_audio_interface {
+    audio_devices_t device;
+    char device_name[100];
+    char interface_name[100];
+};
 #endif // QCOM_AUDIO_PLATFORM_H

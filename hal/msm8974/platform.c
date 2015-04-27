@@ -44,9 +44,13 @@
 #include "sound/msmcal-hwdep.h"
 
 #define SOUND_TRIGGER_DEVICE_HANDSET_MONO_LOW_POWER_ACDB_ID (100)
-#define MIXER_XML_PATH "/system/etc/mixer_paths.xml"
+#define MIXER_XML_DEFAULT_PATH "/system/etc/mixer_paths.xml"
 #define MIXER_XML_PATH_AUXPCM "/system/etc/mixer_paths_auxpcm.xml"
 #define MIXER_XML_PATH_I2S "/system/etc/mixer_paths_i2s.xml"
+#define MIXER_XML_BASE_STRING "/system/etc/mixer_paths"
+#define MIXER_FILE_DELIMITER "_"
+#define MIXER_FILE_EXT ".xml"
+
 
 #define PLATFORM_INFO_XML_PATH      "/system/etc/audio_platform_info.xml"
 #define PLATFORM_INFO_XML_PATH_I2S  "/system/etc/audio_platform_info_i2s.xml"
@@ -242,6 +246,10 @@ static int pcm_device_table[AUDIO_USECASE_MAX][2] = {
     [USECASE_VOLTE_CALL] = {VOLTE_CALL_PCM_DEVICE, VOLTE_CALL_PCM_DEVICE},
     [USECASE_QCHAT_CALL] = {QCHAT_CALL_PCM_DEVICE, QCHAT_CALL_PCM_DEVICE},
     [USECASE_VOWLAN_CALL] = {VOWLAN_CALL_PCM_DEVICE, VOWLAN_CALL_PCM_DEVICE},
+    [USECASE_VOICEMMODE1_CALL] = {VOICEMMODE1_CALL_PCM_DEVICE,
+                                  VOICEMMODE1_CALL_PCM_DEVICE},
+    [USECASE_VOICEMMODE2_CALL] = {VOICEMMODE2_CALL_PCM_DEVICE,
+                                  VOICEMMODE2_CALL_PCM_DEVICE},
     [USECASE_COMPRESS_VOIP_CALL] = {COMPRESS_VOIP_CALL_PCM_DEVICE, COMPRESS_VOIP_CALL_PCM_DEVICE},
     [USECASE_INCALL_REC_UPLINK] = {AUDIO_RECORD_PCM_DEVICE,
                                    AUDIO_RECORD_PCM_DEVICE},
@@ -637,6 +645,32 @@ static int msm_device_to_be_id [][NO_COLS] = {
        {AUDIO_DEVICE_NONE                               ,      -1},
        {AUDIO_DEVICE_OUT_DEFAULT                        ,      -1},
 };
+#elif PLATFORM_MSM8996
+static int msm_device_to_be_id [][NO_COLS] = {
+       {AUDIO_DEVICE_OUT_EARPIECE                       ,       2},
+       {AUDIO_DEVICE_OUT_SPEAKER                        ,       2},
+       {AUDIO_DEVICE_OUT_WIRED_HEADSET                  ,       2},
+       {AUDIO_DEVICE_OUT_WIRED_HEADPHONE                ,       2},
+       {AUDIO_DEVICE_OUT_BLUETOOTH_SCO                  ,       11},
+       {AUDIO_DEVICE_OUT_BLUETOOTH_SCO_HEADSET          ,       11},
+       {AUDIO_DEVICE_OUT_BLUETOOTH_SCO_CARKIT           ,       11},
+       {AUDIO_DEVICE_OUT_BLUETOOTH_A2DP                 ,       -1},
+       {AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES      ,       -1},
+       {AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER         ,       -1},
+       {AUDIO_DEVICE_OUT_AUX_DIGITAL                    ,       4},
+       {AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET              ,       9},
+       {AUDIO_DEVICE_OUT_DGTL_DOCK_HEADSET              ,       9},
+       {AUDIO_DEVICE_OUT_USB_ACCESSORY                  ,       -1},
+       {AUDIO_DEVICE_OUT_USB_DEVICE                     ,       -1},
+       {AUDIO_DEVICE_OUT_REMOTE_SUBMIX                  ,       9},
+       {AUDIO_DEVICE_OUT_PROXY                          ,       9},
+/* Add the correct be ids */
+       {AUDIO_DEVICE_OUT_FM                             ,       7},
+       {AUDIO_DEVICE_OUT_FM_TX                          ,       8},
+       {AUDIO_DEVICE_OUT_ALL                            ,      -1},
+       {AUDIO_DEVICE_NONE                               ,      -1},
+       {AUDIO_DEVICE_OUT_DEFAULT                        ,      -1},
+};
 #else
 static int msm_device_to_be_id [][NO_COLS] = {
     {AUDIO_DEVICE_NONE, -1},
@@ -988,9 +1022,12 @@ void *platform_init(struct audio_device *adev)
     char baseband[PROPERTY_VALUE_MAX];
     char value[PROPERTY_VALUE_MAX];
     struct platform_data *my_data = NULL;
-    int retry_num = 0, snd_card_num = 0, key = 0;
+    int retry_num = 0, snd_card_num = 0, key = 0, ret = 0;
     const char *snd_card_name;
     char *cvd_version = NULL;
+    char *snd_internal_name = NULL;
+    char *tmp = NULL;
+    char mixer_xml_file[MIXER_PATH_MAX_LENGTH]= {0};
 
     my_data = calloc(1, sizeof(struct platform_data));
 
@@ -1028,10 +1065,51 @@ void *platform_init(struct audio_device *adev)
 
                 adev->audio_route = audio_route_init(snd_card_num,
                                                      MIXER_XML_PATH_I2S);
-            } else if (audio_extn_read_xml(adev, snd_card_num, MIXER_XML_PATH,
-                                    MIXER_XML_PATH_AUXPCM) == -ENOSYS) {
-                adev->audio_route = audio_route_init(snd_card_num,
-                                                 MIXER_XML_PATH);
+            } else {
+                /* Get the codec internal name from the sound card name
+                 * and form the mixer paths file name dynamically. This
+                 * is generic way of picking any codec name based mixer
+                 * files in future with no code change. This code
+                 * assumes mixer files are formed with format as
+                 * mixer_paths_internalcodecname.xml
+
+                 * If this dynamically read mixer files fails to open then it
+                 * falls back to default mixer file i.e mixer_paths.xml. This is
+                 * done to preserve backward compatibility but not mandatory as
+                 * long as the mixer files are named as per above assumption.
+                */
+
+                snd_internal_name = strtok_r(snd_card_name, "-", &tmp);
+                if (snd_internal_name != NULL)
+                    snd_internal_name = strtok_r(NULL, "-", &tmp);
+
+                if (snd_internal_name != NULL) {
+                    strlcpy(mixer_xml_file, MIXER_XML_BASE_STRING,
+                        MIXER_PATH_MAX_LENGTH);
+                    strlcat(mixer_xml_file, MIXER_FILE_DELIMITER,
+                        MIXER_PATH_MAX_LENGTH);
+                    strlcat(mixer_xml_file, snd_internal_name,
+                        MIXER_PATH_MAX_LENGTH);
+                    strlcat(mixer_xml_file, MIXER_FILE_EXT,
+                        MIXER_PATH_MAX_LENGTH);
+                } else {
+                    strlcpy(mixer_xml_file, MIXER_XML_DEFAULT_PATH,
+                        MIXER_PATH_MAX_LENGTH);
+                }
+
+                if (F_OK == access(mixer_xml_file, 0)) {
+                    ALOGD("%s: Loading mixer file: %s", __func__, mixer_xml_file);
+                    if (audio_extn_read_xml(adev, snd_card_num, mixer_xml_file,
+                                    MIXER_XML_PATH_AUXPCM) == -ENOSYS)
+                        adev->audio_route = audio_route_init(snd_card_num,
+                                                       mixer_xml_file);
+                } else {
+                    ALOGD("%s: Loading default mixer file", __func__);
+                    if(audio_extn_read_xml(adev, snd_card_num, MIXER_XML_DEFAULT_PATH,
+                                    MIXER_XML_PATH_AUXPCM) == -ENOSYS)
+                        adev->audio_route = audio_route_init(snd_card_num,
+                                                       MIXER_XML_DEFAULT_PATH);
+                }
             }
             if (!adev->audio_route) {
                 ALOGE("%s: Failed to init audio route controls, aborting.",
