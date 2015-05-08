@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
  * Copyright (C) 2014 The Android Open Source Project
@@ -626,6 +626,12 @@ void audio_extn_utils_send_audio_calibration(struct audio_device *adev,
                                              struct audio_usecase *usecase)
 {
     int type = usecase->type;
+    int rc;
+
+    rc = platform_send_audio_calibration_for_usecase(adev->platform, usecase);
+    if (rc != -ENOSYS) {
+        return;
+    }
 
     if (type == PCM_PLAYBACK) {
         struct stream_out *out = usecase->stream.out;

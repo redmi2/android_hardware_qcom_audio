@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
  * Copyright (C) 2013 The Android Open Source Project
@@ -2087,6 +2087,13 @@ int platform_send_audio_calibration(void *platform, struct audio_usecase *usecas
                                      sample_rate);
     }
     return 0;
+}
+
+int platform_send_audio_calibration_for_usecase(void *platform __unused,
+                                                struct audio_usecase *usecase __unused)
+{
+    ALOGE("%s: Not implemented", __func__);
+    return -ENOSYS;
 }
 
 int platform_switch_voice_call_device_pre(void *platform)
