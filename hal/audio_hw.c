@@ -2246,9 +2246,13 @@ static int out_get_render_position(const struct audio_stream_out *stream,
 {
     struct stream_out *out = (struct stream_out *)stream;
     struct audio_device *adev = out->dev;
-    if (is_offload_usecase(out->usecase) && (dsp_frames != NULL)) {
+
+    if (dsp_frames == NULL)
+        return -EINVAL;
+
+    *dsp_frames = 0;
+    if (is_offload_usecase(out->usecase)) {
         ssize_t ret = 0;
-        *dsp_frames = 0;
         pthread_mutex_lock(&out->lock);
         if (out->compr != NULL) {
             ret = compress_get_tstamp(out->compr, (unsigned long *)dsp_frames,
@@ -2276,6 +2280,9 @@ static int out_get_render_position(const struct audio_stream_out *stream,
         } else {
             return 0;
         }
+    } else if (audio_is_linear_pcm(out->format)) {
+        *dsp_frames = out->written;
+        return 0;
     } else
         return -EINVAL;
 }
@@ -2807,6 +2814,9 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
         return -ENOMEM;
     }
 
+    pthread_mutex_init(&out->lock, (const pthread_mutexattr_t *) NULL);
+    pthread_cond_init(&out->cond, (const pthread_condattr_t *) NULL);
+
     if (devices == AUDIO_DEVICE_NONE)
         devices = AUDIO_DEVICE_OUT_SPEAKER;
 
@@ -3077,9 +3087,6 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
     out->standby = 1;
     /* out->muted = false; by calloc() */
     /* out->written = 0; by calloc() */
-
-    pthread_mutex_init(&out->lock, (const pthread_mutexattr_t *) NULL);
-    pthread_cond_init(&out->cond, (const pthread_condattr_t *) NULL);
 
     config->format = out->stream.common.get_format(&out->stream.common);
     config->channel_mask = out->stream.common.get_channels(&out->stream.common);
