@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
  * Copyright (C) 2014 The Android Open Source Project
@@ -45,6 +45,7 @@
 #define SAMPLING_RATES_TAG "sampling_rates"
 #define BIT_WIDTH_TAG "bit_width"
 #define APP_TYPE_TAG "app_type"
+#define SOURCE_FORMAT_TAG "source_format"
 
 #define STRING_TO_ENUM(string) { #string, string }
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
@@ -205,6 +206,32 @@ static int parse_bit_width_names(char *name)
     return bit_width;
 }
 
+static void parse_source_format_names(char *name,
+                        struct streams_output_cfg *so_info)
+{
+    struct stream_source_format *ssf_info = NULL;
+    char *str = strtok(name, "|");
+
+    if (str != NULL && strcmp(str, DYNAMIC_VALUE_TAG) == 0)
+        return;
+
+    list_init(&so_info->source_format_list);
+    while (str != NULL) {
+        audio_format_t source_format = (audio_format_t)string_to_enum(s_format_name_to_enum_table,
+                                              ARRAY_SIZE(s_format_name_to_enum_table), str);
+        ALOGV("%s: source format - %d", __func__, source_format);
+        if (source_format != 0) {
+            ssf_info = (struct stream_source_format *)calloc(1, sizeof(struct stream_source_format));
+            if (ssf_info == NULL)
+                break; /* return whatever was parsed */
+
+            ssf_info->source_format = source_format;
+            list_add_tail(&so_info->source_format_list, &ssf_info->list);
+        }
+        str = strtok(NULL, "|");
+    }
+}
+
 static int parse_app_type_names(void *platform, char *name)
 {
     int app_type = platform_get_default_app_type(platform);
@@ -232,16 +259,22 @@ static void update_streams_output_cfg_list(cnode *root, void *platform,
     }
 
     while (node) {
-        if (strcmp(node->name, FLAGS_TAG) == 0) {
+        if (strncmp(node->name, FLAGS_TAG, strlen(FLAGS_TAG)) == 0) {
             so_info->flags = parse_flag_names((char *)node->value);
-        } else if (strcmp(node->name, FORMATS_TAG) == 0) {
+        } else if (strncmp(node->name, FORMATS_TAG, strlen(FORMATS_TAG)) == 0) {
             parse_format_names((char *)node->value, so_info);
-        } else if (strcmp(node->name, SAMPLING_RATES_TAG) == 0) {
+        } else if (strncmp(node->name, SAMPLING_RATES_TAG,
+                strlen(SAMPLING_RATES_TAG)) == 0) {
             so_info->app_type_cfg.sample_rate = CODEC_BACKEND_DEFAULT_SAMPLE_RATE;
             parse_sample_rate_names((char *)node->value, so_info);
-        } else if (strcmp(node->name, BIT_WIDTH_TAG) == 0) {
+        } else if (strncmp(node->name, BIT_WIDTH_TAG,
+                strlen(BIT_WIDTH_TAG)) == 0) {
             so_info->app_type_cfg.bit_width = parse_bit_width_names((char *)node->value);
-        } else if (strcmp(node->name, APP_TYPE_TAG) == 0) {
+        } else if (strncmp(node->name, SOURCE_FORMAT_TAG,
+                strlen(SOURCE_FORMAT_TAG)) == 0) {
+            parse_source_format_names((char *)node->value, so_info);
+        } else if (strncmp(node->name, APP_TYPE_TAG,
+                strlen(APP_TYPE_TAG)) == 0) {
             so_info->app_type_cfg.app_type = parse_app_type_names(platform, (char *)node->value);
         }
         node = node->next;
@@ -357,6 +390,7 @@ void audio_extn_utils_dump_streams_output_cfg_list(
     struct streams_output_cfg *so_info;
     struct stream_format *sf_info;
     struct stream_sample_rate *ss_info;
+    struct stream_source_format *ssf_info;
     ALOGV("%s", __func__);
     list_for_each(node_i, streams_output_cfg_list) {
         so_info = node_to_item(node_i, struct streams_output_cfg, list);
@@ -370,6 +404,10 @@ void audio_extn_utils_dump_streams_output_cfg_list(
         list_for_each(node_j, &so_info->sample_rate_list) {
             ss_info = node_to_item(node_j, struct stream_sample_rate, list);
             ALOGV("sample rate-%d", ss_info->sample_rate);
+        }
+        list_for_each(node_j, &so_info->source_format_list) {
+            ssf_info = node_to_item(node_j, struct stream_source_format, list);
+            ALOGV("source format-%x", ssf_info->source_format);
         }
     }
 }
@@ -395,6 +433,11 @@ void audio_extn_utils_release_streams_output_cfg_list(
             list_remove(node_j);
             free(node_to_item(node_j, struct stream_sample_rate, list));
         }
+        while (!list_empty(&so_info->source_format_list)) {
+            node_j = list_head(&so_info->source_format_list);
+            list_remove(node_j);
+            free(node_to_item(node_j, struct stream_source_format, list));
+        }
         list_remove(node_i);
         free(node_to_item(node_i, struct streams_output_cfg, list));
     }
@@ -402,21 +445,36 @@ void audio_extn_utils_release_streams_output_cfg_list(
 
 static bool set_output_cfg(struct streams_output_cfg *so_info,
                            struct stream_app_type_cfg *app_type_cfg,
-                           uint32_t sample_rate, uint32_t bit_width)
- {
-    struct listnode *node_i;
+                           uint32_t sample_rate, uint32_t bit_width,
+                           audio_format_t source_format)
+{
+    struct listnode *node_i, *node_j;
+    struct stream_source_format *sf_info;;
     struct stream_sample_rate *ss_info;
-    list_for_each(node_i, &so_info->sample_rate_list) {
-        ss_info = node_to_item(node_i, struct stream_sample_rate, list);
-        if ((sample_rate <= ss_info->sample_rate) &&
-            (bit_width == so_info->app_type_cfg.bit_width)) {
+    list_for_each(node_i, &so_info->source_format_list) {
+        sf_info = node_to_item(node_i, struct stream_source_format, list);
+        if (source_format == sf_info->source_format) {
+            list_for_each(node_j, &so_info->sample_rate_list) {
+                ss_info = node_to_item(node_j, struct stream_sample_rate, list);
+                if ((sample_rate <= ss_info->sample_rate) &&
+                    (bit_width == so_info->app_type_cfg.bit_width)) {
+                    app_type_cfg->app_type = so_info->app_type_cfg.app_type;
+                    app_type_cfg->sample_rate = ss_info->sample_rate;
+                    app_type_cfg->bit_width = so_info->app_type_cfg.bit_width;
+                    app_type_cfg->source_format =
+                                so_info->app_type_cfg.source_format;
 
-            app_type_cfg->app_type = so_info->app_type_cfg.app_type;
-            app_type_cfg->sample_rate = ss_info->sample_rate;
-            app_type_cfg->bit_width = so_info->app_type_cfg.bit_width;
-            ALOGV("%s app_type_cfg->app_type %d, app_type_cfg->sample_rate %d, app_type_cfg->bit_width %d",
-                   __func__, app_type_cfg->app_type, app_type_cfg->sample_rate, app_type_cfg->bit_width);
-            return true;
+                    ALOGV("%s app_type_cfg->app_type %d",
+                                "app_type_cfg->sample_rate %d",
+                                "app_type_cfg->bit_width %d",
+                                "app_type_cfg->source_format %x",
+                                __func__, app_type_cfg->app_type,
+                                app_type_cfg->sample_rate,
+                                app_type_cfg->bit_width,
+                                app_type_cfg->source_format);
+                    return true;
+                }
+            }
         }
     }
     /*
@@ -425,16 +483,30 @@ static bool set_output_cfg(struct streams_output_cfg *so_info,
      * than all sample rates in list for the input bit width.
      */
     sample_rate = CODEC_BACKEND_DEFAULT_SAMPLE_RATE;
-    list_for_each(node_i, &so_info->sample_rate_list) {
-        ss_info = node_to_item(node_i, struct stream_sample_rate, list);
-        if ((sample_rate <= ss_info->sample_rate) &&
-            (bit_width == so_info->app_type_cfg.bit_width)) {
-            app_type_cfg->app_type = so_info->app_type_cfg.app_type;
-            app_type_cfg->sample_rate = sample_rate;
-            app_type_cfg->bit_width = so_info->app_type_cfg.bit_width;
-            ALOGV("%s Assuming default sample rate. app_type_cfg->app_type %d, app_type_cfg->sample_rate %d, app_type_cfg->bit_width %d",
-                   __func__, app_type_cfg->app_type, app_type_cfg->sample_rate, app_type_cfg->bit_width);
-            return true;
+    list_for_each(node_i, &so_info->source_format_list) {
+        sf_info = node_to_item(node_i, struct stream_source_format, list);
+        if (source_format == sf_info->source_format) {
+            list_for_each(node_j, &so_info->sample_rate_list) {
+                ss_info = node_to_item(node_j, struct stream_sample_rate, list);
+                if ((sample_rate <= ss_info->sample_rate) &&
+                    (bit_width == so_info->app_type_cfg.bit_width)) {
+                    app_type_cfg->app_type = so_info->app_type_cfg.app_type;
+                    app_type_cfg->sample_rate = sample_rate;
+                    app_type_cfg->bit_width = so_info->app_type_cfg.bit_width;
+                    app_type_cfg->source_format =
+                                so_info->app_type_cfg.source_format;
+
+                    ALOGV("%s Assuming default SR. app_type_cfg->app_type %d",
+                                "app_type_cfg->sample_rate %d",
+                                "app_type_cfg->bit_width %d",
+                                "app_type_cfg->source_format %x",
+                                __func__, app_type_cfg->app_type,
+                                app_type_cfg->sample_rate,
+                                app_type_cfg->bit_width,
+                                app_type_cfg->source_format);
+                    return true;
+                }
+            }
         }
     }
     return false;
@@ -447,6 +519,7 @@ void audio_extn_utils_update_stream_app_type_cfg(void *platform,
                                   audio_format_t format,
                                   uint32_t sample_rate,
                                   uint32_t bit_width,
+                                  audio_format_t source_format,
                                   struct stream_app_type_cfg *app_type_cfg)
 {
     struct listnode *node_i, *node_j, *node_k;
@@ -463,15 +536,16 @@ void audio_extn_utils_update_stream_app_type_cfg(void *platform,
         ALOGI("%s Allowing 24-bit playback on speaker ONLY at default sampling rate", __func__);
     }
 
-    ALOGV("%s: flags: %x, format: %x sample_rate %d",
-           __func__, flags, format, sample_rate);
+    ALOGV("%s: flags: %x, format: %x sample_rate %d, source_format %x",
+           __func__, flags, format, sample_rate, source_format);
     list_for_each(node_i, streams_output_cfg_list) {
         so_info = node_to_item(node_i, struct streams_output_cfg, list);
         if (so_info->flags == flags) {
             list_for_each(node_j, &so_info->format_list) {
                 sf_info = node_to_item(node_j, struct stream_format, list);
                 if (sf_info->format == format) {
-                    if (set_output_cfg(so_info, app_type_cfg, sample_rate, bit_width))
+                    if (set_output_cfg(so_info, app_type_cfg, sample_rate,
+                        bit_width, source_format))
                         return;
                 }
             }
@@ -484,6 +558,7 @@ void audio_extn_utils_update_stream_app_type_cfg(void *platform,
             app_type_cfg->app_type = so_info->app_type_cfg.app_type;
             app_type_cfg->sample_rate = so_info->app_type_cfg.sample_rate;
             app_type_cfg->bit_width = so_info->app_type_cfg.bit_width;
+            app_type_cfg->source_format = so_info->app_type_cfg.source_format;
             ALOGV("%s Default to primary output: App type: %d sample_rate %d",
                   __func__, so_info->app_type_cfg.app_type, app_type_cfg->sample_rate);
             return;
@@ -493,6 +568,7 @@ void audio_extn_utils_update_stream_app_type_cfg(void *platform,
     app_type_cfg->app_type = platform_get_default_app_type(platform);
     app_type_cfg->sample_rate = CODEC_BACKEND_DEFAULT_SAMPLE_RATE;
     app_type_cfg->bit_width = 16;
+    app_type_cfg->source_format = AUDIO_FORMAT_DEFAULT;
 }
 
 int audio_extn_utils_send_app_type_cfg(struct audio_usecase *usecase)
