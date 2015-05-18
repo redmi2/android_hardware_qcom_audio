@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  * Not a contribution.
  *
  * Copyright (C) 2013 The Android Open Source Project
@@ -172,6 +172,7 @@ struct stream_app_type_cfg {
     int sample_rate;
     uint32_t bit_width;
     int app_type;
+    audio_format_t source_format;
 };
 
 struct stream_out {
@@ -205,6 +206,7 @@ struct stream_out {
     pthread_cond_t offload_cond;
     pthread_t offload_thread;
     struct listnode offload_cmd_list;
+    audio_format_t source_format;
     bool offload_thread_blocked;
 
     stream_callback_t offload_callback;
@@ -274,11 +276,17 @@ struct stream_sample_rate {
     uint32_t sample_rate;
 };
 
+struct stream_source_format {
+    struct listnode list;
+    audio_format_t source_format;
+};
+
 struct streams_output_cfg {
     struct listnode list;
     audio_output_flags_t flags;
     struct listnode format_list;
     struct listnode sample_rate_list;
+    struct listnode source_format_list;
     struct stream_app_type_cfg app_type_cfg;
 };
 

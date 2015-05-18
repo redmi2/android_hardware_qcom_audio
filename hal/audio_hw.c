@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
  * Copyright (C) 2013 The Android Open Source Project
@@ -75,7 +75,7 @@
 
 #define COMPRESS_OFFLOAD_NUM_FRAGMENTS 4
 /* ToDo: Check and update a proper value in msec */
-#define COMPRESS_OFFLOAD_PLAYBACK_LATENCY 96
+#define COMPRESS_OFFLOAD_PLAYBACK_LATENCY 50
 #define COMPRESS_PLAYBACK_VOLUME_MAX 0x2000
 
 #define PROXY_OPEN_RETRY_COUNT           100
@@ -916,14 +916,16 @@ int select_devices(struct audio_device *adev, audio_usecase_t uc_id)
 
     if (usecase->type == PCM_PLAYBACK) {
         audio_extn_utils_update_stream_app_type_cfg(adev->platform,
-                                                &adev->streams_output_cfg_list,
-                                                usecase->stream.out->devices,
-                                                usecase->stream.out->flags,
-                                                usecase->stream.out->format,
-                                                usecase->stream.out->sample_rate,
-                                                usecase->stream.out->bit_width,
-                                                &usecase->stream.out->app_type_cfg);
-        ALOGI("%s Selected apptype: %d", __func__, usecase->stream.out->app_type_cfg.app_type);
+                                        &adev->streams_output_cfg_list,
+                                        usecase->stream.out->devices,
+                                        usecase->stream.out->flags,
+                                        usecase->stream.out->format,
+                                        usecase->stream.out->sample_rate,
+                                        usecase->stream.out->bit_width,
+                                        usecase->stream.out->source_format,
+                                        &usecase->stream.out->app_type_cfg);
+        ALOGI("%s Selected apptype: %d",
+                __func__, usecase->stream.out->app_type_cfg.app_type);
     }
 
     enable_audio_route(adev, usecase);
@@ -1991,13 +1993,7 @@ static uint32_t out_get_latency(const struct audio_stream_out *stream)
     uint32_t latency = 0;
 
     if (is_offload_usecase(out->usecase)) {
-        if (out->use_small_bufs == true)
-            latency = ((out->compr_config.fragments *
-                   out->compr_config.fragment_size * 1000) /
-                   (out->sample_rate * out->compr_config.codec->ch_in *
-                   audio_bytes_per_sample(out->format)));
-        else
-            latency = COMPRESS_OFFLOAD_PLAYBACK_LATENCY;
+        latency = COMPRESS_OFFLOAD_PLAYBACK_LATENCY;
     } else {
         latency = (out->config.period_count * out->config.period_size * 1000) /
            (out->config.rate);
@@ -2089,7 +2085,7 @@ static ssize_t out_write(struct audio_stream_out *stream, const void *buffer,
     }
 
     if (is_offload_usecase(out->usecase)) {
-        ALOGD("copl(%p): writing buffer (%zu bytes) to compress device", out, bytes);
+        ALOGVV("copl(%p): writing buffer (%zu bytes) to compress device", out, bytes);
         if (out->send_new_metadata) {
             ALOGD("copl(%p):send new gapless metadata", out);
             compress_set_gapless_metadata(out->compr, &out->gapless_mdata);
@@ -2761,6 +2757,8 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
             goto error_open;
         }
 
+        out->source_format = config->offload_info.source_format;
+
         if ((out->devices & AUDIO_DEVICE_OUT_AUX_DIGITAL) &&
             ((audio_extn_dolby_is_passthrough_stream(out->flags)))) {
             ALOGV("read and update_pass through formats");
@@ -2919,9 +2917,10 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
     if (out->bit_width == 0)
         out->bit_width = 16;
     audio_extn_utils_update_stream_app_type_cfg(adev->platform,
-                                                &adev->streams_output_cfg_list,
-                                                devices, flags, format, out->sample_rate,
-                                                out->bit_width, &out->app_type_cfg);
+                                &adev->streams_output_cfg_list,
+                                devices, flags, format, out->sample_rate,
+                                out->bit_width, out->source_format,
+                                &out->app_type_cfg);
     if ((out->usecase == USECASE_AUDIO_PLAYBACK_PRIMARY) ||
         (flags & AUDIO_OUTPUT_FLAG_PRIMARY)) {
         /* Ensure the default output is not selected twice */
