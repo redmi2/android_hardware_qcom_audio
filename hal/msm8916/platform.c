@@ -41,6 +41,7 @@
 
 #define MIXER_XML_PATH "/system/etc/mixer_paths.xml"
 #define MIXER_XML_PATH_MTP "/system/etc/mixer_paths_mtp.xml"
+#define MIXER_XML_PATH_SBC "/system/etc/mixer_paths_sbc.xml"
 #define MIXER_XML_PATH_MSM8909_PM8916 "/system/etc/mixer_paths_msm8909_pm8916.xml"
 #define MIXER_XML_PATH_QRD_SKUH "/system/etc/mixer_paths_qrd_skuh.xml"
 #define MIXER_XML_PATH_QRD_SKUI "/system/etc/mixer_paths_qrd_skui.xml"
@@ -56,6 +57,7 @@
 #define MIXER_XML_PATH_I2S "/system/etc/mixer_paths_i2s.xml"
 #define MIXER_XML_PATH_WCD9306 "/system/etc/mixer_paths_wcd9306.xml"
 #define MIXER_XML_PATH_WCD9330 "/system/etc/mixer_paths_wcd9330.xml"
+#define MIXER_XML_PATH_WCD9335 "/system/etc/mixer_paths_wcd9335.xml"
 #define PLATFORM_INFO_XML_PATH      "/system/etc/audio_platform_info.xml"
 #define PLATFORM_INFO_XML_PATH_I2S  "/system/etc/audio_platform_info_i2s.xml"
 
@@ -724,7 +726,10 @@ static void update_codec_type(const char *snd_card_name) {
          !strncmp(snd_card_name, "msm8939-tomtom9330-snd-card",
                   sizeof("msm8939-tomtom9330-snd-card")) ||
          !strncmp(snd_card_name, "msm8952-tomtom-snd-card",
-                  sizeof("msm8952-tomtom-snd-card"))) {
+                  sizeof("msm8952-tomtom-snd-card")) ||
+         !strncmp(snd_card_name, "msm8976-tasha-snd-card",
+                  sizeof("msm8976-tasha-snd-card")))
+     {
          ALOGI("%s: snd_card_name: %s",__func__,snd_card_name);
          is_external_codec = true;
      }
@@ -736,6 +741,15 @@ static void query_platform(const char *snd_card_name,
                  sizeof("msm8x16-snd-card-mtp"))) {
         strlcpy(mixer_xml_path, MIXER_XML_PATH_MTP,
                 sizeof(MIXER_XML_PATH_MTP));
+
+        msm_device_to_be_id = msm_device_to_be_id_internal_codec;
+        msm_be_id_array_len  =
+            sizeof(msm_device_to_be_id_internal_codec) / sizeof(msm_device_to_be_id_internal_codec[0]);
+
+    } else if (!strncmp(snd_card_name, "msm8x16-snd-card-sbc",
+                 sizeof("msm8x16-snd-card-sbc"))) {
+        strlcpy(mixer_xml_path, MIXER_XML_PATH_SBC,
+                sizeof(mixer_xml_path));
 
         msm_device_to_be_id = msm_device_to_be_id_internal_codec;
         msm_be_id_array_len  =
@@ -809,6 +823,15 @@ static void query_platform(const char *snd_card_name,
         msm_device_to_be_id = msm_device_to_be_id_external_codec;
         msm_be_id_array_len  =
             sizeof(msm_device_to_be_id_external_codec) / sizeof(msm_device_to_be_id_external_codec[0]);
+
+    } else if (!strncmp(snd_card_name, "msm8976-tasha-snd-card",
+                 sizeof("msm8976-tasha-snd-card"))) {
+        strlcpy(mixer_xml_path, MIXER_XML_PATH_WCD9335,
+                sizeof(MIXER_XML_PATH_WCD9335));
+        msm_device_to_be_id = msm_device_to_be_id_external_codec;
+        msm_be_id_array_len  =
+            sizeof(msm_device_to_be_id_external_codec) / sizeof(msm_device_to_be_id_external_codec[0]);
+
 
     } else if (!strncmp(snd_card_name, "msm8909-skua-snd-card",
                  sizeof("msm8909-skua-snd-card"))) {
@@ -1207,6 +1230,8 @@ void *platform_init(struct audio_device *adev)
     const char *snd_card_name;
     char mixer_xml_path[100],ffspEnable[PROPERTY_VALUE_MAX];
     char *cvd_version = NULL;
+    const char *mixer_ctl_name = "Set HPX ActiveBe";
+    struct mixer_ctl *ctl = NULL;
 
     my_data = calloc(1, sizeof(struct platform_data));
     if (!my_data) {
@@ -1412,6 +1437,13 @@ void *platform_init(struct audio_device *adev)
             }
         }
         closedir(dir);
+    }
+
+    /* Configure active back end for HPX*/
+    ctl = mixer_get_ctl_by_name(adev->mixer, mixer_ctl_name);
+    if (ctl) {
+        ALOGE(" sending HPX Active BE information ");
+        mixer_ctl_set_value(ctl, 0, is_external_codec);
     }
 
 acdb_init_fail:
@@ -2325,8 +2357,9 @@ snd_device_t platform_get_input_snd_device(void *platform, audio_devices_t out_d
         if (out_device & AUDIO_DEVICE_OUT_SPEAKER)
             in_device = AUDIO_DEVICE_IN_BACK_MIC;
         if (adev->active_input) {
-            if (adev->active_input->enable_aec &&
-                    adev->active_input->enable_ns) {
+            if (my_data->fluence_type != FLUENCE_NONE &&
+                adev->active_input->enable_aec &&
+                adev->active_input->enable_ns) {
                 if (in_device & AUDIO_DEVICE_IN_BACK_MIC) {
                     if (my_data->fluence_in_spkr_mode) {
                         if (my_data->fluence_type & FLUENCE_QUAD_MIC) {
@@ -2350,7 +2383,8 @@ snd_device_t platform_get_input_snd_device(void *platform, audio_devices_t out_d
                     snd_device = SND_DEVICE_IN_HEADSET_MIC_FLUENCE;
                 }
                 platform_set_echo_reference(adev->platform, true);
-            } else if (adev->active_input->enable_aec) {
+            } else if (my_data->fluence_type != FLUENCE_NONE &&
+                       adev->active_input->enable_aec) {
                 if (in_device & AUDIO_DEVICE_IN_BACK_MIC) {
                     if (my_data->fluence_in_spkr_mode) {
                         if (my_data->fluence_type & FLUENCE_QUAD_MIC) {
@@ -2374,7 +2408,8 @@ snd_device_t platform_get_input_snd_device(void *platform, audio_devices_t out_d
                     snd_device = SND_DEVICE_IN_HEADSET_MIC_FLUENCE;
                 }
                 platform_set_echo_reference(adev->platform, true);
-            } else if (adev->active_input->enable_ns) {
+            } else if (my_data->fluence_type != FLUENCE_NONE &&
+                       adev->active_input->enable_ns) {
                 if (in_device & AUDIO_DEVICE_IN_BACK_MIC) {
                     if (my_data->fluence_in_spkr_mode) {
                         if (my_data->fluence_type & FLUENCE_QUAD_MIC) {
@@ -3329,8 +3364,7 @@ uint32_t platform_get_pcm_offload_buffer_size(audio_offload_info_t* info)
     // To have same PCM samples for all channels, the buffer size requires to
     // be multiple of (number of channels * bytes per sample)
     // For writes to succeed, the buffer must be written at address which is multiple of 32
-    // Alignment of 96 satsfies both of the above requirements
-    fragment_size = ALIGN(fragment_size, 96);
+    fragment_size = ALIGN(fragment_size, ((bits_per_sample >> 3)* popcount(info->channel_mask) * 32));
 
     ALOGI("PCM offload Fragment size to %d bytes", fragment_size);
     return fragment_size;
@@ -3343,10 +3377,13 @@ int platform_set_codec_backend_cfg(struct audio_device* adev,
 
     int ret = 0;
     const char *snd_card_name = mixer_get_name(adev->mixer);
+
     if (bit_width != adev->cur_codec_backend_bit_width) {
         const char * mixer_ctl_name;
         if (!strncmp(snd_card_name, "msm8952-tomtom-snd-card",
-                 sizeof("msm8952-tomtom-snd-card"))) {
+                sizeof("msm8952-tomtom-snd-card")) ||
+            !strncmp(snd_card_name, "msm8976-tasha-snd-card",
+                sizeof("msm8976-tasha-snd-card"))) {
             mixer_ctl_name = "SLIM_0_RX Format";
         }
         else
