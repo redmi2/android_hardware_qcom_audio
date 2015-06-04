@@ -59,7 +59,7 @@
 #define MIXER_XML_PATH_WCD9330 "/system/etc/mixer_paths_wcd9330.xml"
 #define MIXER_XML_PATH_WCD9335 "/system/etc/mixer_paths_wcd9335.xml"
 #define PLATFORM_INFO_XML_PATH      "/system/etc/audio_platform_info.xml"
-#define PLATFORM_INFO_XML_PATH_I2S  "/system/etc/audio_platform_info_i2s.xml"
+#define PLATFORM_INFO_XML_PATH_EXTCODEC  "/system/etc/audio_platform_info_extcodec.xml"
 
 #define LIB_ACDB_LOADER "libacdbloader.so"
 #define AUDIO_DATA_BLOCK_MIXER_CTL "HDMI EDID"
@@ -246,22 +246,18 @@ int pcm_device_table[AUDIO_USECASE_MAX][2] = {
     [USECASE_AUDIO_PLAYBACK_OFFLOAD] =
                      {PLAYBACK_OFFLOAD_DEVICE, PLAYBACK_OFFLOAD_DEVICE},
 #ifdef MULTIPLE_OFFLOAD_ENABLED
-    [USECASE_AUDIO_PLAYBACK_OFFLOAD2] =
-                     {PLAYBACK_OFFLOAD_DEVICE2, PLAYBACK_OFFLOAD_DEVICE2},
-    [USECASE_AUDIO_PLAYBACK_OFFLOAD3] =
-                     {PLAYBACK_OFFLOAD_DEVICE3, PLAYBACK_OFFLOAD_DEVICE3},
-    [USECASE_AUDIO_PLAYBACK_OFFLOAD4] =
-                     {PLAYBACK_OFFLOAD_DEVICE4, PLAYBACK_OFFLOAD_DEVICE4},
-    [USECASE_AUDIO_PLAYBACK_OFFLOAD5] =
-                     {PLAYBACK_OFFLOAD_DEVICE5, PLAYBACK_OFFLOAD_DEVICE5},
-    [USECASE_AUDIO_PLAYBACK_OFFLOAD6] =
-                     {PLAYBACK_OFFLOAD_DEVICE6, PLAYBACK_OFFLOAD_DEVICE6},
-    [USECASE_AUDIO_PLAYBACK_OFFLOAD7] =
-                     {PLAYBACK_OFFLOAD_DEVICE7, PLAYBACK_OFFLOAD_DEVICE7},
-    [USECASE_AUDIO_PLAYBACK_OFFLOAD8] =
-                     {PLAYBACK_OFFLOAD_DEVICE8, PLAYBACK_OFFLOAD_DEVICE8},
-    [USECASE_AUDIO_PLAYBACK_OFFLOAD9] =
-                     {PLAYBACK_OFFLOAD_DEVICE9, PLAYBACK_OFFLOAD_DEVICE9},
+    /* Below entries are initialized with invalid values
+     * Valid values should be updated from fnc platform_info_init()
+     * based on pcm ids defined in audio_platform_info.xml.
+     */
+    [USECASE_AUDIO_PLAYBACK_OFFLOAD2] = {-1, -1},
+    [USECASE_AUDIO_PLAYBACK_OFFLOAD3] = {-1, -1},
+    [USECASE_AUDIO_PLAYBACK_OFFLOAD4] = {-1, -1},
+    [USECASE_AUDIO_PLAYBACK_OFFLOAD5] = {-1, -1},
+    [USECASE_AUDIO_PLAYBACK_OFFLOAD6] = {-1, -1},
+    [USECASE_AUDIO_PLAYBACK_OFFLOAD7] = {-1, -1},
+    [USECASE_AUDIO_PLAYBACK_OFFLOAD8] = {-1, -1},
+    [USECASE_AUDIO_PLAYBACK_OFFLOAD9] = {-1, -1},
 #endif
     [USECASE_AUDIO_RECORD] = {AUDIO_RECORD_PCM_DEVICE, AUDIO_RECORD_PCM_DEVICE},
     [USECASE_AUDIO_RECORD_COMPRESS] = {COMPRESS_CAPTURE_DEVICE, COMPRESS_CAPTURE_DEVICE},
@@ -1450,8 +1446,11 @@ acdb_init_fail:
 
     set_platform_defaults();
 
-    /* Initialize ACDB ID's */
-    platform_info_init(PLATFORM_INFO_XML_PATH);
+    /* Initialize ACDB and PCM ID's */
+    if (is_external_codec)
+        platform_info_init(PLATFORM_INFO_XML_PATH_EXTCODEC);
+    else
+        platform_info_init(PLATFORM_INFO_XML_PATH);
 
     /* init usb */
     audio_extn_usb_init(adev);
@@ -3469,6 +3468,7 @@ bool platform_check_codec_backend_cfg(struct audio_device* adev,
     struct stream_out *out = NULL;
     unsigned int bit_width = CODEC_BACKEND_DEFAULT_BIT_WIDTH;
     unsigned int sample_rate = CODEC_BACKEND_DEFAULT_SAMPLE_RATE;
+    char value[PROPERTY_VALUE_MAX] = {0};
 
     // For voice calls use default configuration
     // force routing is not required here, caller will do it anyway
@@ -3508,6 +3508,22 @@ bool platform_check_codec_backend_cfg(struct audio_device* adev,
     if (16 == bit_width) {
         sample_rate = CODEC_BACKEND_DEFAULT_SAMPLE_RATE;
     }
+
+    //check if mulitchannel clip needs to be down sampled to 48k
+    property_get("audio.playback.mch.downsample",value,"");
+    if (!strncmp("true", value, sizeof("true"))) {
+        out = usecase->stream.out;
+        if ((popcount(out->channel_mask) > 2) &&
+                      (out->sample_rate > CODEC_BACKEND_DEFAULT_SAMPLE_RATE) &&
+                      !(out->flags & AUDIO_OUTPUT_FLAG_COMPRESS_PASSTHROUGH)) {
+           sample_rate = CODEC_BACKEND_DEFAULT_SAMPLE_RATE;
+          /* update out sample rate to reflect current backend sample rate  */
+           out->sample_rate = sample_rate;
+           ALOGD("%s: MCH session defaulting sample rate to %d",
+                        __func__, sample_rate);
+         }
+    }
+
     // 24 bit playback on speakers is allowed through 48 khz backend only
     // bit width re-configured based on platform info
     if ((24 == bit_width) &&
