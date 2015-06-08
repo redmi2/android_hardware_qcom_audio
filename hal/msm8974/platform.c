@@ -1346,6 +1346,22 @@ const char *platform_get_snd_device_name(snd_device_t snd_device)
         return "";
 }
 
+const char *platform_get_spkr_1_tz_name(snd_device_t snd_device)
+{
+    if (snd_device >= SND_DEVICE_MIN && snd_device < SND_DEVICE_MAX)
+        return speaker_device_tz_names.spkr_1_tz_name;
+    else
+        return "";
+}
+
+const char *platform_get_spkr_2_tz_name(snd_device_t snd_device)
+{
+    if (snd_device >= SND_DEVICE_MIN && snd_device < SND_DEVICE_MAX)
+        return speaker_device_tz_names.spkr_2_tz_name;
+    else
+        return "";
+}
+
 int platform_get_snd_device_name_extn(void *platform, snd_device_t snd_device,
                                       char *device_name)
 {
@@ -2647,6 +2663,11 @@ int platform_set_parameters(void *platform, struct str_parms *parms)
         bool status = false;
         str_parms_del(parms, AUDIO_PARAMETER_KEY_EXT_AUDIO_DEVICE);
         event_name = strtok_r(value, ",", &status_str);
+        if (!event_name) {
+            ret = -EINVAL;
+            ALOGE("%s: event_name is NULL", __func__);
+            goto done;
+        }
         ALOGV("%s: recieved update of external audio device %s %s",
                          __func__,
                          event_name, status_str);
@@ -3456,7 +3477,7 @@ int platform_set_channel_allocation(void *platform, int channel_alloc)
 int platform_set_channel_map(void *platform, int ch_count, char *ch_map, int snd_id)
 {
     struct mixer_ctl *ctl;
-    char mixer_ctl_name[44]; // max length of name is 44 as defined
+    char mixer_ctl_name[44] = {0}; // max length of name is 44 as defined
     int ret;
     unsigned int i;
     int set_values[8] = {0};
@@ -3768,6 +3789,15 @@ end:
 }
 
 /*
+ * This is a lookup table to map names of speaker device with respective left and right TZ names.
+ * Also the tz names for a particular left or right speaker can be overriden by adding
+ * corresponding entry in audio_platform_info.xml file.
+ */
+struct speaker_device_to_tz_names speaker_device_tz_names = {
+    {SND_DEVICE_OUT_SPEAKER, "", ""},
+};
+
+/*
  * This is a lookup table to map android audio input device to audio h/w interface (backend).
  * The table can be extended for other input devices by adding appropriate entries.
  * Also the audio interface for a particular input device can be overriden by adding
@@ -3815,6 +3845,36 @@ int platform_set_audio_device_interface(const char *device_name, const char *int
 
     ret = -EINVAL;
 
+done:
+    return ret;
+}
+
+int platform_set_spkr_device_tz_names(snd_device_t index,
+                                      const char *spkr_1_tz_name, const char *spkr_2_tz_name)
+{
+    int ret = 0;
+    int i;
+
+    if (spkr_1_tz_name == NULL && spkr_2_tz_name == NULL) {
+        ALOGE("%s: Invalid input", __func__);
+        ret = -EINVAL;
+        goto done;
+    }
+    if (index != speaker_device_tz_names.snd_device) {
+        ALOGE("%s: not matching speaker device\n");
+        ret = -EINVAL;
+        goto done;
+    }
+    ALOGD("%s: Enter, spkr_1_tz_name :%s, spkr_2_tz_name:%s",
+           __func__, spkr_1_tz_name, spkr_2_tz_name);
+
+    if (spkr_1_tz_name != NULL)
+        strlcpy(speaker_device_tz_names.spkr_1_tz_name, spkr_1_tz_name,
+                sizeof(speaker_device_tz_names.spkr_1_tz_name));
+
+    if (spkr_2_tz_name != NULL)
+        strlcpy(speaker_device_tz_names.spkr_2_tz_name, spkr_2_tz_name,
+                sizeof(speaker_device_tz_names.spkr_2_tz_name));
 done:
     return ret;
 }

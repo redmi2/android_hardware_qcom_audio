@@ -1421,7 +1421,7 @@ void *platform_init(struct audio_device *adev)
     DIR *dir;
     struct dirent *dirent;
     char file_name[10] = "wsa";
-    strcat(CodecPeek, snd_card_name);
+    strlcat(CodecPeek, snd_card_name, sizeof(CodecPeek));
 
     dir = opendir(CodecPeek);
     if (dir != NULL) {
@@ -3136,6 +3136,10 @@ void platform_get_parameters(void *platform,
                     }
                 }
             }
+        } else if (SND_CARD_STATE_OFFLINE == get_snd_card_state(my_data->adev)) {
+            //Do not allow DSP session during SSR
+            ALOGI("Rejecting request for DSP only session from HAL due to SSR");
+            isallowed = 0;
         }
         str_parms_add_int(reply, AUDIO_PARAMETER_IS_HW_DECODER_SESSION_ALLOWED, isallowed);
     }
@@ -3810,7 +3814,7 @@ int platform_set_channel_map(void *platform, int ch_count, char *ch_map, int snd
     strlcpy(mixer_ctl_name, "Playback Channel Map", sizeof(mixer_ctl_name));
     if (snd_id >= 0) {
         snprintf(device_num, sizeof(device_num), "%d", snd_id);
-        strncat(mixer_ctl_name, device_num, 13);
+        strlcat(mixer_ctl_name, device_num, sizeof(device_num));
     }
 
     ALOGD("%s mixer_ctl_name:%s", __func__, mixer_ctl_name);
@@ -4168,6 +4172,61 @@ int platform_set_audio_device_interface(const char * device_name,
 
     ret = -EINVAL;
 
+done:
+    return ret;
+}
+
+/*
+ * This is a lookup table to map names of speaker device with respective left and right TZ names.
+ * Also the tz names for a particular left or right speaker can be overriden by adding
+ * corresponding entry in audio_platform_info.xml file.
+ */
+struct speaker_device_to_tz_names speaker_device_tz_names = {
+    {SND_DEVICE_OUT_SPEAKER, "", ""},
+};
+
+const char *platform_get_spkr_1_tz_name(snd_device_t snd_device)
+{
+    if (snd_device >= SND_DEVICE_MIN && snd_device < SND_DEVICE_MAX)
+        return speaker_device_tz_names.spkr_1_tz_name;
+    else
+        return "";
+}
+
+const char *platform_get_spkr_2_tz_name(snd_device_t snd_device)
+{
+    if (snd_device >= SND_DEVICE_MIN && snd_device < SND_DEVICE_MAX)
+        return speaker_device_tz_names.spkr_2_tz_name;
+    else
+        return "";
+}
+
+int platform_set_spkr_device_tz_names(snd_device_t index,
+                                      const char *spkr_1_tz_name, const char *spkr_2_tz_name)
+{
+    int ret = 0;
+    int i;
+
+    if (spkr_1_tz_name == NULL && spkr_2_tz_name == NULL) {
+        ALOGE("%s: Invalid input", __func__);
+        ret = -EINVAL;
+        goto done;
+    }
+    if (index != speaker_device_tz_names.snd_device) {
+        ALOGE("%s: not matching speaker device\n");
+        ret = -EINVAL;
+        goto done;
+    }
+    ALOGD("%s: Enter, spkr_1_tz_name :%s, spkr_2_tz_name:%s",
+            __func__, spkr_1_tz_name, spkr_2_tz_name);
+
+    if (spkr_1_tz_name != NULL)
+        strlcpy(speaker_device_tz_names.spkr_1_tz_name, spkr_1_tz_name,
+                sizeof(speaker_device_tz_names.spkr_1_tz_name));
+
+    if (spkr_2_tz_name != NULL)
+        strlcpy(speaker_device_tz_names.spkr_2_tz_name, spkr_2_tz_name,
+                sizeof(speaker_device_tz_names.spkr_2_tz_name));
 done:
     return ret;
 }
