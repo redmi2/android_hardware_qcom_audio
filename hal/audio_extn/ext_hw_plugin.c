@@ -528,17 +528,23 @@ done_tunnel:
             free(plptr);
     } else {
         audio_hal_plugin_usecase_type_t use_case;
-        snd_device_t snd_dev;
+        audio_hal_plugin_direction_type_t dir;
+        snd_device_t snd_dev = 0;
 
         err = str_parms_get_int(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_UC,
                 &use_case);
-        if ((err < 0) || (use_case < 0) || (use_case >= AUDIO_HAL_PLUGIN_USECASE_MAX)) {
+        if (err < 0) {
             ALOGE("%s: Invalid or missing usecase param for plugin msg", __func__);
             ret = -EINVAL;
             /* TODO: do we need to support no use case in kvpair? */
             goto done;
         }
         str_parms_del(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_UC);
+        if ((use_case < 0) || (use_case >= AUDIO_HAL_PLUGIN_USECASE_MAX)) {
+            ALOGE("%s: Invalid usecase param for plugin msg", __func__);
+            ret = -EINVAL;
+            goto done;
+        }
 
         if (my_plugin->usecase_ref_count[use_case] == 0) {
             ALOGE("%s: plugin usecase (%d) is not enabled", __func__, use_case);
@@ -546,16 +552,51 @@ done_tunnel:
             ret = -EINVAL;
             goto done;
         }
-        /* TODO: confirm this handles all usecase */
-        if (my_plugin->out_snd_dev[use_case]) {
-            snd_dev = my_plugin->out_snd_dev[use_case];
-        } else if (my_plugin->in_snd_dev[use_case]) {
-            snd_dev = my_plugin->in_snd_dev[use_case];
+
+        err = str_parms_get_int(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_DIRECTION,
+                &dir);
+        if (err < 0) {
+            if (my_plugin->out_snd_dev[use_case]) {
+                snd_dev = my_plugin->out_snd_dev[use_case];
+            } else if (my_plugin->in_snd_dev[use_case]) {
+                snd_dev = my_plugin->in_snd_dev[use_case];
+            } else {
+                ALOGE("%s: No valid snd_device found for the usecase (%d)",
+                        __func__, use_case);
+                ret = -EINVAL;
+                goto done;
+            }
         } else {
-            ALOGE("%s: No valid snd_device found for the usecase (%d)",
-                    __func__, use_case);
-            ret = -EINVAL;
-            goto done;
+            str_parms_del(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_DIRECTION);
+
+            switch(dir) {
+            case AUDIO_HAL_PLUGIN_DIRECTION_PLAYBACK:
+            {
+                if (!my_plugin->out_snd_dev[use_case]) {
+                    ALOGE("%s: No valid out_snd_device found for playback (%d)",
+                            __func__, use_case);
+                    ret = -EINVAL;
+                    goto done;
+                }
+                snd_dev = my_plugin->out_snd_dev[use_case];
+                break;
+            }
+            case AUDIO_HAL_PLUGIN_DIRECTION_CAPTURE:
+            {
+                if (!my_plugin->in_snd_dev[use_case]) {
+                    ALOGE("%s: No valid in_snd_device found for capture (%d)",
+                            __func__, use_case);
+                    ret = -EINVAL;
+                    goto done;
+                }
+                snd_dev = my_plugin->in_snd_dev[use_case];
+                break;
+            }
+            default:
+                ALOGE("%s: Invalid direction param for plugin msg", __func__);
+                ret = -EINVAL;
+                goto done;
+            }
         }
 
         switch(val) {
@@ -768,22 +809,32 @@ done_tunnel:
 
             err = str_parms_get_int(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_EQ_ID,
                     (int*)&pp_eq.preset_id);
-            if ((err < 0) || (pp_eq.preset_id < -1)) {
+            if (err < 0) {
                 ALOGE("%s: Invalid or missing preset_id param for SET_PP_EQ", __func__);
                 ret = -EINVAL;
                 goto done;
             }
             str_parms_del(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_EQ_ID);
+            if (pp_eq.preset_id < -1) {
+                ALOGE("%s: Invalid preset_id param for SET_PP_EQ", __func__);
+                ret = -EINVAL;
+                goto done;
+            }
 
             if (pp_eq.preset_id == -1) {
                 err = str_parms_get_int(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_EQ_NUM_BANDS,
                         (int*)&pp_eq.num_bands);
-                if ((err < 0) || (!pp_eq.num_bands)) {
+                if (err < 0) {
                     ALOGE("%s: Invalid or missing num_bands param for SET_PP_EQ", __func__);
                     ret = -EINVAL;
                     goto done;
                 }
                 str_parms_del(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_EQ_NUM_BANDS);
+                if (!pp_eq.num_bands) {
+                    ALOGE("%s: Invalid num_bands param for SET_PP_EQ", __func__);
+                    ret = -EINVAL;
+                    goto done;
+                }
 
                 err = str_parms_get_str(parms,
                         AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_EQ_BAND_DATA, value, len);
@@ -872,11 +923,17 @@ int audio_extn_ext_hw_plugin_get_parameters(void *plugin,
 
     err = str_parms_get_int(query, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_UC,
             &use_case);
-    if ((err < 0) || (use_case < 0) || (use_case >= AUDIO_HAL_PLUGIN_USECASE_MAX)) {
+    if (err < 0) {
         ALOGI("%s: Invalid or missing usecase param for plugin msg", __func__);
         use_case = AUDIO_HAL_PLUGIN_USECASE_INVALID;
     } else {
         str_parms_del(query, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_UC);
+
+        if ((use_case < 0) || (use_case >= AUDIO_HAL_PLUGIN_USECASE_MAX)) {
+            ALOGI("%s: Invalid usecase param for plugin msg", __func__);
+            use_case = AUDIO_HAL_PLUGIN_USECASE_INVALID;
+            goto done_get_param;
+        }
 
         if (my_plugin->usecase_ref_count[use_case] == 0) {
             ALOGI("%s: plugin usecase (%d) is not enabled",

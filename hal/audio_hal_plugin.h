@@ -45,6 +45,7 @@ extern "C" {
 
 #define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_MSG_TYPE     "ext_hw_plugin_msg_type"
 #define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_UC           "ext_hw_plugin_usecase"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_DIRECTION    "ext_hw_plugin_direction"
 #define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_CMASK        "ext_hw_plugin_channel_mask"
 #define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_GAIN         "ext_hw_plugin_gain"
 #define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_MUTE_FLAG    "ext_hw_plugin_mute_flag"
@@ -98,6 +99,17 @@ typedef enum
     AUDIO_HAL_PLUGIN_USECASE_CS_VOICE_CALL,
     AUDIO_HAL_PLUGIN_USECASE_MAX
 } audio_hal_plugin_usecase_type_t;
+
+/**
+ * Type of audio hal plug-in direction used in set_param
+ */
+typedef enum
+{
+    AUDIO_HAL_PLUGIN_DIRECTION_INVALID = -1,
+    AUDIO_HAL_PLUGIN_DIRECTION_PLAYBACK = 0,
+    AUDIO_HAL_PLUGIN_DIRECTION_CAPTURE,
+    AUDIO_HAL_PLUGIN_DIRECTION_MAX
+} audio_hal_plugin_direction_type_t;
 
 /**
  * Type of query status mask
