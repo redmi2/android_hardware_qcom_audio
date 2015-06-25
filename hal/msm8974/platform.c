@@ -3154,8 +3154,6 @@ bool platform_check_codec_backend_cfg(struct audio_device* adev,
     unsigned int bit_width = CODEC_BACKEND_DEFAULT_BIT_WIDTH;
     unsigned int sample_rate = CODEC_BACKEND_DEFAULT_SAMPLE_RATE;
     char value[PROPERTY_VALUE_MAX] = {0};
-
-    // For voice calls use default configuration
     // force routing is not required here, caller will do it anyway
     if (voice_is_in_call(adev) || adev->mode == AUDIO_MODE_IN_COMMUNICATION) {
         ALOGW("%s:Use default bw and sr for voice/voip calls ",__func__);
