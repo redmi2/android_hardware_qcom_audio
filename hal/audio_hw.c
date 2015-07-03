@@ -2756,6 +2756,22 @@ static int in_remove_audio_effect(const struct audio_stream *stream,
     return add_remove_audio_effect(stream, effect, false);
 }
 
+static streams_input_ctxt_t *in_get_stream(struct audio_device *dev,
+                                  audio_io_handle_t input)
+{
+    struct listnode *node;
+
+    list_for_each(node, &dev->active_inputs_list) {
+        streams_input_ctxt_t *in_ctxt = node_to_item(node,
+                                                     streams_input_ctxt_t,
+                                                     list);
+        if (in_ctxt->input->capture_handle == input) {
+            return in_ctxt;
+        }
+    }
+    return NULL;
+}
+
 static int adev_open_output_stream(struct audio_hw_device *dev,
                                    audio_io_handle_t handle,
                                    audio_devices_t devices,
@@ -3401,7 +3417,7 @@ static size_t adev_get_input_buffer_size(const struct audio_hw_device *dev __unu
 }
 
 static int adev_open_input_stream(struct audio_hw_device *dev,
-                                  audio_io_handle_t handle __unused,
+                                  audio_io_handle_t handle,
                                   audio_devices_t devices,
                                   struct audio_config *config,
                                   struct audio_stream_in **stream_in,
@@ -3418,6 +3434,15 @@ static int adev_open_input_stream(struct audio_hw_device *dev,
     *stream_in = NULL;
     if (check_input_parameters(config->sample_rate, config->format, channel_count) != 0)
         return -EINVAL;
+
+    pthread_mutex_lock(&adev->lock);
+    if (in_get_stream(adev, handle) != NULL) {
+        ALOGW("%s, input stream already opened", __func__);
+        ret = -EEXIST;
+    }
+    pthread_mutex_unlock(&adev->lock);
+    if (ret)
+        return ret;
 
     in = (struct stream_in *)calloc(1, sizeof(struct stream_in));
 
@@ -3518,6 +3543,20 @@ static int adev_open_input_stream(struct audio_hw_device *dev,
     audio_extn_sound_trigger_check_and_get_session(in);
 
     *stream_in = &in->stream;
+
+    streams_input_ctxt_t *in_ctxt = (streams_input_ctxt_t *)
+        calloc(1, sizeof(streams_input_ctxt_t));
+    if (in_ctxt == NULL) {
+        ALOGE("%s fail to allocate input ctxt", __func__);
+        ret = -ENOMEM;
+        goto err_open;
+    }
+    in_ctxt->input = in;
+
+    pthread_mutex_lock(&adev->lock);
+    list_add_tail(&adev->active_inputs_list, &in_ctxt->list);
+    pthread_mutex_unlock(&adev->lock);
+
     ALOGV("%s: exit", __func__);
     return ret;
 
@@ -3558,7 +3597,15 @@ static void adev_close_input_stream(struct audio_hw_device *dev,
             audio_extn_compr_cap_format_supported(in->config.format))
         audio_extn_compr_cap_deinit();
 
+    pthread_mutex_lock(&adev->lock);
+    streams_input_ctxt_t *in_ctxt = in_get_stream(adev, in->capture_handle);
+    if (in_ctxt != NULL) {
+        list_remove(&in_ctxt->list);
+    } else {
+        ALOGW("%s, input stream already closed", __func__);
+    }
     free(stream);
+    pthread_mutex_unlock(&adev->lock);
     return;
 }
 
@@ -3566,6 +3613,212 @@ static int adev_dump(const audio_hw_device_t *device __unused,
                      int fd __unused)
 {
     return 0;
+}
+
+static struct audio_patch_record *get_patch_from_list(struct audio_device *adev,
+                                            audio_patch_handle_t patch_id)
+{
+    struct audio_patch_record *patch;
+    struct listnode *node;
+
+    list_for_each(node, &adev->audio_patch_record_list) {
+        patch = node_to_item(node, struct audio_patch_record, list);
+        if (patch->handle == patch_id)
+            return patch;
+    }
+    return NULL;
+}
+
+static int adev_create_audio_patch(struct audio_hw_device *dev,
+                               unsigned int num_sources,
+                               const struct audio_port_config *sources,
+                               unsigned int num_sinks,
+                               const struct audio_port_config *sinks,
+                               audio_patch_handle_t *handle)
+{
+    struct audio_device *adev = (struct audio_device *)dev;
+    int ret = 0;
+    struct audio_patch_record *patch_record;
+    struct audio_usecase *uc_info = NULL;
+    audio_usecase_t usecase = USECASE_INVALID;
+    audio_io_handle_t io_handle = AUDIO_IO_HANDLE_NONE;
+
+    ALOGV("adev_create_audio_patch enter");
+
+    if (!sources || !sinks || !handle ) {
+        ALOGE("%s: invalid input parameters", __func__);
+        return -EINVAL;
+    }
+
+    /* Release patch if valid handle */
+    if (*handle != AUDIO_PATCH_HANDLE_NONE) {
+        ret = adev->device.release_audio_patch(dev, *handle);
+        if (ret) {
+            ALOGE("%s: failed to release patch (%d)", __func__, *handle);
+        }
+    }
+
+    /* No validation on num of sources and sinks to allow patch with multiple sinks */
+    /* being created, but only the first source and sink are used to create patch*/
+    if ((sources->type == AUDIO_PORT_TYPE_DEVICE) &&
+        (sinks->type == AUDIO_PORT_TYPE_MIX)) {
+        pthread_mutex_lock(&adev->lock);
+        streams_input_ctxt_t *in_ctxt = in_get_stream(adev, sinks->ext.mix.handle);
+        if (!in_ctxt) {
+            ALOGE("%s, failed to find input stream", __func__);
+            ret = -EINVAL;
+        } else {
+            in_ctxt->input->source = sinks->ext.mix.usecase.source;
+            io_handle = sinks->ext.mix.handle;
+        }
+        pthread_mutex_unlock(&adev->lock);
+        if(ret)
+            return ret;
+    } else if ((sources->type == AUDIO_PORT_TYPE_DEVICE) &&
+        (sinks->type == AUDIO_PORT_TYPE_DEVICE)) {
+        /* allocate use case and call to plugin driver*/
+        uc_info = (struct audio_usecase *)calloc(1, sizeof(struct audio_usecase));
+        if (!uc_info) {
+            ALOGE("%s fail to allocate uc_info", __func__);
+            return -ENOMEM;
+        }
+        /* TODO - add sink type check and printout for non speaker sink */
+        switch(sources->ext.device.type) {
+        case AUDIO_DEVICE_IN_LINE:
+            uc_info->id = USECASE_AUDIO_LINE_IN_PASSTHROUGH;
+            uc_info->type = PCM_PASSTHROUGH;
+            uc_info->devices = AUDIO_DEVICE_IN_LINE;
+            uc_info->in_snd_device = SND_DEVICE_IN_LINE;
+            uc_info->out_snd_device = SND_DEVICE_OUT_SPEAKER;
+            break;
+        case AUDIO_DEVICE_IN_HDMI:
+            uc_info->id = USECASE_AUDIO_HDMI_IN_PASSTHROUGH;
+            uc_info->type = PCM_PASSTHROUGH;
+            uc_info->devices = AUDIO_DEVICE_IN_HDMI;
+            uc_info->in_snd_device = SND_DEVICE_IN_HDMI_MIC;
+            uc_info->out_snd_device = SND_DEVICE_OUT_SPEAKER;
+            break;
+        default:
+            ALOGE("%s: Unsupported audio source type :%x", __func__,
+                sources->ext.device.type);
+            goto error_config;
+        }
+
+        ALOGV("%s: Starting ext hw plugin use case(%d) in_snd_device(%d) out_snd_device(%d)",
+              __func__, uc_info->id, uc_info->in_snd_device, uc_info->out_snd_device);
+
+        /* TODO - add checking on whether the use case existing based on use case id */
+        ret = audio_extn_ext_hw_plugin_usecase_start(adev->ext_hw_plugin, uc_info);
+        if (ret) {
+            ALOGE("%s: failed to start ext hw plugin use case(%d)",
+                __func__, uc_info->id);
+            goto error_config;
+        }
+        usecase = uc_info->id;
+        pthread_mutex_lock(&adev->lock);
+        list_add_tail(&adev->usecase_list, &uc_info->list);
+        pthread_mutex_unlock(&adev->lock);
+    } else {
+        ALOGV("%s: skip patch creation for types other than device", __func__);
+        return ret;
+    }
+
+    /* patch created success, add to patch record list */
+    patch_record = (struct audio_patch_record *)calloc(1,
+        sizeof(struct audio_patch_record));
+
+    ALOGD("%s: enter: num_src(%d) num_src(%d) src_id(%d) src_role(%d) \
+        src_dev_type(%d) sink_id(%d) sink_role(%d) sink_dev_type(%d)",__func__,
+        num_sources, num_sinks, sources->id, sources->role,
+        sources->ext.device.type, sinks->id, sinks->role,
+        sinks->ext.device.type);
+
+    if (!patch_record) {
+        ALOGE("%s fail to allocate patch_record", __func__);
+        ret = -ENOMEM;
+        goto error_config;
+    }
+
+    pthread_mutex_lock(&adev->lock);
+    adev->audio_patch_index++;
+    patch_record->handle = adev->audio_patch_index;
+    patch_record->usecase = usecase;
+    patch_record->io_handle = io_handle;
+    list_add_tail(&adev->audio_patch_record_list, &patch_record->list);
+    pthread_mutex_unlock(&adev->lock);
+
+    *handle = patch_record->handle;
+    return ret;
+
+error_config:
+    if (uc_info)
+        free(uc_info);
+    return ret;
+}
+
+static int adev_release_audio_patch(struct audio_hw_device *dev,
+                               audio_patch_handle_t handle)
+{
+    struct audio_device *adev = (struct audio_device *)dev;
+    int ret = 0;
+    struct audio_usecase *uc_info = NULL;
+    struct audio_patch_record *patch_record = NULL;
+    streams_input_ctxt_t *in_ctxt = NULL;
+
+    ALOGV("adev_release_audio_patch enter");
+
+    if (handle == AUDIO_PATCH_HANDLE_NONE) {
+        ALOGE("%s: invalid input parameters", __func__);
+        return -EINVAL;
+    }
+
+    pthread_mutex_lock(&adev->lock);
+
+    /* get the patch record from handle */
+    patch_record = get_patch_from_list(adev, handle);
+    if(!patch_record) {
+        ALOGE("%s: failed to find the patch record with handle(%d) in the list",
+              __func__, handle);
+        ret = -EINVAL;
+        goto exit;
+    }
+
+    if (patch_record->io_handle) {
+        in_ctxt = in_get_stream(adev, patch_record->io_handle);
+        if (!in_ctxt) {
+            ALOGI("%s, Could not find input stream", __func__);
+        } else {
+            in_ctxt->input->source = AUDIO_SOURCE_DEFAULT;
+        }
+    }
+
+    if (patch_record->usecase != USECASE_INVALID) {
+        uc_info = get_usecase_from_list(adev, patch_record->usecase);
+        if (!uc_info) {
+            ALOGE("%s: failed to find the usecase (%d)",
+                  __func__, patch_record->usecase);
+            ret = -EINVAL;
+        } else {
+            /* call to plugin to stop the usecase */
+            ret = audio_extn_ext_hw_plugin_usecase_stop(adev->ext_hw_plugin, uc_info);
+            if (ret) {
+                ALOGE("%s: failed to stop ext hw plugin use case(%d)",
+                    __func__, uc_info->id);
+            }
+
+            /* remove usecase from list and free it */
+            list_remove(&uc_info->list);
+            free(uc_info);
+        }
+    }
+
+    /* remove the patch record from list and free it */
+    list_remove(&patch_record->list);
+    free(patch_record);
+
+exit:
+    pthread_mutex_unlock(&adev->lock);
+    return ret;
 }
 
 static int adev_close(hw_device_t *device)
@@ -3639,7 +3892,7 @@ static int adev_open(const hw_module_t *module, const char *name,
     pthread_mutex_init(&adev->lock, (const pthread_mutexattr_t *) NULL);
 
     adev->device.common.tag = HARDWARE_DEVICE_TAG;
-    adev->device.common.version = AUDIO_DEVICE_API_VERSION_2_0;
+    adev->device.common.version = AUDIO_DEVICE_API_VERSION_3_0;
     adev->device.common.module = (struct hw_module_t *)module;
     adev->device.common.close = adev_close;
 
@@ -3660,6 +3913,8 @@ static int adev_open(const hw_module_t *module, const char *name,
     adev->device.open_input_stream = adev_open_input_stream;
     adev->device.close_input_stream = adev_close_input_stream;
     adev->device.dump = adev_dump;
+    adev->device.create_audio_patch = adev_create_audio_patch;
+    adev->device.release_audio_patch = adev_release_audio_patch;
 
     /* Set the default route before the PCM stream is opened */
     adev->mode = AUDIO_MODE_NORMAL;
@@ -3674,6 +3929,8 @@ static int adev_open(const hw_module_t *module, const char *name,
     adev->snd_dev_ref_cnt = calloc(SND_DEVICE_MAX, sizeof(int));
     voice_init(adev);
     list_init(&adev->usecase_list);
+    list_init(&adev->audio_patch_record_list);
+    list_init(&adev->active_inputs_list);
     adev->cur_wfd_channels = 2;
     adev->offload_usecases_state = 0;
 
