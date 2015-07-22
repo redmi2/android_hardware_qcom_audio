@@ -26,6 +26,8 @@
 
 void *platform_init(struct audio_device *adev);
 void platform_deinit(void *platform);
+int platform_is_acdb_initialized(void *platform);
+int platform_acdb_init(void *platform);
 const char *platform_get_snd_device_name(snd_device_t snd_device);
 int platform_get_snd_device_name_extn(void *platform, snd_device_t snd_device,
                                       char *device_name);
@@ -115,4 +117,5 @@ int platform_set_spkr_device_tz_names(snd_device_t index,
                                        const char *spkr_1_tz_name, const char *spkr_2_tz_name);
 const char *platform_get_spkr_1_tz_name(snd_device_t snd_device);
 const char *platform_get_spkr_2_tz_name(snd_device_t snd_device);
+int platform_get_wsa_mode(void *platform);
 #endif // AUDIO_PLATFORM_API_H

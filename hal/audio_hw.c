@@ -899,6 +899,9 @@ int select_devices(struct audio_device *adev, audio_usecase_t uc_id)
         (usecase->in_snd_device != SND_DEVICE_NONE) &&
         (usecase->out_snd_device != SND_DEVICE_NONE)) {
         status = platform_switch_voice_call_device_pre(adev->platform);
+        /* Disable sidetone only if voice call already exists */
+        if (voice_is_call_state_active(adev))
+            voice_set_sidetone(adev, usecase->out_snd_device, false);
     }
 
     /* Disable current sound devices */
@@ -941,6 +944,9 @@ int select_devices(struct audio_device *adev, audio_usecase_t uc_id)
                                                         out_snd_device,
                                                         in_snd_device);
         enable_audio_route_for_voice_usecases(adev, usecase);
+        /* Enable sidetone only if voice call already exists */
+        if (voice_is_call_state_active(adev))
+            voice_set_sidetone(adev, out_snd_device, true);
     }
 
     usecase->in_snd_device = in_snd_device;
@@ -3133,6 +3139,12 @@ static int adev_set_parameters(struct audio_hw_device *dev, const char *kvpairs)
         } else if (strstr(snd_card_status, "ONLINE")) {
             ALOGD("Received sound card ONLINE status");
             set_snd_card_state(adev,SND_CARD_STATE_ONLINE);
+            if (!platform_is_acdb_initialized(adev->platform)) {
+                ret = platform_acdb_init(adev->platform);
+                if(ret)
+                   ALOGE("acdb initialization is failed");
+
+            }
         }
     }
 
