@@ -1751,7 +1751,7 @@ int platform_get_snd_device_bit_width(snd_device_t snd_device)
 {
     if ((snd_device < SND_DEVICE_MIN) || (snd_device >= SND_DEVICE_MAX)) {
         ALOGE("%s: Invalid snd_device = %d", __func__, snd_device);
-        return DEFAULT_OUTPUT_SAMPLING_RATE;
+        return CODEC_BACKEND_DEFAULT_BIT_WIDTH;
     }
     return backend_bit_width_table[snd_device];
 }
@@ -3527,7 +3527,7 @@ bool platform_check_codec_backend_cfg(struct audio_device* adev,
         }
     }
 
-    // 16 bit playback on speakers is allowed through 48 khz backend only
+    /* 16 bit playback is allowed through 48 khz backend only */
     if (16 == bit_width) {
         sample_rate = CODEC_BACKEND_DEFAULT_SAMPLE_RATE;
     }
@@ -3554,6 +3554,15 @@ bool platform_check_codec_backend_cfg(struct audio_device* adev,
         bit_width = (uint32_t)platform_get_snd_device_bit_width(SND_DEVICE_OUT_SPEAKER);
         sample_rate = CODEC_BACKEND_DEFAULT_SAMPLE_RATE;
     }
+
+    /*
+     * Sample rate greater than 48K is only supported by external codecs on
+     * specific devices e.g. Headphones, reset the sample rate to
+     * default value if not external codec.
+     */
+    if (!is_external_codec)
+        sample_rate = CODEC_BACKEND_DEFAULT_SAMPLE_RATE;
+
     // Force routing if the expected bitwdith or samplerate
     // is not same as current backend comfiguration
     if ((bit_width != adev->cur_codec_backend_bit_width) ||
