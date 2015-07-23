@@ -136,9 +136,6 @@ enum {
     USECASE_AUDIO_PLAYBACK_RES,
     USECASE_AUDIO_PLAYBACK_RES_OFFLOAD,
 
-    USECASE_AUDIO_LINE_IN_PASSTHROUGH,
-    USECASE_AUDIO_HDMI_IN_PASSTHROUGH,
-
     AUDIO_USECASE_MAX
 };
 
@@ -246,8 +243,7 @@ typedef enum {
     PCM_CAPTURE,
     VOICE_CALL,
     VOIP_CALL,
-    PCM_HFP_CALL,
-    PCM_PASSTHROUGH,
+    PCM_HFP_CALL
 } usecase_type_t;
 
 union stream_ptr {
@@ -288,11 +284,6 @@ struct streams_output_cfg {
     struct stream_app_type_cfg app_type_cfg;
 };
 
-typedef struct streams_input_ctxt {
-    struct listnode list;
-    struct stream_in *input;
-} streams_input_ctxt_t;
-
 struct audio_device {
     struct audio_hw_device device;
     pthread_mutex_t lock; /* see note below on mutex acquisition order */
@@ -331,16 +322,6 @@ struct audio_device {
     struct sound_card_status snd_card_status;
     int (*offload_effects_set_hpx_state)(bool);
     void *ext_hw_plugin;
-    struct listnode audio_patch_record_list;
-    unsigned int audio_patch_index;
-    struct listnode active_inputs_list;
-};
-
-struct audio_patch_record {
-    struct listnode list;
-    audio_patch_handle_t handle;
-    audio_usecase_t usecase;
-    audio_io_handle_t io_handle;
 };
 
 int select_devices(struct audio_device *adev,
