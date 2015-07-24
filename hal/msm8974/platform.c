@@ -3891,7 +3891,7 @@ done:
     return ret;
 }
 
-int platform_get_wsa_mode (void *platform)
+int platform_get_wsa_mode (void *adev)
 {
     return 0;
 }
