@@ -172,12 +172,6 @@ static int32_t ext_hw_plugin_check_plugin_usecase(audio_usecase_t hal_usecase,
     case USECASE_AUDIO_PLAYBACK_RES_OFFLOAD:
         *plugin_usecase = AUDIO_HAL_PLUGIN_USECASE_RES_PLAYBACK;
         break;
-    case USECASE_AUDIO_LINE_IN_PASSTHROUGH:
-        *plugin_usecase = AUDIO_HAL_PLUGIN_USECASE_LINE_IN_PASSTHROUGH;
-        break;
-    case USECASE_AUDIO_HDMI_IN_PASSTHROUGH:
-        *plugin_usecase = AUDIO_HAL_PLUGIN_USECASE_HDMI_IN_PASSTHROUGH;
-        break;
     default:
         ret = -EINVAL;
     }
@@ -237,8 +231,7 @@ int32_t audio_extn_ext_hw_plugin_usecase_start(void *plugin, struct audio_usecas
             my_plugin->out_snd_dev[codec_enable.usecase] = codec_enable.snd_dev;
         }
         if ((usecase->type == PCM_CAPTURE) || (usecase->type == VOICE_CALL) ||
-            (usecase->type == VOIP_CALL) || (usecase->type == PCM_HFP_CALL) ||
-            (usecase->type == PCM_PASSTHROUGH)) {
+            (usecase->type == VOIP_CALL) || (usecase->type == PCM_HFP_CALL)) {
             codec_enable.snd_dev = usecase->in_snd_device;
             /* TODO - below should be related with in_snd_dev */
             codec_enable.sample_rate = 48000;
@@ -317,8 +310,7 @@ int32_t audio_extn_ext_hw_plugin_usecase_stop(void *plugin, struct audio_usecase
             my_plugin->out_snd_dev[codec_disable.usecase] = 0;
         }
         if ((usecase->type == PCM_CAPTURE) || (usecase->type == VOICE_CALL) ||
-        (usecase->type == VOIP_CALL) || (usecase->type == PCM_HFP_CALL) ||
-        (usecase->type == PCM_PASSTHROUGH)) {
+        (usecase->type == VOIP_CALL) || (usecase->type == PCM_HFP_CALL)) {
             codec_disable.snd_dev = usecase->in_snd_device;
 
             ALOGD("%s: disable audio hal plugin input, %d, %d",
