@@ -632,6 +632,7 @@ void AudioPolicyManagerCustom::setPhoneState(audio_mode_t state)
         }
     }
 
+#if 0
     // if entering in call state, handle special case of active streams
     // pertaining to sonification strategy see handleIncallSonification()
     if (isStateInCall(state)) {
@@ -640,6 +641,7 @@ void AudioPolicyManagerCustom::setPhoneState(audio_mode_t state)
             handleIncallSonification((audio_stream_type_t)stream, true, true);
         }
     }
+#endif
 
     // Flag that ringtone volume must be limited to music volume until we exit MODE_RINGTONE
     if (state == AUDIO_MODE_RINGTONE &&
