@@ -1253,16 +1253,10 @@ static void *offload_thread_loop(void *context)
             event = STREAM_CBK_EVENT_WRITE_READY;
             break;
         case OFFLOAD_CMD_PARTIAL_DRAIN:
-            ret = compress_next_track(out->compr);
-            if(ret == 0) {
-                ALOGD("copl(%p):calling compress_partial_drain", out);
-                compress_partial_drain(out->compr);
-                ALOGD("copl(%p):out of compress_partial_drain", out);
-            }
-            else if(ret == -ETIMEDOUT)
-                compress_drain(out->compr);
-            else
-                ALOGE("%s: Next track returned error %d",__func__, ret);
+            compress_next_track(out->compr);
+            ALOGD("copl(%p):calling compress_drain", out);
+            compress_drain(out->compr);
+            ALOGD("copl(%p):out of compress_drain", out);
             send_callback = true;
             event = STREAM_CBK_EVENT_DRAIN_READY;
             /* Resend the metadata for next iteration */
