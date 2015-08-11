@@ -486,7 +486,7 @@ int enable_snd_device(struct audio_device *adev,
     if(SND_DEVICE_IN_USB_HEADSET_MIC == snd_device)
        audio_extn_usb_start_capture(adev);
 
-    if ((snd_device == SND_DEVICE_OUT_SPEAKER ||
+    if ((snd_device == SND_DEVICE_OUT_SPEAKER || snd_device == SND_DEVICE_OUT_SPEAKER_WSA ||
         snd_device == SND_DEVICE_OUT_VOICE_SPEAKER) &&
         audio_extn_spkr_prot_is_enabled()) {
        if (audio_extn_spkr_prot_get_acdb_id(snd_device) < 0) {
@@ -556,7 +556,7 @@ int disable_snd_device(struct audio_device *adev,
         if(SND_DEVICE_IN_USB_HEADSET_MIC == snd_device)
             audio_extn_usb_stop_capture();
 
-        if ((snd_device == SND_DEVICE_OUT_SPEAKER ||
+        if ((snd_device == SND_DEVICE_OUT_SPEAKER || snd_device == SND_DEVICE_OUT_SPEAKER_WSA ||
             snd_device == SND_DEVICE_OUT_VOICE_SPEAKER) &&
             audio_extn_spkr_prot_is_enabled()) {
             audio_extn_spkr_prot_stop_processing(snd_device);
@@ -682,7 +682,8 @@ static void check_and_route_capture_usecases(struct audio_device *adev,
         if (usecase->type != PCM_PLAYBACK &&
                 usecase != uc_info &&
                 usecase->in_snd_device != snd_device &&
-                (usecase->devices & AUDIO_DEVICE_OUT_ALL_CODEC_BACKEND) &&
+                ((uc_info->devices & AUDIO_DEVICE_OUT_ALL_CODEC_BACKEND) &&
+                ((usecase->devices & ~AUDIO_DEVICE_BIT_IN) & AUDIO_DEVICE_IN_ALL_CODEC_BACKEND)) &&
                 (usecase->id != USECASE_AUDIO_SPKR_CALIB_TX)) {
             ALOGV("%s: Usecase (%s) is active on (%s) - disabling ..",
                   __func__, use_case_table[usecase->id],
