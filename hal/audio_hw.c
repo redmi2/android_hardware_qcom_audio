@@ -2766,7 +2766,7 @@ static streams_input_ctxt_t *in_get_stream(struct audio_device *dev,
     return NULL;
 }
 
-static streams_input_ctxt_t *out_get_stream(struct audio_device *dev,
+static streams_output_ctxt_t *out_get_stream(struct audio_device *dev,
                                   audio_io_handle_t output)
 {
     struct listnode *node;
