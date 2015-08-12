@@ -62,6 +62,7 @@ extern "C" {
 #define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_TUNNEL_DATA  "ext_hw_plugin_tunnel_data"
 #define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_GETPARAM_RESULT "ext_hw_plugin_getparam_result"
 #define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_GETPARAM_DATA "ext_hw_plugin_getparam_data"
+#define AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_TUNNEL_GET_SIZE "ext_hw_plugin_tunnel_get_size"
 /**
  * Type of audio hal plug-in messages
  */
@@ -83,6 +84,7 @@ typedef enum
     AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_BMT, /**< get bmt params */
     AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_EQ, /**< get EQ params */
     AUDIO_HAL_PLUGIN_MSG_CODEC_GET_PP_EQ_SUBBANDS, /**< get EQ subbands params */
+    AUDIO_HAL_PLUGIN_MSG_CODEC_TUNNEL_GET_CMD, /**< pass through get cmds */
     AUDIO_HAL_PLUGIN_MSG_MAX
 } audio_hal_plugin_msg_type_t;
 
@@ -328,6 +330,18 @@ typedef struct audio_hal_plugin_codec_get_pp_eq_subbands
                                           returned from get_pp_eq query */
     audio_hal_plugin_pp_eq_subband_binfo_t *ret_bands; /**< Returned subband info list */
 } audio_hal_plugin_codec_get_pp_eq_subbands_t;
+
+/**
+ * Payload of AUDIO_HAL_PLUGIN_MSG_CODEC_TUNNEL_GET_CMD message
+ */
+typedef struct audio_hal_plugin_codec_tunnel_get
+{
+    int32_t *param_data; /**< Request param data from client */
+    uint32_t param_size; /**< Request 32-bit data size from client */
+    uint32_t size_to_get; /**< Expected 32-bit data size to get from cleint */
+    int32_t *ret_data; /**< Returned data */
+    uint32_t ret_size; /**< Returned 32-bit data size */
+} audio_hal_plugin_codec_tunnel_get_t;
 
 /**
  * Initialize the audio hal plug-in module and underlying hw driver
