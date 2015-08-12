@@ -191,7 +191,7 @@ typedef struct audio_hal_plugin_codec_set_pp_fade
 {
     snd_device_t snd_dev; /**< The requested endpoint device */
     audio_hal_plugin_usecase_type_t usecase; /**< Requested use case */
-    uint32_t fade; /**< The requested fade configuration. */
+    int32_t fade; /**< The requested fade configuration. */
 } audio_hal_plugin_codec_set_pp_fade_t;
 
 /**
@@ -201,7 +201,7 @@ typedef struct audio_hal_plugin_codec_set_pp_balance
 {
     snd_device_t snd_dev; /**< The requested endpoint device */
     audio_hal_plugin_usecase_type_t usecase; /**< Requested use case */
-    uint32_t balance; /**< The requested balance configuration. */
+    int32_t balance; /**< The requested balance configuration. */
 } audio_hal_plugin_codec_set_pp_balance_t;
 
 /**
@@ -222,7 +222,7 @@ typedef struct audio_hal_plugin_codec_set_pp_bmt
     audio_hal_plugin_usecase_type_t usecase; /**< Requested use case */
     audio_hal_plugin_codec_pp_filter_type_t filter_type; /**< Requested filter type */
     bool enable_flag; /**< Enable flag. 0 - Disable, 1 - Enable */
-    uint32_t value; /**< Requested value to be set */
+    int32_t value; /**< Requested value to be set */
 } audio_hal_plugin_codec_set_pp_bmt_t;
 
 /**
@@ -266,7 +266,7 @@ typedef struct audio_hal_plugin_codec_get_pp_fade
 {
     snd_device_t snd_dev; /**< The requested endpoint device */
     audio_hal_plugin_usecase_type_t usecase; /**< Requested use case */
-    audio_hal_plugin_buint32_t ret_fade; /**< Returned fade range and value. */
+    audio_hal_plugin_bint32_t ret_fade; /**< Returned fade range and value. */
 } audio_hal_plugin_codec_get_pp_fade_t;
 
 /**
@@ -276,7 +276,7 @@ typedef struct audio_hal_plugin_codec_get_pp_balance
 {
     snd_device_t snd_dev; /**< The requested endpoint device */
     audio_hal_plugin_usecase_type_t usecase; /**< Requested use case */
-    audio_hal_plugin_buint32_t ret_balance; /**< Returned balance range and value. */
+    audio_hal_plugin_bint32_t ret_balance; /**< Returned balance range and value. */
 } audio_hal_plugin_codec_get_pp_balance_t;
 
 /**
@@ -287,7 +287,7 @@ typedef struct audio_hal_plugin_codec_get_pp_bmt
     snd_device_t snd_dev; /**< The requested endpoint device */
     audio_hal_plugin_usecase_type_t usecase; /**< Requested use case */
     audio_hal_plugin_codec_pp_filter_type_t filter_type; /**< Requested filter type */
-    audio_hal_plugin_buint32_t ret_value; /**< Returned range and value */
+    audio_hal_plugin_bint32_t ret_value; /**< Returned range and value */
 } audio_hal_plugin_codec_get_pp_bmt_t;
 
 /**
