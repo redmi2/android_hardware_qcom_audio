@@ -150,20 +150,16 @@ static void fade_node(bool need_data) {
     if (strncmp("true", prop, sizeof("true")))
         return;
     int fd, n = 0;
-    if ((fd = open(FADE_NOTIFY_FILE, O_RDONLY)) < 0)
-        ALOGV("No fade node");
-    else {
-        ALOGV("fade node exists, remove it before creating it");
-        close(fd);
-        remove(FADE_NOTIFY_FILE);
+    if ((fd = open(FADE_NOTIFY_FILE, O_TRUNC|O_WRONLY)) < 0) {
+        ALOGV("No fade node, create one");
+        fd = creat(FADE_NOTIFY_FILE, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+        if (fd < 0) {
+            ALOGE("DTS_EAGLE_HAL (%s): Creating fade notifier node failed", __func__);
+            return;
+        }
+        chmod(FADE_NOTIFY_FILE, S_IRWXU|S_IRGRP|S_IXGRP|S_IROTH);
     }
-    fd = creat(FADE_NOTIFY_FILE, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
     char *str = need_data ? "need" : "have";
-    if (fd < 0) {
-        ALOGE("DTS_EAGLE_HAL (%s): opening fade notifier node failed", __func__);
-        return;
-    }
-    chmod(FADE_NOTIFY_FILE, S_IRWXU|S_IRGRP|S_IXGRP|S_IROTH);
     n = write(fd, str, strlen(str));
     close(fd);
     if (n > 0)
@@ -192,6 +188,25 @@ int audio_extn_dts_eagle_fade(const struct audio_device *adev, bool fade_in, con
             return do_DTS_Eagle_params(adev, fade_out_data, false, out);
     }
     return 0;
+}
+
+void audio_extn_dts_eagle_send_lic() {
+    char prop[PROPERTY_VALUE_MAX];
+    property_get("use.dts_eagle", prop, "0");
+    if (strncmp("true", prop, sizeof("true")))
+        return;
+    int fd = open(DEVICE_NODE, O_RDWR);
+    int index = 1;
+    if(fd > 0) {
+        if(ioctl(fd, DTS_EAGLE_IOCTL_SEND_LICENSE, &index) < 0) {
+            ALOGE("DTS_EAGLE_HAL: error sending license after adsp ssr");
+        }
+        ALOGD("DTS_EAGLE_HAL: sent license after adsp ssr");
+        close(fd);
+    } else {
+        ALOGE("DTS_EAGLE_HAL: error opening eagle");
+    }
+    return;
 }
 
 void audio_extn_dts_eagle_set_parameters(struct audio_device *adev, struct str_parms *parms) {
