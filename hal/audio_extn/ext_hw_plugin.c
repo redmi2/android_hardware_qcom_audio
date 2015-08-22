@@ -548,55 +548,53 @@ done_tunnel:
         }
 
         if (my_plugin->usecase_ref_count[use_case] == 0) {
-            ALOGE("%s: plugin usecase (%d) is not enabled", __func__, use_case);
-            /* TODO: do we need to cache the setting when usecase is not active? */
-            ret = -EINVAL;
-            goto done;
-        }
-
-        err = str_parms_get_int(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_DIRECTION,
-                &dir);
-        if (err < 0) {
-            if (my_plugin->out_snd_dev[use_case]) {
-                snd_dev = my_plugin->out_snd_dev[use_case];
-            } else if (my_plugin->in_snd_dev[use_case]) {
-                snd_dev = my_plugin->in_snd_dev[use_case];
-            } else {
-                ALOGE("%s: No valid snd_device found for the usecase (%d)",
-                        __func__, use_case);
-                ret = -EINVAL;
-                goto done;
-            }
+            /* allow param set when usecase not enabled */
+            ALOGI("%s: plugin usecase (%d) is not enabled", __func__, use_case);
         } else {
-            str_parms_del(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_DIRECTION);
-
-            switch(dir) {
-            case AUDIO_HAL_PLUGIN_DIRECTION_PLAYBACK:
-            {
-                if (!my_plugin->out_snd_dev[use_case]) {
-                    ALOGE("%s: No valid out_snd_device found for playback (%d)",
+            err = str_parms_get_int(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_DIRECTION,
+                    &dir);
+            if (err < 0) {
+                if (my_plugin->out_snd_dev[use_case]) {
+                    snd_dev = my_plugin->out_snd_dev[use_case];
+                } else if (my_plugin->in_snd_dev[use_case]) {
+                    snd_dev = my_plugin->in_snd_dev[use_case];
+                } else {
+                    ALOGE("%s: No valid snd_device found for the usecase (%d)",
                             __func__, use_case);
                     ret = -EINVAL;
                     goto done;
                 }
-                snd_dev = my_plugin->out_snd_dev[use_case];
-                break;
-            }
-            case AUDIO_HAL_PLUGIN_DIRECTION_CAPTURE:
-            {
-                if (!my_plugin->in_snd_dev[use_case]) {
-                    ALOGE("%s: No valid in_snd_device found for capture (%d)",
-                            __func__, use_case);
+            } else {
+                str_parms_del(parms, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_DIRECTION);
+    
+                switch(dir) {
+                case AUDIO_HAL_PLUGIN_DIRECTION_PLAYBACK:
+                {
+                    if (!my_plugin->out_snd_dev[use_case]) {
+                        ALOGE("%s: No valid out_snd_device found for playback (%d)",
+                                __func__, use_case);
+                        ret = -EINVAL;
+                        goto done;
+                    }
+                    snd_dev = my_plugin->out_snd_dev[use_case];
+                    break;
+                }
+                case AUDIO_HAL_PLUGIN_DIRECTION_CAPTURE:
+                {
+                    if (!my_plugin->in_snd_dev[use_case]) {
+                        ALOGE("%s: No valid in_snd_device found for capture (%d)",
+                                __func__, use_case);
+                        ret = -EINVAL;
+                        goto done;
+                    }
+                    snd_dev = my_plugin->in_snd_dev[use_case];
+                    break;
+                }
+                default:
+                    ALOGE("%s: Invalid direction param for plugin msg", __func__);
                     ret = -EINVAL;
                     goto done;
                 }
-                snd_dev = my_plugin->in_snd_dev[use_case];
-                break;
-            }
-            default:
-                ALOGE("%s: Invalid direction param for plugin msg", __func__);
-                ret = -EINVAL;
-                goto done;
             }
         }
 
