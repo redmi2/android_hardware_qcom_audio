@@ -891,7 +891,8 @@ done:
 int audio_extn_ext_hw_plugin_get_parameters(void *plugin,
                   struct str_parms *query, struct str_parms *reply)
 {
-    int32_t val;
+    char *value = NULL;
+    int32_t val, len = 0;;
     int32_t ret = 0, err;
     int32_t rbuf_dlen = 0;
     uint32_t *rbuf_dptr = NULL;
@@ -899,6 +900,7 @@ int audio_extn_ext_hw_plugin_get_parameters(void *plugin,
     audio_hal_plugin_usecase_type_t use_case = AUDIO_HAL_PLUGIN_USECASE_INVALID;
     snd_device_t snd_dev = 0;
     struct ext_hw_plugin_data *my_plugin = NULL;
+    char *kv_pairs = NULL;
 
     if(plugin == NULL || query == NULL || reply == NULL) {
         ALOGE("[%s] received null pointer",__func__);
@@ -920,34 +922,45 @@ int audio_extn_ext_hw_plugin_get_parameters(void *plugin,
         goto done_get_param;
     }
 
-    err = str_parms_get_int(query, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_UC,
-            &use_case);
-    if (err < 0) {
-        ALOGI("%s: Invalid or missing usecase param for plugin msg", __func__);
-        use_case = AUDIO_HAL_PLUGIN_USECASE_INVALID;
-    } else {
-        str_parms_del(query, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_UC);
-
-        if ((use_case < 0) || (use_case >= AUDIO_HAL_PLUGIN_USECASE_MAX)) {
-            ALOGI("%s: Invalid usecase param for plugin msg", __func__);
-            use_case = AUDIO_HAL_PLUGIN_USECASE_INVALID;
+    if(val == AUDIO_HAL_PLUGIN_MSG_CODEC_TUNNEL_GET_CMD) {
+        kv_pairs = str_parms_to_str(query);
+        len = strlen(kv_pairs);
+        value = (char*)calloc(len, sizeof(char));
+        if (value == NULL) {
+            ret = -ENOMEM;
+            ALOGE("[%s] failed to allocate memory",__func__);
             goto done_get_param;
         }
-
-        if (my_plugin->usecase_ref_count[use_case] == 0) {
-            ALOGI("%s: plugin usecase (%d) is not enabled",
-                    __func__, use_case);
+    } else {
+        err = str_parms_get_int(query, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_UC,
+                &use_case);
+        if (err < 0) {
+            ALOGI("%s: Invalid or missing usecase param for plugin msg", __func__);
+            use_case = AUDIO_HAL_PLUGIN_USECASE_INVALID;
         } else {
-            /* TODO: confirm this handles all usecase */
-            if (my_plugin->out_snd_dev[use_case]) {
-                snd_dev = my_plugin->out_snd_dev[use_case];
-            } else if (my_plugin->in_snd_dev[use_case]) {
-                snd_dev = my_plugin->in_snd_dev[use_case];
-            } else {
-                ALOGE("%s: No valid snd_device found for the usecase (%d)",
-                        __func__, use_case);
-                ret = -EINVAL;
+            str_parms_del(query, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_UC);
+
+            if ((use_case < 0) || (use_case >= AUDIO_HAL_PLUGIN_USECASE_MAX)) {
+                ALOGI("%s: Invalid usecase param for plugin msg", __func__);
+                use_case = AUDIO_HAL_PLUGIN_USECASE_INVALID;
                 goto done_get_param;
+            }
+
+            if (my_plugin->usecase_ref_count[use_case] == 0) {
+                ALOGI("%s: plugin usecase (%d) is not enabled",
+                        __func__, use_case);
+            } else {
+                /* TODO: confirm this handles all usecase */
+                if (my_plugin->out_snd_dev[use_case]) {
+                    snd_dev = my_plugin->out_snd_dev[use_case];
+                } else if (my_plugin->in_snd_dev[use_case]) {
+                    snd_dev = my_plugin->in_snd_dev[use_case];
+                } else {
+                    ALOGE("%s: No valid snd_device found for the usecase (%d)",
+                            __func__, use_case);
+                    ret = -EINVAL;
+                    goto done_get_param;
+                }
             }
         }
     }
@@ -1191,6 +1204,93 @@ done_get_eq_subbands:
             free(get_pp_eq_subbands.ret_bands);
         break;
     }
+    case AUDIO_HAL_PLUGIN_MSG_CODEC_TUNNEL_GET_CMD:
+    {
+        char *tmp_ptr = NULL;
+        audio_hal_plugin_codec_tunnel_get_t tunnel_get;
+        memset(&tunnel_get,0,sizeof(tunnel_get));
+
+        err = str_parms_get_int(query, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_TUNNEL_SIZE,
+                (int*)&tunnel_get.param_size);
+        if ((err < 0) || (!tunnel_get.param_size)) {
+            ALOGE("%s: Invalid or missing size param for TUNNEL GET command", __func__);
+            ret = -EINVAL;
+            goto done_get_param;
+        }
+        str_parms_del(query, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_TUNNEL_SIZE);
+
+        err = str_parms_get_str(query,
+                AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_TUNNEL_DATA, value, len);
+        if (err < 0) {
+            ALOGE("%s: Invalid or missing data param for TUNNEL GET command", __func__);
+            ret = -EINVAL;
+            goto done_get_param;
+        }
+        str_parms_del(query, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_TUNNEL_DATA);
+
+        err = str_parms_get_int(query, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_TUNNEL_GET_SIZE,
+                (int*)&tunnel_get.size_to_get);
+        if (err < 0 || (!tunnel_get.size_to_get)) {
+            ALOGE("%s: Invalid or missing size_to_get param for TUNNEL GET command",
+                    __func__);
+            ret = -EINVAL;
+            goto done_get_param;
+        }
+        str_parms_del(query, AUDIO_PARAMETER_KEY_EXT_HW_PLUGIN_TUNNEL_GET_SIZE);
+
+        ret = ext_hw_plugin_string_to_dword(value, (void**)&tunnel_get.param_data,
+            tunnel_get.param_size);
+        if (ret) {
+            ALOGE("%s: Failed to parse payload for TUNNEL GET command", __func__);
+            ret = -EINVAL;
+            goto done_tunnel_get;
+        }
+
+        audio_hal_plugin_msg_type_t msg =
+                AUDIO_HAL_PLUGIN_MSG_CODEC_TUNNEL_GET_CMD;
+        tunnel_get.ret_data = calloc(tunnel_get.size_to_get, sizeof(int32_t));
+        if(tunnel_get.ret_data == NULL) {
+            ret = -ENOMEM;
+            ALOGE("[%s] failed to allocate memory",__func__);
+            goto done_tunnel_get;
+        }
+
+        ALOGD("%s: sending tunnel get cmd to plugin driver,size = %d, size_to_get = %d",
+                __func__, (int)tunnel_get.param_size, (int)tunnel_get.size_to_get);
+
+        ret = my_plugin->audio_hal_plugin_send_msg(msg, (void*)&tunnel_get,
+                sizeof(tunnel_get));
+        if (ret) {
+            ALOGE("%s: Failed to send plugin tunnel get cmd err: %d", __func__, ret);
+            goto done_tunnel_get;
+        }
+        if ((tunnel_get.ret_size == 0) ||
+                (tunnel_get.ret_size > tunnel_get.size_to_get)) {
+            ret = -EINVAL;
+            ALOGE("[%s] Invalid tunnel get cmd return size: %d",
+                    __func__, tunnel_get.ret_size);
+            goto done_tunnel_get;
+        }
+
+        rbuf_dlen = tunnel_get.ret_size + 1;
+        rbuf_dptr = calloc(rbuf_dlen, sizeof(uint32_t));
+        if(rbuf_dptr == NULL) {
+            ALOGE("[%s] Memory allocation failed for dword length %d",__func__,rbuf_dlen);
+            ret = -ENOMEM;
+            goto done_tunnel_get;
+        }
+        tmp_ptr = (char*)rbuf_dptr;
+        memcpy(tmp_ptr, &tunnel_get.ret_size, sizeof(uint32_t));
+        tmp_ptr += sizeof(uint32_t);
+        memcpy(tmp_ptr, tunnel_get.ret_data, 4*tunnel_get.ret_size);
+
+done_tunnel_get:
+        if (tunnel_get.param_data!= NULL)
+            free(tunnel_get.param_data);
+        if (tunnel_get.ret_data!= NULL)
+            free(tunnel_get.ret_data);
+        break;
+    }
     default:
         ALOGE("%s: Invalid plugin message type: %d", __func__, val);
         ret = -EINVAL;
@@ -1219,6 +1319,10 @@ done_get_param:
 
 done:
     ALOGI("%s: exit with code(%d)", __func__, ret);
+    if(kv_pairs != NULL)
+        free(kv_pairs);
+    if(value != NULL)
+        free(value);
     return ret;
 }
 #endif /* EXT_HW_PLUGIN_ENABLED */
