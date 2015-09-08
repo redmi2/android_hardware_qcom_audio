@@ -67,7 +67,7 @@ static struct hfp_module hfpmod = {
     .hfp_sco_tx = NULL,
     .hfp_pcm_rx = NULL,
     .hfp_pcm_tx = NULL,
-    .hfp_volume = 0,
+    .hfp_volume = 7,
     .is_hfp_running = 0,
     .ucid = USECASE_AUDIO_HFP_SCO,
 };
