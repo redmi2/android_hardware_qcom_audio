@@ -70,8 +70,7 @@ int voice_stop_usecase(struct audio_device *adev, audio_usecase_t usecase_id)
     }
 
     session->state.current = CALL_INACTIVE;
-    if (adev->mode == AUDIO_MODE_NORMAL)
-        adev->voice.is_in_call = false;
+    adev->voice.is_in_call = false;
 
     ret = platform_stop_voice_call(adev->platform, session->vsid);
 
