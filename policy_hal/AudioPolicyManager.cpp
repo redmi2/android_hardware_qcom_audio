@@ -298,13 +298,43 @@ bool AudioPolicyManagerCustom::isOffloadSupported(const audio_offload_info_t& of
      offloadInfo.stream_type, offloadInfo.bit_rate, offloadInfo.duration_us,
      offloadInfo.has_video);
 
-    // Check if offload has been disabled
     char propValue[PROPERTY_VALUE_MAX];
-    if (property_get("audio.offload.disable", propValue, "0")) {
-        if (atoi(propValue) != 0) {
-            ALOGV("offload disabled by audio.offload.disable=%s", propValue );
+    bool pcmOffload = false;
+#ifdef PCM_OFFLOAD_ENABLED
+    if ((offloadInfo.format & AUDIO_FORMAT_MAIN_MASK) == AUDIO_FORMAT_PCM_OFFLOAD) {
+        bool prop_enabled = false;
+        if ((AUDIO_FORMAT_PCM_16_BIT_OFFLOAD == offloadInfo.format) &&
+               property_get("audio.offload.pcm.16bit.enable", propValue, NULL)) {
+            prop_enabled = atoi(propValue) || !strncmp("true", propValue, 4);
+        }
+
+#ifdef PCM_OFFLOAD_ENABLED_24
+        if ((AUDIO_FORMAT_PCM_24_BIT_OFFLOAD == offloadInfo.format) &&
+               property_get("audio.offload.pcm.24bit.enable", propValue, NULL)) {
+            prop_enabled = atoi(propValue) || !strncmp("true", propValue, 4);
+        }
+#endif
+
+        if (prop_enabled) {
+            ALOGI("PCM offload property is enabled");
+            pcmOffload = true;
+        }
+
+        if (!pcmOffload) {
+            ALOGD("system property not enabled for PCM offload format[%x]",offloadInfo.format);
             return false;
         }
+    }
+#endif
+    if (!pcmOffload) {
+        // Check if offload has been disabled
+        if (property_get("audio.offload.disable", propValue, "0")) {
+            if (atoi(propValue) != 0) {
+                ALOGV("offload disabled by audio.offload.disable=%s", propValue );
+                return false;
+            }
+        }
+
     }
 
     // Check if stream type is music, then only allow offload as of now.
@@ -321,7 +351,6 @@ bool AudioPolicyManagerCustom::isOffloadSupported(const audio_offload_info_t& of
            ALOGD("offload disabled for multi-channel AAC,FLAC and VORBIS format");
            return false;
     }
-
     //TODO: enable audio offloading with video when ready
     const bool allowOffloadWithVideo =
             property_get_bool("audio.offload.video", false /* default_value */);

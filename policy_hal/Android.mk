@@ -28,6 +28,15 @@ LOCAL_STATIC_LIBRARIES := \
     libmedia_helper \
 
 LOCAL_CFLAGS += -Wno-error -fpermissive
+
+ifeq ($(strip $(AUDIO_FEATURE_ENABLED_PCM_OFFLOAD)),true)
+    LOCAL_CFLAGS += -DPCM_OFFLOAD_ENABLED
+endif
+
+ifeq ($(strip $(AUDIO_FEATURE_ENABLED_PCM_OFFLOAD_24)),true)
+       LOCAL_CFLAGS += -DPCM_OFFLOAD_ENABLED_24
+endif
+
 LOCAL_MODULE := libaudiopolicymanager
 
 include $(BUILD_SHARED_LIBRARY)
