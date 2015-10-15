@@ -373,7 +373,8 @@ int platform_get_snd_device_name_extn(void *platform, snd_device_t snd_device,
     return 0;
 }
 
-void platform_add_backend_name(char *mixer_path, snd_device_t snd_device)
+void platform_add_backend_name(char *mixer_path, snd_device_t snd_device,
+                               struct audio_usecase *usecase)
 {
     if (snd_device == SND_DEVICE_IN_BT_SCO_MIC)
         strlcat(mixer_path, " bt-sco", MIXER_PATH_MAX_LENGTH);
@@ -1162,12 +1163,6 @@ int platform_set_device_params(struct stream_out *out __unused,
 int platform_set_audio_device_interface(const char * device_name __unused,
                                         const char *intf_name __unused,
                                         const char *codec_type __unused)
-{
-    return -ENOSYS;
-}
-
-int platform_set_spkr_device_tz_names(snd_device_t index,
-                                      const char *spkr_1_tz_name, const char *spkr_2_tz_name)
 {
     return -ENOSYS;
 }

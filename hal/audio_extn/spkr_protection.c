@@ -77,6 +77,7 @@
 #define WAIT_TIME_SPKR_CALIB (60 * 1000 * 1000)
 
 #define MIN_SPKR_IDLE_SEC (60 * 30)
+#define WAKEUP_MIN_IDLE_CHECK 30
 
 /*Once calibration is started sleep for 1 sec to allow
   the calibration to kick off*/
@@ -98,6 +99,16 @@
 #define THERMAL_SYSFS "/sys/class/thermal"
 #define TZ_TYPE "/sys/class/thermal/thermal_zone%d/type"
 #define TZ_WSA "/sys/class/thermal/thermal_zone%d/temp"
+
+#define AUDIO_PARAMETER_KEY_SPKR_TZ_1     "spkr_1_tz_name"
+#define AUDIO_PARAMETER_KEY_SPKR_TZ_2     "spkr_2_tz_name"
+
+#define SPKR_TZ_1    "wsatz.12"
+#define SPKR_TZ_2    "wsatz.11"
+#define SPKR_TZ_3    "wsatz.14"
+#define SPKR_TZ_4    "wsatz.13"
+
+
 /*Modes of Speaker Protection*/
 enum speaker_protection_mode {
     SPKR_PROTECTION_DISABLED = -1,
@@ -131,8 +142,6 @@ struct speaker_prot_session {
     bool spkr_in_use;
     struct timespec spkr_last_time_used;
     bool wsa_found;
-    char *spkr_1_tz_name;
-    char *spkr_2_tz_name;
     int spkr_1_tzn;
     int spkr_2_tzn;
 };
@@ -148,8 +157,14 @@ static struct pcm_config pcm_config_skr_prot = {
     .avail_min = 0,
 };
 
+struct spkr_tz_names {
+    char *spkr_1_name;
+    char *spkr_2_name;
+};
+
 static struct speaker_prot_session handle;
 static int vi_feed_no_channels;
+static struct spkr_tz_names tz_names;
 
 int read_line_from_file(const char *path, char *buf, size_t count)
 {
@@ -203,6 +218,8 @@ int get_tzn(const char *sensor_name)
         ALOGE("Unable to open %s\n", THERMAL_SYSFS);
         return found;
     }
+    if (!sensor_name)
+        return found;
 
     while ((tdirent = readdir(tdir))) {
         char buf[50];
@@ -216,11 +233,12 @@ int get_tzn(const char *sensor_name)
             if (strcmp(tzdirent->d_name, "type"))
                 continue;
             snprintf(name, MAX_PATH, TZ_TYPE, tzn);
-            ALOGD("Opening %s\n", name);
+            ALOGV("Opening %s\n", name);
             read_line_from_file(name, buf, sizeof(buf));
             if (strlen(buf) > 0)
                 buf[strlen(buf) - 1] = '\0';
             if (!strcmp(buf, sensor_name)) {
+                ALOGD(" spkr tz name found, %s\n", name);
                 found = 1;
                 break;
             }
@@ -450,10 +468,16 @@ static int spkr_calibrate(int t0_spk_1, int t0_spk_2)
     uc_info_rx->type = PCM_PLAYBACK;
     uc_info_rx->in_snd_device = SND_DEVICE_NONE;
     uc_info_rx->stream.out = adev->primary_output;
-    uc_info_rx->out_snd_device = SND_DEVICE_OUT_SPEAKER_PROTECTED;
+    if (audio_extn_is_vbat_enabled())
+        uc_info_rx->out_snd_device = SND_DEVICE_OUT_SPEAKER_PROTECTED_VBAT;
+    else
+        uc_info_rx->out_snd_device = SND_DEVICE_OUT_SPEAKER_PROTECTED;
     disable_rx = true;
     list_add_tail(&adev->usecase_list, &uc_info_rx->list);
-    enable_snd_device(adev, SND_DEVICE_OUT_SPEAKER_PROTECTED);
+    if (audio_extn_is_vbat_enabled())
+         enable_snd_device(adev, SND_DEVICE_OUT_SPEAKER_PROTECTED_VBAT);
+    else
+         enable_snd_device(adev, SND_DEVICE_OUT_SPEAKER_PROTECTED);
     enable_audio_route(adev, uc_info_rx);
 
     pcm_dev_rx_id = platform_get_pcm_device_id(uc_info_rx->id, PCM_PLAYBACK);
@@ -564,7 +588,7 @@ static int spkr_calibrate(int t0_spk_1, int t0_spk_2)
                 }
                 break;
             } else if (status.status == -EAGAIN) {
-                  ALOGD("%s: spkr_prot_thread try again", __func__);
+                  ALOGV("%s: spkr_prot_thread try again", __func__);
                   usleep(WAIT_FOR_GET_CALIB_STATUS);
             } else {
                 ALOGE("%s: spkr_prot_thread get failed status %d",
@@ -612,7 +636,10 @@ exit:
         }
         if (disable_rx) {
             list_remove(&uc_info_rx->list);
-            disable_snd_device(adev, SND_DEVICE_OUT_SPEAKER_PROTECTED);
+            if (audio_extn_is_vbat_enabled())
+                disable_snd_device(adev, SND_DEVICE_OUT_SPEAKER_PROTECTED_VBAT);
+            else
+                disable_snd_device(adev, SND_DEVICE_OUT_SPEAKER_PROTECTED);
             disable_audio_route(adev, uc_info_rx);
         }
         if (disable_tx) {
@@ -741,18 +768,22 @@ static void* spkr_calibration_thread()
             if (is_speaker_in_use(&sec)) {
                 ALOGV("%s: WSA Speaker in use retry calibration", __func__);
                 pthread_mutex_unlock(&adev->lock);
+                sleep(WAKEUP_MIN_IDLE_CHECK);
                 continue;
             } else {
+                ALOGD("%s: wsa speaker idle %ld,minimum time %ld", __func__, sec, min_idle_time);
                 if (sec < min_idle_time) {
                     pthread_mutex_unlock(&adev->lock);
+                    sleep(WAKEUP_MIN_IDLE_CHECK);
                     continue;
                }
-               ALOGV("%s: wsa speaker idle %ld min time %ld", __func__, sec, min_idle_time);
                goahead = true;
            }
            if (!list_empty(&adev->usecase_list)) {
                 ALOGD("%s: Usecase active re-try calibration", __func__);
-                goahead = false;
+                pthread_mutex_unlock(&adev->lock);
+                sleep(WAKEUP_MIN_IDLE_CHECK);
+                continue;
            }
            if (goahead) {
                if (spk_1_tzn >= 0) {
@@ -784,15 +815,17 @@ static void* spkr_calibration_thread()
                        if (t0_spk_1 < TZ_TEMP_MIN_THRESHOLD ||
                            t0_spk_1 > TZ_TEMP_MAX_THRESHOLD) {
                            pthread_mutex_unlock(&adev->lock);
+                           sleep(WAKEUP_MIN_IDLE_CHECK);
                            continue;
                        }
+                       ALOGD("%s: temp T0 for spkr1 %d\n", __func__, t0_spk_1);
                        /*Convert temp into q6 format*/
                        t0_spk_1 = (t0_spk_1 * (1 << 6));
-                       ALOGD("%s: temp T0 for spkr1 %d\n", __func__, t0_spk_1);
                    } else {
                        ALOGV("%s: thermal equilibrium failed for spkr1 in %d/%d readings\n",
                                                 __func__, i, NUM_ATTEMPTS);
                        pthread_mutex_unlock(&adev->lock);
+                       sleep(WAKEUP_MIN_IDLE_CHECK);
                        continue;
                    }
                }
@@ -824,15 +857,17 @@ static void* spkr_calibration_thread()
                        if (t0_spk_2 < TZ_TEMP_MIN_THRESHOLD ||
                            t0_spk_2 > TZ_TEMP_MAX_THRESHOLD) {
                            pthread_mutex_unlock(&adev->lock);
+                           sleep(WAKEUP_MIN_IDLE_CHECK);
                            continue;
                        }
+                       ALOGD("%s: temp T0 for spkr2 %d\n", __func__, t0_spk_2);
                        /*Convert temp into q6 format*/
                        t0_spk_2 = (t0_spk_2 * (1 << 6));
-                       ALOGD("%s: temp T0 for spkr2 %d\n", __func__, t0_spk_2);
                    } else {
                        ALOGV("%s: thermal equilibrium failed for spkr2 in %d/%d readings\n",
                                                 __func__, i, NUM_ATTEMPTS);
                        pthread_mutex_unlock(&adev->lock);
+                       sleep(WAKEUP_MIN_IDLE_CHECK);
                        continue;
                    }
                }
@@ -866,19 +901,22 @@ static void* spkr_calibration_thread()
         if (is_speaker_in_use(&sec)) {
             ALOGV("%s: Speaker in use retry calibration", __func__);
             pthread_mutex_unlock(&adev->lock);
+            sleep(WAKEUP_MIN_IDLE_CHECK);
             continue;
         } else {
             if (sec < min_idle_time) {
                 pthread_mutex_unlock(&adev->lock);
+                sleep(WAKEUP_MIN_IDLE_CHECK);
                 continue;
             }
-            ALOGD("%s: speaker idle %ld min time %ld", __func__, sec, min_idle_time);
             goahead = true;
         }
         if (!list_empty(&adev->usecase_list)) {
             ALOGD("%s: Usecase active re-try calibration", __func__);
             goahead = false;
             pthread_mutex_unlock(&adev->lock);
+            sleep(WAKEUP_MIN_IDLE_CHECK);
+            continue;
         }
         if (goahead) {
                 int status;
@@ -918,13 +956,40 @@ static int thermal_client_callback(int temp)
 
 static bool is_wsa_present(void)
 {
-   handle.spkr_1_tz_name = platform_get_spkr_1_tz_name(SND_DEVICE_OUT_SPEAKER);
-   handle.spkr_2_tz_name = platform_get_spkr_2_tz_name(SND_DEVICE_OUT_SPEAKER);
-   handle.spkr_1_tzn = get_tzn(handle.spkr_1_tz_name);
-   handle.spkr_2_tzn = get_tzn(handle.spkr_2_tz_name);
+   ALOGD("%s: tz1: %s, tz2: %s", __func__,
+          tz_names.spkr_1_name, tz_names.spkr_2_name);
+   handle.spkr_1_tzn = get_tzn(tz_names.spkr_1_name);
+   handle.spkr_2_tzn = get_tzn(tz_names.spkr_2_name);
    if ((handle.spkr_1_tzn >= 0) || (handle.spkr_2_tzn >= 0))
         handle.wsa_found = true;
    return handle.wsa_found;
+}
+
+void audio_extn_spkr_prot_set_parameters(struct str_parms *parms,
+                                         char *value, int len)
+{
+    int err;
+
+    err = str_parms_get_str(parms, AUDIO_PARAMETER_KEY_SPKR_TZ_1,
+                            value, len);
+    if (err >= 0) {
+        if ((!strncmp(SPKR_TZ_1, value, sizeof(SPKR_TZ_1)) ||
+            (!strncmp(SPKR_TZ_3, value, sizeof(SPKR_TZ_3)))))
+            tz_names.spkr_1_name = strdup(value);
+        str_parms_del(parms, AUDIO_PARAMETER_KEY_SPKR_TZ_1);
+    }
+
+    err = str_parms_get_str(parms, AUDIO_PARAMETER_KEY_SPKR_TZ_2,
+                            value, len);
+    if (err >= 0) {
+        if ((!strncmp(SPKR_TZ_2, value, sizeof(SPKR_TZ_2)) ||
+            (!strncmp(SPKR_TZ_4, value, sizeof(SPKR_TZ_4)))))
+            tz_names.spkr_2_name = strdup(value);
+        str_parms_del(parms, AUDIO_PARAMETER_KEY_SPKR_TZ_2);
+    }
+
+    ALOGV("%s: tz1: %s, tz2: %s", __func__,
+          tz_names.spkr_1_name, tz_names.spkr_2_name);
 }
 
 void audio_extn_spkr_prot_init(void *adev)
@@ -958,6 +1023,8 @@ void audio_extn_spkr_prot_init(void *adev)
         (void)pthread_create(&handle.spkr_calibration_thread,
         (const pthread_attr_t *) NULL, spkr_calibration_thread, &handle);
         return;
+    } else {
+        ALOGD("%s: WSA spkr calibration thread is not created", __func__);
     }
     pthread_cond_init(&handle.spkr_prot_thermalsync, NULL);
     pthread_cond_init(&handle.spkr_calib_cancel, NULL);
@@ -1029,6 +1096,12 @@ int audio_extn_spkr_prot_get_acdb_id(snd_device_t snd_device)
     case SND_DEVICE_OUT_VOICE_SPEAKER:
         acdb_id = platform_get_snd_device_acdb_id(SND_DEVICE_OUT_VOICE_SPEAKER_PROTECTED);
         break;
+    case SND_DEVICE_OUT_SPEAKER_VBAT:
+        acdb_id = platform_get_snd_device_acdb_id(SND_DEVICE_OUT_SPEAKER_PROTECTED_VBAT);
+        break;
+    case SND_DEVICE_OUT_VOICE_SPEAKER_VBAT:
+        acdb_id = platform_get_snd_device_acdb_id(SND_DEVICE_OUT_VOICE_SPEAKER_PROTECTED_VBAT);
+        break;
     default:
         acdb_id = -EINVAL;
         break;
@@ -1046,6 +1119,10 @@ int audio_extn_get_spkr_prot_snd_device(snd_device_t snd_device)
         return SND_DEVICE_OUT_SPEAKER_PROTECTED;
     case SND_DEVICE_OUT_VOICE_SPEAKER:
         return SND_DEVICE_OUT_VOICE_SPEAKER_PROTECTED;
+    case SND_DEVICE_OUT_SPEAKER_VBAT:
+        return SND_DEVICE_OUT_SPEAKER_PROTECTED_VBAT;
+    case SND_DEVICE_OUT_VOICE_SPEAKER_VBAT:
+        return SND_DEVICE_OUT_VOICE_SPEAKER_PROTECTED_VBAT;
     default:
         return snd_device;
     }

@@ -69,6 +69,10 @@ ifeq ($(strip $(AUDIO_FEATURE_ENABLED_ANC_HEADSET)),true)
     LOCAL_CFLAGS += -DANC_HEADSET_ENABLED
 endif
 
+ifeq ($(strip $(AUDIO_FEATURE_ENABLED_VBAT_MONITOR)),true)
+    LOCAL_CFLAGS += -DVBAT_MONITOR_ENABLED
+endif
+
 ifeq ($(strip $(AUDIO_FEATURE_ENABLED_FLUENCE)),true)
     LOCAL_CFLAGS += -DFLUENCE_ENABLED
 endif
@@ -191,6 +195,10 @@ ifeq ($(strip $(AUDIO_FEATURE_ENABLED_PCM_OFFLOAD_24)),true)
        LOCAL_CFLAGS += -DPCM_OFFLOAD_ENABLED_24
 endif
 
+ifeq ($(strip $(AUDIO_FEATURE_ENABLED_AAC_ADTS_OFFLOAD)),true)
+    LOCAL_CFLAGS += -DAAC_ADTS_OFFLOAD_ENABLED
+endif
+
 ifeq ($(strip $(AUDIO_FEATURE_ENABLED_DEV_ARBI)),true)
     LOCAL_CFLAGS += -DDEV_ARBI_ENABLED
     LOCAL_SRC_FILES += audio_extn/dev_arbi.c
@@ -223,10 +231,6 @@ ifeq ($(strip $(AUDIO_FEATURE_ENABLED_SOURCE_TRACKING)),true)
     LOCAL_SRC_FILES += audio_extn/source_track.c
 endif
 
-ifeq ($(strip $(AUDIO_FEATURE_ENABLED_AUDIOSPHERE)),true)
-    LOCAL_CFLAGS += -DAUDIOSPHERE_ENABLED
-endif
-
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libcutils \
@@ -250,6 +254,14 @@ ifeq ($(strip $(AUDIO_FEATURE_ENABLED_LISTEN)),true)
     LOCAL_CFLAGS += -DAUDIO_LISTEN_ENABLED
     LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/audio-listen
     LOCAL_SRC_FILES += audio_extn/listen.c
+endif
+
+ifeq ($(strip $(AUDIO_FEATURE_ENABLED_EXT_HDMI)),true)
+    LOCAL_CFLAGS += -DAUDIO_EXTERNAL_HDMI_ENABLED
+ifeq ($(strip $(AUDIO_FEATURE_ENABLED_HDMI_PASSTHROUGH)),true)
+    LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/audio-parsers
+    LOCAL_SHARED_LIBRARIES += libaudioparsers
+endif
 endif
 
 ifeq ($(strip $(BOARD_SUPPORTS_SOUND_TRIGGER)),true)

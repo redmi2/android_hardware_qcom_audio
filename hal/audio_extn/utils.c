@@ -35,6 +35,12 @@
 #include "audio_extn.h"
 #include "voice.h"
 
+#ifdef AUDIO_EXTERNAL_HDMI_ENABLED
+#ifdef HDMI_PASSTHROUGH_ENABLED
+#include "audio_parsers.h"
+#endif
+#endif
+
 #define AUDIO_OUTPUT_POLICY_VENDOR_CONFIG_FILE "/vendor/etc/audio_output_policy.conf"
 
 #define OUTPUTS_TAG "outputs"
@@ -52,6 +58,21 @@
 #define BASE_TABLE_SIZE 64
 #define MAX_BASEINDEX_LEN 256
 
+#ifdef AUDIO_EXTERNAL_HDMI_ENABLED
+#define PROFESSIONAL        (1<<0)      /* 0 = consumer, 1 = professional */
+#define NON_LPCM            (1<<1)      /* 0 = audio, 1 = non-audio */
+#define SR_44100            (0<<0)      /* 44.1kHz */
+#define SR_NOTID            (1<<0)      /* non indicated */
+#define SR_48000            (2<<0)      /* 48kHz */
+#define SR_32000            (3<<0)      /* 32kHz */
+#define SR_22050            (4<<0)      /* 22.05kHz */
+#define SR_24000            (6<<0)      /* 24kHz */
+#define SR_88200            (8<<0)      /* 88.2kHz */
+#define SR_96000            (10<<0)     /* 96kHz */
+#define SR_176400           (12<<0)     /* 176.4kHz */
+#define SR_192000           (14<<0)     /* 192kHz */
+
+#endif
 struct string_to_enum {
     const char *name;
     uint32_t value;
@@ -59,6 +80,7 @@ struct string_to_enum {
 
 const struct string_to_enum s_flag_name_to_enum_table[] = {
     STRING_TO_ENUM(AUDIO_OUTPUT_FLAG_DIRECT),
+    STRING_TO_ENUM(AUDIO_OUTPUT_FLAG_DIRECT_PCM),
     STRING_TO_ENUM(AUDIO_OUTPUT_FLAG_PRIMARY),
     STRING_TO_ENUM(AUDIO_OUTPUT_FLAG_FAST),
     STRING_TO_ENUM(AUDIO_OUTPUT_FLAG_DEEP_BUFFER),
@@ -104,6 +126,10 @@ const struct string_to_enum s_format_name_to_enum_table[] = {
     STRING_TO_ENUM(AUDIO_FORMAT_AAC_LC),
     STRING_TO_ENUM(AUDIO_FORMAT_AAC_HE_V1),
     STRING_TO_ENUM(AUDIO_FORMAT_AAC_HE_V2),
+    STRING_TO_ENUM(AUDIO_FORMAT_AAC_ADTS),
+    STRING_TO_ENUM(AUDIO_FORMAT_AAC_SUB_LC),
+    STRING_TO_ENUM(AUDIO_FORMAT_AAC_SUB_HE_V1),
+    STRING_TO_ENUM(AUDIO_FORMAT_AAC_SUB_HE_V2),
 #endif
 };
 
@@ -499,37 +525,38 @@ void audio_extn_utils_update_stream_app_type_cfg(void *platform,
     app_type_cfg->bit_width = 16;
 }
 
-int audio_extn_utils_send_app_type_cfg(struct audio_usecase *usecase)
+int audio_extn_utils_send_app_type_cfg(struct audio_device *adev,
+                                       struct audio_usecase *usecase)
 {
     char mixer_ctl_name[MAX_LENGTH_MIXER_CONTROL_IN_INT];
     int app_type_cfg[MAX_LENGTH_MIXER_CONTROL_IN_INT], len = 0, rc;
-    struct stream_out *out;
-    struct audio_device *adev;
     struct mixer_ctl *ctl;
     int pcm_device_id, acdb_dev_id, snd_device = usecase->out_snd_device;
     int32_t sample_rate = DEFAULT_OUTPUT_SAMPLING_RATE;
 
     ALOGV("%s", __func__);
 
-    if (usecase->type != PCM_PLAYBACK) {
-        ALOGV("%s: not a playback path, no need to cfg app type", __func__);
+    if (usecase->type != PCM_PLAYBACK && usecase->type != PCM_CAPTURE) {
+        ALOGE("%s: not a playback or capture path, no need to cfg app type", __func__);
         rc = 0;
         goto exit_send_app_type_cfg;
     }
     if ((usecase->id != USECASE_AUDIO_PLAYBACK_DEEP_BUFFER) &&
         (usecase->id != USECASE_AUDIO_PLAYBACK_LOW_LATENCY) &&
         (usecase->id != USECASE_AUDIO_PLAYBACK_MULTI_CH) &&
-        (!is_offload_usecase(usecase->id))) {
-        ALOGV("%s: a playback path where app type cfg is not required %d", __func__, usecase->id);
+        (!is_offload_usecase(usecase->id)) &&
+        (usecase->type != PCM_CAPTURE)) {
+        ALOGV("%s: a rx/tx path where app type cfg is not required %d", __func__, usecase->id);
         rc = 0;
         goto exit_send_app_type_cfg;
     }
-    out = usecase->stream.out;
-    adev = out->dev;
-
-    snd_device = usecase->out_snd_device;
-
-    pcm_device_id = platform_get_pcm_device_id(out->usecase, PCM_PLAYBACK);
+    if (usecase->type == PCM_PLAYBACK) {
+        snd_device = usecase->out_snd_device;
+        pcm_device_id = platform_get_pcm_device_id(usecase->id, PCM_PLAYBACK);
+    } else if (usecase->type == PCM_CAPTURE) {
+        snd_device = usecase->in_snd_device;
+        pcm_device_id = platform_get_pcm_device_id(usecase->id, PCM_CAPTURE);
+    }
 
     snprintf(mixer_ctl_name, sizeof(mixer_ctl_name),
              "Audio Stream %d App Type Cfg", pcm_device_id);
@@ -550,32 +577,46 @@ int audio_extn_utils_send_app_type_cfg(struct audio_usecase *usecase)
         goto exit_send_app_type_cfg;
     }
 
-    if ((24 == usecase->stream.out->bit_width) &&
-        (usecase->stream.out->devices & AUDIO_DEVICE_OUT_SPEAKER)) {
+    if ((usecase->type == PCM_PLAYBACK) && (usecase->stream.out == NULL)) {
         sample_rate = DEFAULT_OUTPUT_SAMPLING_RATE;
-    } else if ((snd_device != SND_DEVICE_OUT_HEADPHONES_44_1 &&
-        usecase->stream.out->sample_rate == OUTPUT_SAMPLING_RATE_44100) ||
-        (usecase->stream.out->sample_rate < OUTPUT_SAMPLING_RATE_44100)) {
-        sample_rate = DEFAULT_OUTPUT_SAMPLING_RATE;
-    } else {
-        sample_rate = out->app_type_cfg.sample_rate;
-    }
-
-    app_type_cfg[len++] = out->app_type_cfg.app_type;
-    app_type_cfg[len++] = acdb_dev_id;
-    if (((out->format == AUDIO_FORMAT_E_AC3) ||
-        (out->format == AUDIO_FORMAT_E_AC3_JOC))
-#ifdef HDMI_PASSTHROUGH_ENABLED
-        && (out->flags  & AUDIO_OUTPUT_FLAG_COMPRESS_PASSTHROUGH)
-#endif
-        )
-        app_type_cfg[len++] = sample_rate * 4;
-    else
+        app_type_cfg[len++] = platform_get_default_app_type(adev->platform);
+        app_type_cfg[len++] = acdb_dev_id;
         app_type_cfg[len++] = sample_rate;
+        ALOGI("%s PLAYBACK app_type %d, acdb_dev_id %d, sample_rate %d",
+              __func__, platform_get_default_app_type(adev->platform), acdb_dev_id, sample_rate);
+    } else if (usecase->type == PCM_PLAYBACK) {
+        if ((24 == usecase->stream.out->bit_width) &&
+            (usecase->stream.out->devices & AUDIO_DEVICE_OUT_SPEAKER)) {
+            sample_rate = DEFAULT_OUTPUT_SAMPLING_RATE;
+        } else if ((snd_device != SND_DEVICE_OUT_HEADPHONES_44_1 &&
+            usecase->stream.out->sample_rate == OUTPUT_SAMPLING_RATE_44100) ||
+            (usecase->stream.out->sample_rate < OUTPUT_SAMPLING_RATE_44100)) {
+            sample_rate = DEFAULT_OUTPUT_SAMPLING_RATE;
+        } else {
+            sample_rate = usecase->stream.out->app_type_cfg.sample_rate;
+        }
 
+        app_type_cfg[len++] = usecase->stream.out->app_type_cfg.app_type;
+        app_type_cfg[len++] = acdb_dev_id;
+        if (((usecase->stream.out->format == AUDIO_FORMAT_E_AC3) ||
+            (usecase->stream.out->format == AUDIO_FORMAT_E_AC3_JOC))
+#ifdef HDMI_PASSTHROUGH_ENABLED
+            && (out->flags  & AUDIO_OUTPUT_FLAG_COMPRESS_PASSTHROUGH)
+#endif
+            )
+            app_type_cfg[len++] = sample_rate * 4;
+        else
+            app_type_cfg[len++] = sample_rate;
+        ALOGI("%s PLAYBACK app_type %d, acdb_dev_id %d, sample_rate %d",
+              __func__, usecase->stream.out->app_type_cfg.app_type, acdb_dev_id, sample_rate);
+    } else if (usecase->type == PCM_CAPTURE) {
+        app_type_cfg[len++] = platform_get_default_app_type(adev->platform);
+        app_type_cfg[len++] = acdb_dev_id;
+        app_type_cfg[len++] = sample_rate;
+        ALOGI("%s CAPTURE app_type %d, acdb_dev_id %d, sample_rate %d",
+           __func__, platform_get_default_app_type(adev->platform), acdb_dev_id, sample_rate);
+    }
     mixer_ctl_set_array(ctl, app_type_cfg, len);
-    ALOGI("%s app_type %d, acdb_dev_id %d, sample_rate %d",
-           __func__, out->app_type_cfg.app_type, acdb_dev_id, sample_rate);
     rc = 0;
 exit_send_app_type_cfg:
     return rc;
@@ -745,3 +786,136 @@ done:
     outp[k] = '\0';
     return k;
 }
+
+#ifdef AUDIO_EXTERNAL_HDMI_ENABLED
+
+void get_default_compressed_channel_status(
+                                  unsigned char *channel_status)
+{
+     int32_t status = 0;
+     unsigned char bit_index;
+     memset(channel_status,0,24);
+
+     /* block start bit in preamble bit 3 */
+     channel_status[0] |= PROFESSIONAL;
+     //compre out
+     channel_status[0] |= NON_LPCM;
+     // sample rate; fixed 48K for default/transcode
+     channel_status[3] |= SR_48000;
+}
+
+#ifdef HDMI_PASSTHROUGH_ENABLED
+int32_t get_compressed_channel_status(void *audio_stream_data,
+                                                   uint32_t audio_frame_size,
+                                                   unsigned char *channel_status,
+                                                   enum audio_parser_code_type codec_type)
+                                                   // codec_type - AUDIO_PARSER_CODEC_AC3
+                                                   //            - AUDIO_PARSER_CODEC_DTS
+{
+     unsigned char *stream;
+     int ret = 0;
+     stream = (unsigned char *)audio_stream_data;
+
+     if (audio_stream_data == NULL || audio_frame_size == 0) {
+         ALOGW("no buffer to get channel status, return default for compress");
+         get_default_compressed_channel_status(channel_status);
+         return ret;
+     }
+
+     memset(channel_status,0,24);
+     if(init_audio_parser(stream, audio_frame_size, codec_type) == -1)
+     {
+         ALOGE("init audio parser failed");
+         return -1;
+     }
+     ret = get_channel_status(channel_status, codec_type);
+     return ret;
+
+}
+
+#endif
+
+void get_lpcm_channel_status(uint32_t sampleRate,
+                                                  unsigned char *channel_status)
+{
+     int32_t status = 0;
+     unsigned char bit_index;
+     memset(channel_status,0,24);
+     /* block start bit in preamble bit 3 */
+     channel_status[0] |= PROFESSIONAL;
+     //LPCM OUT
+     channel_status[0] &= ~NON_LPCM;
+
+     switch (sampleRate) {
+         case 8000:
+         case 11025:
+         case 12000:
+         case 16000:
+         case 22050:
+             channel_status[3] |= SR_NOTID;
+         case 24000:
+             channel_status[3] |= SR_24000;
+             break;
+         case 32000:
+             channel_status[3] |= SR_32000;
+             break;
+         case 44100:
+             channel_status[3] |= SR_44100;
+             break;
+         case 48000:
+             channel_status[3] |= SR_48000;
+             break;
+         case 88200:
+             channel_status[3] |= SR_88200;
+             break;
+         case 96000:
+             channel_status[3] |= SR_96000;
+             break;
+         case 176400:
+             channel_status[3] |= SR_176400;
+             break;
+         case 192000:
+            channel_status[3] |= SR_192000;
+             break;
+         default:
+             ALOGV("Invalid sample_rate %u\n", sampleRate);
+             status = -1;
+             break;
+     }
+}
+
+void audio_utils_set_hdmi_channel_status(struct stream_out *out, char * buffer, size_t bytes)
+{
+    unsigned char channel_status[24]={0};
+    struct snd_aes_iec958 iec958;
+    const char *mixer_ctl_name = "IEC958 Playback PCM Stream";
+    struct mixer_ctl *ctl;
+    int i=0;
+#ifdef HDMI_PASSTHROUGH_ENABLED
+    if (audio_extn_is_dolby_format(out->format) &&
+        /*TODO:Extend code to support DTS passthrough*/
+        /*set compressed channel status bits*/
+        audio_extn_dolby_is_passthrough_stream(out->flags)){
+        get_compressed_channel_status(buffer, bytes, channel_status, AUDIO_PARSER_CODEC_AC3);
+    } else
+#endif
+    {
+        /*set channel status bit for LPCM*/
+        get_lpcm_channel_status(out->sample_rate, channel_status);
+    }
+
+    memcpy(iec958.status, channel_status,sizeof(iec958.status));
+    ctl = mixer_get_ctl_by_name(out->dev->mixer, mixer_ctl_name);
+    if (!ctl) {
+            ALOGE("%s: Could not get ctl for mixer cmd - %s",
+                  __func__, mixer_ctl_name);
+            return;
+    }
+    if (mixer_ctl_set_array(ctl, &iec958, sizeof(iec958)) < 0) {
+        ALOGE("%s: Could not set channel status for ext HDMI ",
+              __func__);
+        return;
+    }
+
+}
+#endif

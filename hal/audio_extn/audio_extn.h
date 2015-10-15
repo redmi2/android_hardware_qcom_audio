@@ -85,6 +85,16 @@
 #define AUDIO_FORMAT_APE 0x1D000000UL
 #endif
 
+#ifndef AAC_ADTS_OFFLOAD_ENABLED
+#define AUDIO_FORMAT_AAC_ADTS 0x1E000000UL
+#define AUDIO_FORMAT_AAC_ADTS_LC   (AUDIO_FORMAT_AAC_ADTS |\
+                                      AUDIO_FORMAT_AAC_SUB_LC)
+#define AUDIO_FORMAT_AAC_ADTS_HE_V1 (AUDIO_FORMAT_AAC_ADTS |\
+                                      AUDIO_FORMAT_AAC_SUB_HE_V1)
+#define AUDIO_FORMAT_AAC_ADTS_HE_V2  (AUDIO_FORMAT_AAC_ADTS |\
+                                      AUDIO_FORMAT_AAC_SUB_HE_V2)
+#endif
+
 #ifndef COMPRESS_METADATA_NEEDED
 #define audio_extn_parse_compress_metadata(out, parms) (0)
 #else
@@ -93,7 +103,8 @@ int audio_extn_parse_compress_metadata(struct stream_out *out,
 #endif
 
 #ifdef AUDIO_EXTN_FORMATS_ENABLED
-#define AUDIO_OUTPUT_BIT_WIDTH (config->offload_info.bit_width)
+#define AUDIO_OUTPUT_BIT_WIDTH ((config->offload_info.bit_width == 32) ? 24\
+                                   :config->offload_info.bit_width)
 #else
 #define AUDIO_OUTPUT_BIT_WIDTH (CODEC_BACKEND_DEFAULT_BIT_WIDTH)
 #endif
@@ -115,6 +126,14 @@ void audio_extn_get_parameters(const struct audio_device *adev,
 bool audio_extn_get_anc_enabled(void);
 bool audio_extn_should_use_fb_anc(void);
 bool audio_extn_should_use_handset_anc(int in_channels);
+#endif
+
+#ifndef VBAT_MONITOR_ENABLED
+#define audio_extn_is_vbat_enabled()                     (0)
+#define audio_extn_can_use_vbat()                        (0)
+#else
+bool audio_extn_is_vbat_enabled(void);
+bool audio_extn_can_use_vbat(void);
 #endif
 
 #ifndef FLUENCE_ENABLED
@@ -261,6 +280,7 @@ int32_t audio_extn_read_xml(struct audio_device *adev, uint32_t mixer_card,
 #define audio_extn_spkr_prot_is_enabled() (false)
 #define audio_extn_spkr_prot_get_acdb_id(snd_device)         (-EINVAL)
 #define audio_extn_get_spkr_prot_snd_device(snd_device) (snd_device)
+#define audio_extn_spkr_prot_set_parameters(parms, value, len)   (0)
 #else
 void audio_extn_spkr_prot_init(void *adev);
 int audio_extn_spkr_prot_start_processing(snd_device_t snd_device);
@@ -269,6 +289,8 @@ bool audio_extn_spkr_prot_is_enabled();
 int audio_extn_spkr_prot_get_acdb_id(snd_device_t snd_device);
 int audio_extn_get_spkr_prot_snd_device(snd_device_t snd_device);
 void audio_extn_spkr_prot_calib_cancel(void *adev);
+void audio_extn_spkr_prot_set_parameters(struct str_parms *parms,
+                                         char *value, int len);
 #endif
 
 #ifndef COMPRESS_CAPTURE_ENABLED
@@ -429,7 +451,8 @@ void audio_extn_utils_update_stream_app_type_cfg(void *platform,
                                   uint32_t sample_rate,
                                   uint32_t bit_width,
                                   struct stream_app_type_cfg *app_type_cfg);
-int audio_extn_utils_send_app_type_cfg(struct audio_usecase *usecase);
+int audio_extn_utils_send_app_type_cfg(struct audio_device *adev,
+                                       struct audio_usecase *usecase);
 void audio_extn_utils_send_audio_calibration(struct audio_device *adev,
                                              struct audio_usecase *usecase);
 #ifdef DS2_DOLBY_DAP_ENABLED
@@ -487,4 +510,10 @@ int audio_extn_perf_lock_init(void);
 void audio_extn_perf_lock_acquire(void);
 void audio_extn_perf_lock_release(void);
 #endif /* KPI_OPTIMIZE_ENABLED */
+
+#ifndef AUDIO_EXTERNAL_HDMI_ENABLED
+#define audio_utils_set_hdmi_channel_status(out, buffer, bytes) (0)
+#else
+void audio_utils_set_hdmi_channel_status(struct stream_out *out, char * buffer, size_t bytes);
+#endif
 #endif /* AUDIO_EXTN_H */
