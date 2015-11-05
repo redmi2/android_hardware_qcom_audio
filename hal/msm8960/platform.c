@@ -350,6 +350,11 @@ void platform_deinit(void *platform)
     free(platform);
 }
 
+int platform_hal_plugin_enable(void *platform, struct stream_out *out, bool enable)
+{
+    return 0;
+}
+
 const char *platform_get_snd_device_name(snd_device_t snd_device)
 {
     if (snd_device >= SND_DEVICE_MIN && snd_device < SND_DEVICE_MAX)
