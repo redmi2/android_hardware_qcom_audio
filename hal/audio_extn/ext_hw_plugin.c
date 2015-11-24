@@ -26,7 +26,7 @@ WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
 OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.*/
 
-#define LOG_TAG "audio_hw_dsp_plugin"
+#define LOG_TAG "ext_audio_hw_plugin"
 #define LOG_NDEBUG 0
 
 #include <errno.h>
@@ -55,7 +55,7 @@ struct ext_hw_plugin_data {
 };
 
 /* This can be defined in platform specific file or use compile flag */
-#define LIB_PLUGIN_DRIVER "/system/lib/libaudiohalplugin.so"
+#define LIB_PLUGIN_DRIVER "libaudiohalplugin.so"
 
 void* audio_extn_ext_hw_plugin_init(struct audio_device *adev)
 {
