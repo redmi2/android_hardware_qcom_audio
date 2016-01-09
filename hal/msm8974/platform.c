@@ -1216,6 +1216,7 @@ static void audio_hwdep_send_cal(struct platform_data *plat_data)
     }
 
     send_codec_cal(acdb_loader_get_calibration, plat_data, fd);
+    close(fd);
 }
 
 static int platform_acdb_init(void *platform)
