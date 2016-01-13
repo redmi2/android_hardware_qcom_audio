@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
  * Copyright (C) 2013 The Android Open Source Project
@@ -1992,6 +1992,88 @@ int platform_send_audio_calibration(void *platform, struct audio_usecase *usecas
                                      sample_rate);
     }
     return 0;
+}
+
+int platform_send_audio_calibration_for_usecase(void *platform,
+                                                struct audio_usecase *usecase)
+{
+    struct platform_data *my_data = (struct platform_data *)platform;
+    int acdb_dev_id;
+    int ret = 0;
+
+    if ((usecase->type == VOICE_CALL) || (usecase->type == VOIP_CALL)) {
+        ALOGV("%s: by-passing audio calibration for usecase(%d)",
+              __func__, usecase->id);
+        return ret;
+    }
+
+    if ((usecase->type == PCM_PLAYBACK) || (usecase->type == PCM_HFP_CALL)) {
+        switch (usecase->id) {
+        case USECASE_AUDIO_PLAYBACK_DEEP_BUFFER:
+        case USECASE_AUDIO_PLAYBACK_LOW_LATENCY:
+        case USECASE_AUDIO_PLAYBACK_MULTI_CH:
+        case USECASE_AUDIO_PLAYBACK_OFFLOAD:
+#ifdef MULTIPLE_OFFLOAD_ENABLED
+        case USECASE_AUDIO_PLAYBACK_OFFLOAD2:
+        case USECASE_AUDIO_PLAYBACK_OFFLOAD3:
+        case USECASE_AUDIO_PLAYBACK_OFFLOAD4:
+        case USECASE_AUDIO_PLAYBACK_OFFLOAD5:
+        case USECASE_AUDIO_PLAYBACK_OFFLOAD6:
+        case USECASE_AUDIO_PLAYBACK_OFFLOAD7:
+        case USECASE_AUDIO_PLAYBACK_OFFLOAD8:
+        case USECASE_AUDIO_PLAYBACK_OFFLOAD9:
+#endif
+        case USECASE_AUDIO_PLAYBACK_ULL:
+        case USECASE_AUDIO_DIRECT_PCM_OFFLOAD:
+            acdb_dev_id = 78;
+            break;
+        case USECASE_AUDIO_HFP_SCO:
+        case USECASE_AUDIO_HFP_SCO_WB:
+            acdb_dev_id = 15;
+            break;
+        default:
+            ALOGE("%s: audio calibration not supported for usecase(%d)",
+                  __func__, usecase->id);
+            ret = -EINVAL;
+            break;
+        }
+
+        if ((ret == 0) && (my_data->acdb_send_audio_cal)) {
+            struct stream_out *out = usecase->stream.out;
+            ALOGV("%s: sending audio calibration for usecase(%d) acdb_id(%d)",
+                  __func__, usecase->id, acdb_dev_id);
+            my_data->acdb_send_audio_cal(acdb_dev_id, ACDB_DEV_TYPE_OUT,
+                                         out->app_type_cfg.app_type,
+                                         out->app_type_cfg.sample_rate);
+        }
+    }
+
+    if ((usecase->type == PCM_CAPTURE) || (usecase->type == PCM_HFP_CALL)) {
+        switch (usecase->id) {
+        case USECASE_AUDIO_RECORD:
+        case USECASE_AUDIO_RECORD_COMPRESS:
+        case USECASE_AUDIO_RECORD_LOW_LATENCY:
+        case USECASE_AUDIO_HFP_SCO:
+        case USECASE_AUDIO_HFP_SCO_WB:
+            acdb_dev_id = 11;
+            break;
+        default:
+            ALOGE("%s: audio calibration not supported for usecase(%d)",
+                  __func__, usecase->id);
+            ret = -EINVAL;
+            break;
+        }
+
+        if ((ret == 0) && (my_data->acdb_send_audio_cal)) {
+            ALOGV("%s: sending audio calibration for usecase(%d) acdb_id(%d)",
+                  __func__, usecase->id, acdb_dev_id);
+            my_data->acdb_send_audio_cal(acdb_dev_id, ACDB_DEV_TYPE_IN,
+                                         platform_get_default_app_type(platform),
+                                         48000);
+        }
+    }
+
+    return ret;
 }
 
 int platform_switch_voice_call_device_pre(void *platform)

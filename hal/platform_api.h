@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  * Not a contribution.
  *
  * Copyright (C) 2013 The Android Open Source Project
@@ -45,6 +45,8 @@ int platform_get_native_support();
 int platform_get_backend_index(snd_device_t snd_device);
 int platform_send_audio_calibration(void *platform, struct audio_usecase *usecase,
                                     int app_type, int sample_rate);
+int platform_send_audio_calibration_for_usecase(void *platform,
+                                                struct audio_usecase *usecase);
 int platform_get_default_app_type(void *platform);
 int platform_switch_voice_call_device_pre(void *platform);
 int platform_switch_voice_call_enable_device_config(void *platform,
