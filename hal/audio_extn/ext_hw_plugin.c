@@ -213,30 +213,6 @@ int32_t audio_extn_ext_hw_plugin_usecase_start(void *plugin, struct audio_usecas
             return 0;
         }
 
-        if ((usecase->type == PCM_PLAYBACK) || (usecase->type == VOICE_CALL) ||
-            (usecase->type == VOIP_CALL) || (usecase->type == PCM_HFP_CALL)) {
-            codec_enable.snd_dev = usecase->out_snd_device;
-            /* TODO - below should be related with out_snd_dev */
-            codec_enable.sample_rate = 48000;
-            codec_enable.bit_width = 24;
-            codec_enable.num_chs = 2;
-
-            ALOGD("%s: enable audio hal plugin output, %d, %d, %d, %d, %d",
-                __func__, (int)codec_enable.usecase,
-                (int)codec_enable.snd_dev,
-                (int)codec_enable.sample_rate,
-                (int)codec_enable.bit_width,
-                (int)codec_enable.num_chs);
-
-            ret = my_plugin->audio_hal_plugin_send_msg(msg,
-                (void*)&codec_enable, sizeof(codec_enable));
-            if (ret) {
-                ALOGE("%s: enable audio hal plugin output failed ret = %d",
-                    __func__, ret);
-                return ret;
-            }
-            my_plugin->out_snd_dev[codec_enable.usecase] = codec_enable.snd_dev;
-        }
         if ((usecase->type == PCM_CAPTURE) || (usecase->type == VOICE_CALL) ||
             (usecase->type == VOIP_CALL) || (usecase->type == PCM_HFP_CALL)) {
             codec_enable.snd_dev = usecase->in_snd_device;
@@ -260,6 +236,31 @@ int32_t audio_extn_ext_hw_plugin_usecase_start(void *plugin, struct audio_usecas
                 return ret;
             }
             my_plugin->in_snd_dev[codec_enable.usecase] = codec_enable.snd_dev;
+        }
+
+        if ((usecase->type == PCM_PLAYBACK) || (usecase->type == VOICE_CALL) ||
+            (usecase->type == VOIP_CALL) || (usecase->type == PCM_HFP_CALL)) {
+            codec_enable.snd_dev = usecase->out_snd_device;
+            /* TODO - below should be related with out_snd_dev */
+            codec_enable.sample_rate = 48000;
+            codec_enable.bit_width = 24;
+            codec_enable.num_chs = 2;
+
+            ALOGD("%s: enable audio hal plugin output, %d, %d, %d, %d, %d",
+                __func__, (int)codec_enable.usecase,
+                (int)codec_enable.snd_dev,
+                (int)codec_enable.sample_rate,
+                (int)codec_enable.bit_width,
+                (int)codec_enable.num_chs);
+
+            ret = my_plugin->audio_hal_plugin_send_msg(msg,
+                (void*)&codec_enable, sizeof(codec_enable));
+            if (ret) {
+                ALOGE("%s: enable audio hal plugin output failed ret = %d",
+                    __func__, ret);
+                return ret;
+            }
+            my_plugin->out_snd_dev[codec_enable.usecase] = codec_enable.snd_dev;
         }
         my_plugin->usecase_ref_count[codec_enable.usecase]++;
     }
