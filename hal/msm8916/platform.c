@@ -55,6 +55,7 @@
 #define MIXER_XML_PATH_SKU1 "/system/etc/mixer_paths_qrd_sku1.xml"
 #define MIXER_XML_PATH_SKU2 "/system/etc/mixer_paths_qrd_sku2.xml"
 #define MIXER_XML_PATH_SKUN_CAJON "/system/etc/mixer_paths_qrd_skun_cajon.xml"
+#define MIXER_XML_PATH_SKU3 "/system/etc/mixer_paths_qrd_sku3.xml"
 #define MIXER_XML_PATH_AUXPCM "/system/etc/mixer_paths_auxpcm.xml"
 #define MIXER_XML_PATH_AUXPCM "/system/etc/mixer_paths_auxpcm.xml"
 #define MIXER_XML_PATH_I2S "/system/etc/mixer_paths_i2s.xml"
@@ -250,17 +251,11 @@ struct platform_data {
 
 static bool is_external_codec = false;
 static const int pcm_device_table_of_ext_codec[AUDIO_USECASE_MAX][2] = {
-   [USECASE_QCHAT_CALL] = {QCHAT_CALL_PCM_DEVICE_OF_EXT_CODEC, QCHAT_CALL_PCM_DEVICE_OF_EXT_CODEC},
-   [USECASE_VOICEMMODE1_CALL] = {VOICEMMODE1_CALL_PCM_DEVICE_OF_EXT_CODEC,
-                                 VOICEMMODE1_CALL_PCM_DEVICE_OF_EXT_CODEC},
-   [USECASE_VOICEMMODE2_CALL] = {VOICEMMODE2_CALL_PCM_DEVICE_OF_EXT_CODEC,
-                                 VOICEMMODE2_CALL_PCM_DEVICE_OF_EXT_CODEC},
+   [USECASE_QCHAT_CALL] = {QCHAT_CALL_PCM_DEVICE_OF_EXT_CODEC, QCHAT_CALL_PCM_DEVICE_OF_EXT_CODEC}
 };
 
 /* List of use cases that has different PCM device ID's for internal and external codecs */
-static const int misc_usecase[AUDIO_USECASE_MAX] = {USECASE_QCHAT_CALL,
-                                                    USECASE_VOICEMMODE1_CALL,
-                                                    USECASE_VOICEMMODE2_CALL};
+static const int misc_usecase[AUDIO_USECASE_MAX] = { USECASE_QCHAT_CALL };
 
 int pcm_device_table[AUDIO_USECASE_MAX][2] = {
     [USECASE_AUDIO_PLAYBACK_DEEP_BUFFER] = {DEEP_BUFFER_PCM_DEVICE,
@@ -298,10 +293,8 @@ int pcm_device_table[AUDIO_USECASE_MAX][2] = {
     [USECASE_VOLTE_CALL] = {VOLTE_CALL_PCM_DEVICE, VOLTE_CALL_PCM_DEVICE},
     [USECASE_QCHAT_CALL] = {QCHAT_CALL_PCM_DEVICE, QCHAT_CALL_PCM_DEVICE},
     [USECASE_VOWLAN_CALL] = {VOWLAN_CALL_PCM_DEVICE, VOWLAN_CALL_PCM_DEVICE},
-    [USECASE_VOICEMMODE1_CALL] = {VOICEMMODE1_CALL_PCM_DEVICE,
-                                  VOICEMMODE1_CALL_PCM_DEVICE},
-    [USECASE_VOICEMMODE2_CALL] = {VOICEMMODE2_CALL_PCM_DEVICE,
-                                  VOICEMMODE2_CALL_PCM_DEVICE},
+    [USECASE_VOICEMMODE1_CALL] = {-1, -1}, /* pcm ids updated from platform info file */
+    [USECASE_VOICEMMODE2_CALL] = {-1, -1}, /* pcm ids updated from platform info file */
     [USECASE_COMPRESS_VOIP_CALL] = {COMPRESS_VOIP_CALL_PCM_DEVICE, COMPRESS_VOIP_CALL_PCM_DEVICE},
     [USECASE_INCALL_REC_UPLINK] = {AUDIO_RECORD_PCM_DEVICE,
                                    AUDIO_RECORD_PCM_DEVICE},
@@ -780,6 +773,8 @@ static void update_codec_type(const char *snd_card_name) {
                   sizeof("msm8939-tomtom9330-snd-card")) ||
          !strncmp(snd_card_name, "msm8952-tomtom-snd-card",
                   sizeof("msm8952-tomtom-snd-card")) ||
+         !strncmp(snd_card_name, "msm8953-sku3-tasha-snd-card",
+                  sizeof("msm8953-sku3-tasha-snd-card")) ||
          !strncmp(snd_card_name, "msm8952-tasha-snd-card",
                   sizeof("msm8952-tasha-snd-card")) ||
          !strncmp(snd_card_name, "msm8952-tashalite-snd-card",
@@ -987,6 +982,13 @@ static void query_platform(const char *snd_card_name,
         msm_device_to_be_id = msm_device_to_be_id_internal_codec;
         msm_be_id_array_len  =
             sizeof(msm_device_to_be_id_internal_codec) / sizeof(msm_device_to_be_id_internal_codec[0]);
+    }  else if (!strncmp(snd_card_name, "msm8953-sku3-tasha-snd-card",
+                 sizeof("msm8953-sku3-tasha-snd-card"))) {
+        strlcpy(mixer_xml_path, MIXER_XML_PATH_SKU3,
+                sizeof(MIXER_XML_PATH_SKU3));
+        msm_device_to_be_id = msm_device_to_be_id_external_codec;
+        msm_be_id_array_len  =
+            sizeof(msm_device_to_be_id_external_codec) / sizeof(msm_device_to_be_id_external_codec[0]);
     } else if (!strncmp(snd_card_name, "msm8952-skum-snd-card",
                  sizeof("msm8952-skum-snd-card"))) {
         strlcpy(mixer_xml_path, MIXER_XML_PATH_SKUM,
@@ -1458,6 +1460,7 @@ static void audio_hwdep_send_cal(struct platform_data *plat_data)
     }
     if (send_codec_cal(acdb_loader_get_calibration, plat_data, fd) < 0)
         ALOGE("%s: Could not send anc cal", __FUNCTION__);
+    close(fd);
 }
 
 const char * get_snd_card_name_for_acdb_loader(const char *snd_card_name) {
