@@ -474,6 +474,8 @@ static int spkr_calibrate(int t0_spk_1, int t0_spk_2)
         uc_info_rx->out_snd_device = SND_DEVICE_OUT_SPEAKER_PROTECTED;
     disable_rx = true;
     list_add_tail(&adev->usecase_list, &uc_info_rx->list);
+    platform_check_and_set_codec_backend_cfg(adev, uc_info_rx,
+                                             uc_info_rx->out_snd_device);
     if (audio_extn_is_vbat_enabled())
          enable_snd_device(adev, SND_DEVICE_OUT_SPEAKER_PROTECTED_VBAT);
     else
@@ -801,7 +803,11 @@ static void* spkr_calibration_thread()
                                     break;
                                 }
                                 t0_spk_prior = t0_spk_1;
+                                pthread_mutex_unlock(&adev->lock);
                                 sleep(1);
+                                pthread_mutex_lock(&adev->lock);
+                                if (is_speaker_in_use(&sec))
+                                    break;
                             } else {
                                ALOGE("%s: read fail for %s err:%d\n", __func__, wsa_path, ret);
                                break;
@@ -843,7 +849,11 @@ static void* spkr_calibration_thread()
                                     break;
                                 }
                                 t0_spk_prior = t0_spk_2;
+                                pthread_mutex_unlock(&adev->lock);
                                 sleep(1);
+                                pthread_mutex_lock(&adev->lock);
+                                if (is_speaker_in_use(&sec))
+                                    break;
                             } else {
                                ALOGE("%s: read fail for %s err:%d\n", __func__, wsa_path, ret);
                                break;

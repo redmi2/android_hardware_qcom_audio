@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
  * Copyright (C) 2013 The Android Open Source Project
@@ -406,6 +406,7 @@ static const char * const device_table[SND_DEVICE_MAX] = {
     [SND_DEVICE_IN_USB_HEADSET_MIC] = "usb-headset-mic",
     [SND_DEVICE_IN_CAPTURE_FM] = "capture-fm",
     [SND_DEVICE_IN_AANC_HANDSET_MIC] = "aanc-handset-mic",
+    [SND_DEVICE_IN_VOICE_FLUENCE_DMIC_AANC] = "aanc-handset-mic",
     [SND_DEVICE_IN_QUAD_MIC] = "quad-mic",
     [SND_DEVICE_IN_HANDSET_STEREO_DMIC] = "handset-stereo-dmic-ef",
     [SND_DEVICE_IN_SPEAKER_STEREO_DMIC] = "speaker-stereo-dmic-ef",
@@ -507,6 +508,7 @@ static int acdb_device_table[SND_DEVICE_MAX] = {
     [SND_DEVICE_IN_USB_HEADSET_MIC] = 44,
     [SND_DEVICE_IN_CAPTURE_FM] = 0,
     [SND_DEVICE_IN_AANC_HANDSET_MIC] = 104,
+    [SND_DEVICE_IN_VOICE_FLUENCE_DMIC_AANC] = 105,
     [SND_DEVICE_IN_QUAD_MIC] = 46,
     [SND_DEVICE_IN_HANDSET_STEREO_DMIC] = 34,
     [SND_DEVICE_IN_SPEAKER_STEREO_DMIC] = 35,
@@ -607,6 +609,7 @@ static struct name_to_index snd_device_name_index[SND_DEVICE_MAX] = {
     {TO_NAME_INDEX(SND_DEVICE_IN_USB_HEADSET_MIC)},
     {TO_NAME_INDEX(SND_DEVICE_IN_CAPTURE_FM)},
     {TO_NAME_INDEX(SND_DEVICE_IN_AANC_HANDSET_MIC)},
+    {TO_NAME_INDEX(SND_DEVICE_IN_VOICE_FLUENCE_DMIC_AANC)},
     {TO_NAME_INDEX(SND_DEVICE_IN_QUAD_MIC)},
     {TO_NAME_INDEX(SND_DEVICE_IN_HANDSET_STEREO_DMIC)},
     {TO_NAME_INDEX(SND_DEVICE_IN_SPEAKER_STEREO_DMIC)},
@@ -1217,10 +1220,12 @@ static void audio_hwdep_send_cal(struct platform_data *plat_data)
     if (acdb_loader_get_calibration == NULL) {
         ALOGE("%s: ERROR. dlsym Error:%s acdb_loader_get_calibration", __func__,
            dlerror());
+        close(fd);
         return;
     }
 
     send_codec_cal(acdb_loader_get_calibration, plat_data, fd);
+    close(fd);
 }
 
 static int platform_acdb_init(void *platform)
@@ -1296,6 +1301,7 @@ void *platform_init(struct audio_device *adev)
         if (!snd_card_name) {
             ALOGE("failed to allocate memory for snd_card_name\n");
             free(my_data);
+            mixer_close(adev->mixer);
             return NULL;
         }
         ALOGV("%s: snd_card_name: %s", __func__, snd_card_name);
@@ -1360,6 +1366,7 @@ void *platform_init(struct audio_device *adev)
                        __func__);
                 free(my_data);
                 free(snd_card_name);
+                mixer_close(adev->mixer);
                 return NULL;
             }
             adev->snd_card = snd_card_num;
@@ -1368,6 +1375,7 @@ void *platform_init(struct audio_device *adev)
         }
         retry_num = 0;
         snd_card_num++;
+        mixer_close(adev->mixer);
     }
 
     if (snd_card_num >= MAX_SND_CARD) {
@@ -1972,6 +1980,9 @@ int platform_send_audio_calibration(void *platform, struct audio_usecase *usecas
 
     if (usecase->type == PCM_PLAYBACK)
         snd_device =  usecase->out_snd_device;
+    else if ((usecase->type == PCM_CAPTURE) &&
+                   voice_is_in_call_rec_stream(usecase->stream.in))
+        snd_device = voice_get_incall_rec_snd_device(usecase->in_snd_device);
     else if ((usecase->type == PCM_HFP_CALL) || (usecase->type == PCM_CAPTURE))
         snd_device = usecase->in_snd_device;
 
@@ -2488,7 +2499,12 @@ snd_device_t platform_get_input_snd_device(void *platform, audio_devices_t out_d
             out_device & AUDIO_DEVICE_OUT_WIRED_HEADPHONE) {
             if (out_device & AUDIO_DEVICE_OUT_EARPIECE &&
                 audio_extn_should_use_handset_anc(channel_count)) {
-                snd_device = SND_DEVICE_IN_AANC_HANDSET_MIC;
+                if(my_data->fluence_type != FLUENCE_NONE) {
+                    snd_device = SND_DEVICE_IN_VOICE_FLUENCE_DMIC_AANC;
+                    adev->acdb_settings |= DMIC_FLAG;
+                } else {
+                    snd_device = SND_DEVICE_IN_AANC_HANDSET_MIC;
+                }
                 adev->acdb_settings |= ANC_FLAG;
             } else if (my_data->fluence_type == FLUENCE_NONE ||
                 my_data->fluence_in_voice_call == false) {

@@ -2105,10 +2105,10 @@ static char* out_get_parameters(const struct audio_stream *stream, const char *k
         value[0] = '\0';
         if (out->flags & AUDIO_OUTPUT_FLAG_DIRECT_PCM) {
             ALOGV("in direct_pcm");
-            strlcat(value, "true", strlen("true"));
+            strlcat(value, "true", sizeof(value ));
         } else {
             ALOGV("not in direct_pcm");
-            strlcat(value, "false", strlen("false"));
+            strlcat(value, "false", sizeof(value));
         }
         str_parms_add_str(reply, "is_direct_pcm_track", value);
         str = str_parms_to_str(reply);
@@ -3321,8 +3321,6 @@ static int adev_set_parameters(struct audio_hw_device *dev, const char *kvpairs)
             struct audio_usecase *usecase;
             ALOGD("Received sound card OFFLINE status");
             set_snd_card_state(adev,SND_CARD_STATE_OFFLINE);
-            //close compress sessions on OFFLINE status
-            close_compress_sessions(adev);
         } else if (strstr(snd_card_status, "ONLINE")) {
             ALOGD("Received sound card ONLINE status");
             set_snd_card_state(adev,SND_CARD_STATE_ONLINE);
