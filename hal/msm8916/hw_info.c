@@ -233,6 +233,12 @@ static int update_hardware_info_8x16(struct hardware_info *hw_info, const char *
         hw_info->snd_devices = NULL;
         hw_info->num_snd_devices = 0;
         strlcpy(hw_info->dev_extn, "", sizeof(hw_info->dev_extn));
+   } else if (!strcmp(snd_card_name, "msm8x16-wt88047-snd-card")) {
+        strlcpy(hw_info->type, "wt88047", sizeof(hw_info->type));
+        strlcpy(hw_info->name, "msm8x16", sizeof(hw_info->name));
+        hw_info->snd_devices = NULL;
+        hw_info->num_snd_devices = 0;
+        strlcpy(hw_info->dev_extn, "", sizeof(hw_info->dev_extn));
     } else {
         ALOGW("%s: Not an  8x16/8939/8909 device", __func__);
         return -ENODEV;
